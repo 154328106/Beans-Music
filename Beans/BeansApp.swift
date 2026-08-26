@@ -11,6 +11,8 @@ struct BeansApp: App {
     @AppStorage("beans.disclaimerAccepted") private var disclaimerAccepted = false
 
     init() {
+        // 闪退检测：优先初始化，检测上次异常退出并安装崩溃捕获
+        _ = CrashReporter.shared
         // 启动时重新注册用户上传的全局字体（覆盖安装后依然生效）
         FontManager.reinstallIfNeeded()
         // 提升整体流畅度：保持高刷新率渲染

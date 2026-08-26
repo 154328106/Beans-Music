@@ -36,6 +36,19 @@ enum ChangelogStore {
     /// 日志按新到旧排列；每次发版在顶部追加一条
     static let logs: [VersionLog] = [
         VersionLog(
+            id: "1.4.7",
+            version: "1.4.7",
+            title: "闪退检测 + 歌词进度偏移校正",
+            features: [
+                "新增闪退检测：捕获未捕获异常与崩溃信号，写入崩溃日志（Documents/BeansLogs/crash-*.log），并在下次启动时提示上次是否异常退出，方便排查闪退原因",
+                "新增「歌词进度偏移」调节：歌词与音频不同步时，可在播放器设置中手动校正（正数提前、负数延后）",
+            ],
+            fixes: [
+                "优化启动稳定性与崩溃可追溯性",
+            ]
+        ),
+
+        VersionLog(
             id: "1.3.4",
             version: "1.3.4",
             title: "UI 板块排序 + 音频混合 + 流畅度与日志优化",

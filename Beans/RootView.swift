@@ -96,6 +96,8 @@ struct RootView: View {
             ToastView(center: ToastCenter.shared)
         }
         .onAppear {
+            // 启动已完成：标记本次启动正常（供下次启动检测闪退）
+            CrashReporter.shared.markLaunchCompleted()
             // 已确认过免责声明：直接判断是否需要展示更新说明
             if disclaimerAccepted, ChangelogStore.shouldShowWhatsNew {
                 showWhatsNew = true

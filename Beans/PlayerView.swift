@@ -81,6 +81,8 @@ struct PlayerView: View {
     @AppStorage("beans.lyricTilt") private var lyricTilt = 0
     /// 歌词左右倾斜角度（0 = 关闭；负值向左、正值向右，立体透视感）
     @AppStorage("beans.lyricTiltY") private var lyricTiltY = 0
+    /// 歌词进度偏移（秒）：歌词与音频不同步时手动校正，正数提前、负数延后
+    @AppStorage("beans.lyricOffset") private var lyricOffset = 0.0
     /// 侧边滑动手势当前位移（刷视频式切歌过渡）
     @State private var swipeOffset: CGFloat = 0
 
@@ -644,7 +646,7 @@ struct PlayerView: View {
         var answer: Int?
         while low <= high {
             let mid = (low + high) / 2
-            if lyrics[mid].time <= player.progress {
+            if lyrics[mid].time <= player.progress + lyricOffset {
                 answer = mid
                 low = mid + 1
             } else {
@@ -740,7 +742,7 @@ struct PlayerView: View {
                 if lyrics.isEmpty {
                     emptyLyricsView
                 } else {
-                    LyricsSection(lyrics: lyrics, accent: lyricCurrentColor, secondary: lyricDimColor, gradientStart: lyricGradStart, gradientEnd: lyricGradEnd, baseFontSize: CGFloat(lyricFontSize) * CGFloat(lyricScale), lineSpacing: CGFloat(lyricLineSpacing), glowRadius: lyricGlowRadius, showTranslation: lyricTranslation, alignment: lyricAlign, offsetX: CGFloat(lyricOffsetX), anchor: lyricAnchor, glowColorOverride: lyricGlowColor, blurStart: CGFloat(lyricBlurStart), blurAmount: lyricBlurAmount, tilt: CGFloat(lyricTilt), tiltY: CGFloat(lyricTiltY)) { line in
+                    LyricsSection(lyrics: lyrics, accent: lyricCurrentColor, secondary: lyricDimColor, gradientStart: lyricGradStart, gradientEnd: lyricGradEnd, baseFontSize: CGFloat(lyricFontSize) * CGFloat(lyricScale), lineSpacing: CGFloat(lyricLineSpacing), glowRadius: lyricGlowRadius, showTranslation: lyricTranslation, alignment: lyricAlign, offsetX: CGFloat(lyricOffsetX), anchor: lyricAnchor, glowColorOverride: lyricGlowColor, blurStart: CGFloat(lyricBlurStart), blurAmount: lyricBlurAmount, tilt: CGFloat(lyricTilt), tiltY: CGFloat(lyricTiltY), lyricOffset: CGFloat(lyricOffset)) { line in
                         BeansHaptics.tap()
                         player.seek(to: line.time)
                     }
@@ -1543,6 +1545,8 @@ struct LyricsSection: View {
     var tilt: CGFloat = 0
     /// 歌词左右倾斜角度（绕 Y 轴，负值向左、正值向右，0 = 关闭）
     var tiltY: CGFloat = 0
+    /// 歌词进度偏移（秒）：正数提前、负数延后
+    var lyricOffset: CGFloat = 0
     let onTapLine: (LyricLine) -> Void
 
     /// 长按歌词进入多选复制模式（可多选 / 全选复制）
@@ -1560,7 +1564,7 @@ struct LyricsSection: View {
         var answer: Int?
         while low <= high {
             let mid = (low + high) / 2
-            if lyrics[mid].time <= player.progress {
+            if lyrics[mid].time <= player.progress + lyricOffset {
                 answer = mid
                 low = mid + 1
             } else {
@@ -1849,6 +1853,7 @@ struct PlayerSettingsSheet: View {
     @AppStorage("beans.lyricBlurAmount") private var lyricBlurAmount = 1.1
     @AppStorage("beans.lyricTilt") private var lyricTilt = 0
     @AppStorage("beans.lyricTiltY") private var lyricTiltY = 0
+    @AppStorage("beans.lyricOffset") private var lyricOffset = 0.0
     @EnvironmentObject private var player: PlayerManager
     @Environment(\.dismiss) private var dismiss
 
@@ -2095,6 +2100,13 @@ struct PlayerSettingsSheet: View {
     }
 
     /// 歌词显示卡片：字号 / 行距 / 翻译
+    private var lyricOffsetText: String {
+        if lyricOffset == 0 { return "同步" }
+        return lyricOffset > 0
+            ? "提前 " + String(format: "%.1f", lyricOffset) + "s"
+            : "延后 " + String(format: "%.1f", -lyricOffset) + "s"
+    }
+
     private var lyricDisplayCard: some View {
         settingCard("歌词显示") {
             settingSlider("歌词字号", valueText: "\(fontSize) pt") {
@@ -2113,6 +2125,21 @@ struct PlayerSettingsSheet: View {
                     step: 1
                 )
                 .tint(Color.beansAmber)
+            }
+            Divider().opacity(0.5)
+            settingSlider("歌词进度偏移", valueText: lyricOffsetText) {
+                Slider(value: Binding(get: { lyricOffset }, set: { lyricOffset = Double($0) }), in: -10...10, step: 0.1)
+                    .tint(Color.beansAmber)
+            }
+            HStack {
+                Text("歌词与音频不同步时手动校正（正数提前、负数延后）")
+                    .font(BeansFont.appFont(11))
+                    .foregroundStyle(Color.beansComment)
+                Spacer()
+                Button("重置") { lyricOffset = 0 }
+                    .font(BeansFont.appFont(12, .semibold))
+                    .foregroundStyle(Color.beansAmber)
+                    .buttonStyle(.plain)
             }
             Divider().opacity(0.5)
             settingToggle("显示歌词翻译", isOn: $lyricTranslation,
