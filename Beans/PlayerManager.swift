@@ -68,6 +68,7 @@ final class PlayerManager: NSObject, ObservableObject {
         loadHistory()
         loadPlayCounts()
         observeInterruptions()
+        observeRouteChanges()
         setupRemoteCommands()
     }
 
@@ -519,7 +520,6 @@ final class PlayerManager: NSObject, ObservableObject {
     }
 
     private func configureAudioSession() {
-        guard !sessionConfigured else { return }
         do {
             let session = AVAudioSession.sharedInstance()
             // 「与其他音频同时播放」开关：开启时 mixWithOthers，打开其他音频软件也能继续播放；关闭则自动暂停
@@ -530,7 +530,28 @@ final class PlayerManager: NSObject, ObservableObject {
             }
             try session.setActive(true)
             sessionConfigured = true
-        } catch {}
+        } catch {
+            sessionConfigured = false
+            BeansLogger.shared.log("音频会话配置失败：\(error.localizedDescription)", level: .error)
+        }
+    }
+
+    private func observeRouteChanges() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRouteChange(_:)),
+            name: AVAudioSession.routeChangeNotification,
+            object: AVAudioSession.sharedInstance()
+        )
+    }
+
+    /// 输出设备变化（插拔耳机 / 切换扬声器 / 来电路由等）后重新激活会话，避免播放无声
+    @objc private func handleRouteChange(_ notification: Notification) {
+        sessionConfigured = false
+        configureAudioSession()
+        if isPlaying, player?.timeControlStatus != .playing {
+            player?.playImmediately(atRate: Float(rate))
+        }
     }
 
     // MARK: - 来电/中断处理
@@ -550,12 +571,15 @@ final class PlayerManager: NSObject, ObservableObject {
               let type = AVAudioSession.InterruptionType(rawValue: rawType) else { return }
         switch type {
         case .began:
+            wasPlayingBeforeInterruption = isPlaying
             // 开启「与其他音频同时播放」时，不被其他 App 音频中断，保持继续播放
             guard !mixesWithOthers else { return }
-            wasPlayingBeforeInterruption = isPlaying
             player?.pause()
             isPlaying = false
         case .ended:
+            // 中断结束后系统可能停用了音频会话，重新激活避免无声
+            sessionConfigured = false
+            configureAudioSession()
             if wasPlayingBeforeInterruption {
                 player?.playImmediately(atRate: Float(rate))
                 isPlaying = true
