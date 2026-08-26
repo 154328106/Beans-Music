@@ -47,6 +47,9 @@ final class PlayerManager: NSObject, ObservableObject {
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var failureObserver: NSObjectProtocol?
+    private var itemStatusObserver: NSKeyValueObservation?
+    private var timeControlStatusObserver: NSKeyValueObservation?
+    private var playbackConfirmed = false
     private var sessionConfigured = false
     private var playOrder: [Int] = []
     private var orderPosition = 0
@@ -455,9 +458,6 @@ final class PlayerManager: NSObject, ObservableObject {
 
 
     private func setupPlayer(url: URL) {
-        if let song = currentSong {
-            BeansLogger.shared.log("▶ 播放成功：\(song.name)｜域名=\(url.host ?? "?")", level: .info)
-        }
         configureAudioSession()
         removeCurrentObservers()
         // QQ 官方 CDN（isure.stream.qqmusic.qq.com 等）要求 UA/Referer 请求头，
@@ -477,6 +477,22 @@ final class PlayerManager: NSObject, ObservableObject {
         let player = AVPlayer(playerItem: item)
         player.rate = Float(rate)
         self.player = player
+        playbackConfirmed = false
+        itemStatusObserver = item.observe(\.status, options: [.new]) { [weak self] item, _ in
+            guard let self, self.player === player, item.status == .failed else { return }
+            self.loadFailed = true
+            self.isBuffering = false
+            self.isPlaying = false
+            BeansLogger.shared.log("播放地址加载失败：\(item.error?.localizedDescription ?? "未知错误")", level: .error)
+        }
+        timeControlStatusObserver = player.observe(\.timeControlStatus, options: [.new]) { [weak self] player, _ in
+            guard let self, self.player === player else { return }
+            guard player.timeControlStatus == .playing, !self.playbackConfirmed else { return }
+            self.playbackConfirmed = true
+            if let song = self.currentSong {
+                BeansLogger.shared.log("▶ 播放成功：\(song.name)｜域名=\(url.host ?? "?")", level: .info)
+            }
+        }
         player.playImmediately(atRate: Float(rate))
         isPlaying = true
         isBuffering = false
@@ -530,6 +546,9 @@ final class PlayerManager: NSObject, ObservableObject {
             NotificationCenter.default.removeObserver(failureObserver)
         }
         failureObserver = nil
+        itemStatusObserver = nil
+        timeControlStatusObserver = nil
+        playbackConfirmed = false
     }
 
     private func configureAudioSession() {
