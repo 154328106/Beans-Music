@@ -460,7 +460,20 @@ final class PlayerManager: NSObject, ObservableObject {
         }
         configureAudioSession()
         removeCurrentObservers()
-        let item = AVPlayerItem(url: url)
+        // QQ 官方 CDN（isure.stream.qqmusic.qq.com 等）要求 UA/Referer 请求头，
+        // 否则裸 GET 会被拒绝（403），导致播放成功却无声、进度条不动。
+        let item: AVPlayerItem
+        if url.host?.contains("qq.com") == true {
+            let asset = AVURLAsset(url: url, options: [
+                AVURLAssetHTTPHeaderFieldsKey: [
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:80.0) Gecko/20100101 Firefox/80.0",
+                    "Referer": "https://y.qq.com/",
+                ]
+            ])
+            item = AVPlayerItem(asset: asset)
+        } else {
+            item = AVPlayerItem(url: url)
+        }
         let player = AVPlayer(playerItem: item)
         player.rate = Float(rate)
         self.player = player
