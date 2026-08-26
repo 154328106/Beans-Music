@@ -465,7 +465,7 @@ final class PlayerManager: NSObject, ObservableObject {
         let item: AVPlayerItem
         if url.host?.contains("qq.com") == true {
             let asset = AVURLAsset(url: url, options: [
-                AVURLAssetHTTPHeaderFieldsKey: [
+                "AVURLAssetHTTPHeaderFieldsKey": [
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:80.0) Gecko/20100101 Firefox/80.0",
                     "Referer": "https://y.qq.com/",
                 ]
