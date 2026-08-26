@@ -36,6 +36,22 @@ enum ChangelogStore {
     /// 日志按新到旧排列；每次发版在顶部追加一条
     static let logs: [VersionLog] = [
         VersionLog(
+            id: "1.5.0",
+            version: "1.5.0",
+            title: "支持导入洛雪音源脚本",
+            features: [
+                "支持粘贴音源链接或导入 JS / JSON / TXT 配置",
+                "自动识别 Huibq keep-alive 洛雪脚本，并转换为网易云与 QQ 音源",
+                "设置中可统一开启导入音源，并单独启用、停用或删除每个音源",
+                "官方播放地址不可用或仅有试听片段时自动回退导入音源",
+            ],
+            fixes: [
+                "导入音源优先尝试 320K，失败后自动回退 128K",
+                "修复旧版 JS 配置提取时遗漏最外层括号的问题",
+            ]
+        ),
+
+        VersionLog(
             id: "1.4.9",
             version: "1.4.9",
             title: "修复 QQ 独家 VIP 歌曲播放",

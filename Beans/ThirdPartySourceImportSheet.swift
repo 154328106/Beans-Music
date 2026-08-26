@@ -10,12 +10,13 @@ struct ThirdPartySourceImportSheet: View {
     @State private var jsonText = ""
     @State private var errorMessage: String?
     @State private var showFilePicker = false
+    @State private var isImporting = false
 
     var body: some View {
         let _ = theme.accent
         BeansNavigationStack {
             VStack(alignment: .leading, spacing: 10) {
-                Text("粘贴或导入第三方解锁源配置（支持 JSON / JS 文件）")
+                Text("粘贴音源链接、配置内容，或从文件导入（支持 JSON / JS / TXT）")
                     .font(BeansFont.appFont(13, .semibold))
                     .foregroundStyle(Color.beansLabel)
                 HStack(spacing: 8) {
@@ -50,14 +51,18 @@ struct ThirdPartySourceImportSheet: View {
                 Button {
                     importSource()
                 } label: {
-                    Text("导入")
-                        .font(BeansFont.appFont(15, .semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Capsule().fill(Color.beansAmber))
+                    HStack(spacing: 8) {
+                        if isImporting { ProgressView().tint(.white) }
+                        Text(isImporting ? "正在读取" : "导入")
+                            .font(BeansFont.appFont(15, .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Capsule().fill(Color.beansAmber))
                 }
                 .buttonStyle(.plain)
+                .disabled(isImporting)
                 Spacer(minLength: 0)
             }
             .padding(16)
@@ -79,9 +84,41 @@ struct ThirdPartySourceImportSheet: View {
 
     /// 粘贴内容导入（支持单个音源或 JSON 数组）
     private func importSource() {
-        let sources = parseSources(jsonText)
+        let input = jsonText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !input.isEmpty else {
+            errorMessage = "请输入音源链接或配置内容"
+            return
+        }
+        if let url = URL(string: input), ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+            isImporting = true
+            errorMessage = nil
+            Task {
+                defer { isImporting = false }
+                do {
+                    var request = URLRequest(url: url)
+                    request.timeoutInterval = 20
+                    request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+                    let (data, response) = try await URLSession.shared.data(for: request)
+                    guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+                          let text = String(data: data, encoding: .utf8) else {
+                        errorMessage = "音源链接读取失败"
+                        return
+                    }
+                    jsonText = text
+                    finishImport(text)
+                } catch {
+                    errorMessage = "音源链接读取失败：\(error.localizedDescription)"
+                }
+            }
+            return
+        }
+        finishImport(input)
+    }
+
+    private func finishImport(_ text: String) {
+        let sources = parseSources(text)
         guard !sources.isEmpty else {
-            errorMessage = "解析失败，请检查格式（JSON 或 JS 文件内容）"
+            errorMessage = "未识别到兼容的音源配置"
             return
         }
         for source in sources {
@@ -118,18 +155,19 @@ struct ThirdPartySourceImportSheet: View {
     private func parseSources(_ text: String) -> [ThirdPartySource] {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else { return [] }
+        if let lxSources = parseLXScript(trimmed), !lxSources.isEmpty {
+            return lxSources
+        }
         if let list = try? JSONDecoder().decode([ThirdPartySource].self, from: data), !list.isEmpty {
             return list
         }
         if let single = try? JSONDecoder().decode(ThirdPartySource.self, from: data) {
             return [single]
         }
-        // JS 文件：提取第一对 {} 或 [] 之间的内容再解析（module.exports = {...} 等常见写法）
+        // JS 文件：提取完整的 {} 或 [] 内容再尝试作为 JSON 配置解析。
         for pair in [("{", "}"), ("[", "]")] as [(Character, Character)] {
             guard let first = trimmed.firstIndex(of: pair.0), let last = trimmed.lastIndex(of: pair.1), first < last else { continue }
-            let start = trimmed.index(after: first)
-            let end = trimmed.index(before: last)
-            let sub = String(trimmed[start...end])
+            let sub = String(trimmed[first...last])
             guard let subData = sub.data(using: .utf8) else { continue }
             if let list = try? JSONDecoder().decode([ThirdPartySource].self, from: subData), !list.isEmpty {
                 return list
@@ -139,6 +177,40 @@ struct ThirdPartySourceImportSheet: View {
             }
         }
         return []
+    }
+
+    /// 将 Huibq keep-alive 等洛雪 musicUrl 脚本转换为 Beans 原生配置，不执行任意 JavaScript。
+    private func parseLXScript(_ text: String) -> [ThirdPartySource]? {
+        guard text.contains("globalThis.lx"),
+              text.contains("musicUrl"),
+              let apiURL = firstCapture(#"const\s+API_URL\s*=\s*['\"]([^'\"]+)['\"]"#, in: text) else { return nil }
+        let apiKey = firstCapture(#"const\s+API_KEY\s*=\s*['\"]([^'\"]+)['\"]"#, in: text) ?? ""
+        var sources: [ThirdPartySource] = []
+        if text.range(of: #"\bwy\s*:"#, options: .regularExpression) != nil {
+            sources.append(ThirdPartySource(
+                name: "Huibq 洛雪源 · 网易云",
+                kind: "lx-script",
+                template: apiURL,
+                headers: ["source": "wy", "quality": "320k", "apiKey": apiKey]
+            ))
+        }
+        if text.range(of: #"\btx\s*:"#, options: .regularExpression) != nil {
+            sources.append(ThirdPartySource(
+                name: "Huibq 洛雪源 · QQ音乐",
+                kind: "lx-script",
+                template: apiURL,
+                headers: ["source": "tx", "quality": "320k", "apiKey": apiKey]
+            ))
+        }
+        return sources
+    }
+
+    private func firstCapture(_ pattern: String, in text: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              match.numberOfRanges > 1,
+              let range = Range(match.range(at: 1), in: text) else { return nil }
+        return String(text[range])
     }
 }
 

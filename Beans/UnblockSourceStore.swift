@@ -1,7 +1,7 @@
 import Foundation
 
 /// 用户自定义的第三方解锁源（JSON / 落雪 API 服务器导入）
-/// kind：netease-id（按网易云 ID 查询）、keyword（按 歌名+歌手 关键词查询）或 lx（落雪 API 服务器）
+/// kind：netease-id、keyword、lx（落雪 API 服务器）或 lx-script（洛雪音源脚本转换配置）
 /// template：请求 URL 模板，支持占位符 {id} {name} {keyword} {artist}
 /// urlPath：响应 JSON 中播放地址的字段路径（支持点分，如 url / data.url / data.audioUrl）
 /// headers：可选的附加请求头
@@ -61,7 +61,17 @@ final class UnblockSourceStore: ObservableObject {
     }
 
     func add(_ source: ThirdPartySource) {
-        customSources.append(source)
+        if let index = customSources.firstIndex(where: {
+            $0.kind == source.kind
+                && $0.template == source.template
+                && $0.headers["source"] == source.headers["source"]
+        }) {
+            var updated = source
+            updated.id = customSources[index].id
+            customSources[index] = updated
+        } else {
+            customSources.append(source)
+        }
     }
 
     func remove(_ source: ThirdPartySource) {

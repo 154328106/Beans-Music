@@ -30,17 +30,74 @@ enum UnblockService {
     }
 
     /// 入口：按用户导入的自定义音源（已开启的）依次尝试，返回第一个可用地址
-    static func resolve(name: String, artists: String, durationMS: Int, neteaseID: Int, strict: Bool = false) async -> Resolved? {
+    static func resolve(
+        name: String,
+        artists: String,
+        durationMS: Int,
+        neteaseID: Int,
+        songSource: SongSource = .netease,
+        qqMid: String? = nil,
+        strict: Bool = false
+    ) async -> Resolved? {
         let keyword = ([name, artists].filter { !$0.isEmpty })
             .joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !keyword.isEmpty else { return nil }
         let store = UnblockSourceStore.shared
-        // 用户导入的自定义源（按导入顺序；kind == "lx" 走落雪 API 服务器）
+        // 用户导入的自定义源按导入顺序尝试。
         for source in store.customSources where source.enabled {
-            if source.kind == "lx" {
+            if source.kind == "lx-script" {
+                if let r = await lxScript(source: source, songSource: songSource, neteaseID: neteaseID, qqMid: qqMid) { return r }
+            } else if source.kind == "lx" {
                 if let r = await lx(source: source, keyword: keyword) { return r }
             } else if let r = await custom(source: source, name: name, artists: artists, neteaseID: neteaseID) { return r }
+        }
+        return nil
+    }
+
+    // MARK: - 洛雪音源脚本转换配置
+
+    /// Huibq keep-alive 等洛雪脚本的 musicUrl 协议：GET /url/{source}/{songId}/{quality}。
+    private static func lxScript(source: ThirdPartySource, songSource: SongSource, neteaseID: Int, qqMid: String?) async -> Resolved? {
+        let provider = source.headers["source"] ?? ""
+        let songID: String
+        switch (songSource, provider) {
+        case (.netease, "wy") where neteaseID > 0:
+            songID = String(neteaseID)
+        case (.qq, "tx"):
+            guard let qqMid, !qqMid.isEmpty else { return nil }
+            songID = qqMid
+        default:
+            return nil
+        }
+
+        let base = source.template.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
+        let preferred = source.headers["quality"] ?? source.headers["br"] ?? "320k"
+        let qualities = preferred == "128k" ? ["128k"] : [preferred, "128k"]
+        for quality in qualities {
+            guard let url = URL(string: "\(base)/url/\(provider)/\(songID)/\(quality)") else { continue }
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 12
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue("lx-music-mobile/1.0", forHTTPHeaderField: "User-Agent")
+            if let apiKey = source.headers["apiKey"], !apiKey.isEmpty {
+                request.setValue(apiKey, forHTTPHeaderField: "X-Request-Key")
+            }
+            guard let (data, response) = try? await session.data(for: request),
+                  let http = response as? HTTPURLResponse,
+                  http.statusCode == 200,
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+            let code = object["code"] as? Int ?? Int(object["code"] as? String ?? "") ?? -1
+            guard code == 0,
+                  let urlString = object["url"] as? String,
+                  !urlString.isEmpty,
+                  let playURL = URL(string: urlString) else {
+                let message = object["msg"] as? String ?? "code=\(code)"
+                BeansLogger.shared.log("导入音源返回失败：\(source.name) \(message)", level: .debug)
+                continue
+            }
+            BeansLogger.shared.log("导入音源命中：\(source.name) 平台=\(provider) 音质=\(quality)", level: .info)
+            return Resolved(url: playURL, source: source.name)
         }
         return nil
     }

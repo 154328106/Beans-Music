@@ -813,6 +813,9 @@ struct SettingsView: View {
     @AppStorage("beans.audioQuality") private var audioQualityRaw = BeansAudioQuality.exhigh.rawValue
     /// 底栏是否显示文字（关闭后只显示图标）
     @AppStorage("beans.tabLabelsVisible") private var tabLabelsVisible = true
+    /// 官方地址不可用时，是否尝试用户导入的音源
+    @AppStorage("beans.enableUnblock") private var enableImportedSources = false
+    @ObservedObject private var sourceStore = UnblockSourceStore.shared
 
     @State private var appearanceExpanded = false
     @State private var showWallpaperPicker = false
@@ -831,6 +834,7 @@ struct SettingsView: View {
     @State private var showLogShare = false
     @State private var showLogImport = false
     @State private var importedLogText: String?
+    @State private var showSourceImporter = false
 
     private var themeMode: BeansThemeMode {
         BeansThemeMode(rawValue: themeModeRaw) ?? .system
@@ -878,6 +882,10 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showChangelog) {
             ChangelogListView()
+        }
+        .sheet(isPresented: $showSourceImporter) {
+            ThirdPartySourceImportSheet()
+                .environmentObject(theme)
         }
         .fileExporter(
             isPresented: $showExportBackup,
@@ -1297,6 +1305,75 @@ struct SettingsView: View {
                 .toggleStyle(.switch)
                 .tint(Color.beansAmber)
 
+                Divider().overlay(Color.beansComment.opacity(0.15))
+
+                Toggle(isOn: $enableImportedSources) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "externaldrive.connected.to.line.below")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.beansAmber)
+                            .frame(width: 28)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("使用导入音源")
+                                .font(BeansFont.appFont(15))
+                                .foregroundStyle(Color.beansLabel)
+                            Text("仅在官方地址不可用或为试听片段时回退")
+                                .font(BeansFont.appFont(11))
+                                .foregroundStyle(Color.beansComment)
+                        }
+                    }
+                }
+                .toggleStyle(.switch)
+                .tint(Color.beansAmber)
+
+                HStack(spacing: 10) {
+                    Button {
+                        BeansHaptics.tap()
+                        showSourceImporter = true
+                    } label: {
+                        Label("导入音源", systemImage: "square.and.arrow.down")
+                            .font(BeansFont.appFont(13, .semibold))
+                            .foregroundStyle(Color.beansAmber)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(.ultraThinMaterial, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                    Text(sourceStore.customSources.isEmpty ? "尚未导入" : "\(sourceStore.customSources.count) 个")
+                        .font(BeansFont.appFont(12))
+                        .foregroundStyle(Color.beansComment)
+                }
+
+                ForEach(sourceStore.customSources) { source in
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(source.name)
+                                .font(BeansFont.appFont(13, .medium))
+                                .foregroundStyle(Color.beansLabel)
+                                .lineLimit(1)
+                            Text(source.headers["source"]?.uppercased() ?? source.kind)
+                                .font(BeansFont.appFont(10))
+                                .foregroundStyle(Color.beansComment)
+                        }
+                        Spacer()
+                        Toggle("", isOn: sourceEnabledBinding(source.id))
+                            .labelsHidden()
+                            .tint(Color.beansAmber)
+                        Button {
+                            sourceStore.remove(source)
+                            BeansHaptics.tap()
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.red)
+                                .frame(width: 30, height: 30)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("删除音源")
+                    }
+                }
+
             }
             .padding(16)
             .background {
@@ -1304,6 +1381,16 @@ struct SettingsView: View {
             }
             .beansCardShadow(radius: 9, y: 3)
         }
+    }
+
+    private func sourceEnabledBinding(_ id: String) -> Binding<Bool> {
+        Binding(
+            get: { sourceStore.customSources.first(where: { $0.id == id })?.enabled ?? false },
+            set: { value in
+                guard let index = sourceStore.customSources.firstIndex(where: { $0.id == id }) else { return }
+                sourceStore.customSources[index].enabled = value
+            }
+        )
     }
 
     /// 更新日志入口

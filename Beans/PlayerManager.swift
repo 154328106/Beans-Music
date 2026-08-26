@@ -388,6 +388,16 @@ final class PlayerManager: NSObject, ObservableObject {
         if let u = info?.url, info?.freeTrial != true {
             urlString = u
         }
+        if urlString == nil, enableUnblock {
+            resolved = await UnblockService.resolve(
+                name: song.name,
+                artists: song.artists,
+                durationMS: Int(song.duration * 1000),
+                neteaseID: song.id,
+                songSource: .netease,
+                strict: strict
+            )
+        }
         BeansLogger.shared.log("网易云结果：\(song.name) 官方=\(urlString != nil ? "是" : "否") 第三方=\(resolved != nil ? "命中" : "未用/未命中")", level: .debug)
         return (urlString, resolved)
     }
@@ -396,6 +406,18 @@ final class PlayerManager: NSObject, ObservableObject {
     private func qqFallback(song: Song, quality: BeansAudioQuality, enableUnblock: Bool, strict: Bool = false) async -> (String?, UnblockService.Resolved?) {
         var urlString: String?
         var resolved: UnblockService.Resolved?
+        if enableUnblock {
+            resolved = await UnblockService.resolve(
+                name: song.name,
+                artists: song.artists,
+                durationMS: Int(song.duration * 1000),
+                neteaseID: 0,
+                songSource: .qq,
+                qqMid: song.qqMid,
+                strict: strict
+            )
+        }
+        if resolved != nil { return (nil, resolved) }
         if let matched = await matchNetEaseSong(name: song.name, artists: song.artists, durationMS: Int(song.duration * 1000), strict: strict) {
             let infos = try? await NetEaseAPI.shared.songURLInfo(ids: [matched.id], level: quality.level)
             var info = infos?[matched.id]
@@ -406,6 +428,15 @@ final class PlayerManager: NSObject, ObservableObject {
             // 免费完整 URL 直接用；试听片段 / 无 URL 交给第三方解锁
             if let u = info?.url, info?.freeTrial != true {
                 urlString = u
+            } else if enableUnblock {
+                resolved = await UnblockService.resolve(
+                    name: matched.name,
+                    artists: matched.artists,
+                    durationMS: Int(matched.duration * 1000),
+                    neteaseID: matched.id,
+                    songSource: .netease,
+                    strict: strict
+                )
             }
         }
         BeansLogger.shared.log("QQ兜底：\(song.name) 官方=\(urlString != nil ? "是" : "否") 第三方=\(resolved != nil ? "命中" : "未用/未命中")", level: .debug)
