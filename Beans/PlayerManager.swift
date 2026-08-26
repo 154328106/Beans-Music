@@ -334,20 +334,10 @@ final class PlayerManager: NSObject, ObservableObject {
             let quality = BeansAudioQuality.current
             BeansLogger.shared.log("▶ 开始播放：\(song.name) - \(song.artists)｜平台=\(song.source.rawValue) id=\(song.id) 音质=\(quality.level) 免费听歌=\(enableUnblock ? "开" : "关") 官方受限=\(strictUnlock ? "是" : "否")", level: .info)
             if song.source == .qq, let mid = song.qqMid {
-                // VIP 歌曲：登录了 VIP/SVIP 账号时 vkey 可返回完整音轨（官方直链，优先使用）；
-                // 未登录或无会员时 vkey 只会返回试听片段，直接走网易云同名兜底（免费听 VIP）
-                if song.isVIP, QQMusicAuth.shared.isLoggedIn, (QQMusicAuth.shared.vipBadge != nil || strictUnlock) {
-                    urlString = try? await QQMusicAPI.shared.songURL(songmid: mid)
-                    if urlString == nil {
-                        (urlString, resolvedThirdParty) = await qqFallback(song: song, quality: quality, enableUnblock: enableUnblock, strict: strictUnlock)
-                    }
-                } else if song.isVIP {
+                // 是否有播放权益以 vkey 实际返回为准；会员接口识别失败时也必须尝试官方地址。
+                urlString = try? await QQMusicAPI.shared.songURL(songmid: mid, mediaMid: song.qqMediaMid)
+                if urlString == nil {
                     (urlString, resolvedThirdParty) = await qqFallback(song: song, quality: quality, enableUnblock: enableUnblock, strict: strictUnlock)
-                } else {
-                    urlString = try? await QQMusicAPI.shared.songURL(songmid: mid)
-                    if urlString == nil {
-                        (urlString, resolvedThirdParty) = await qqFallback(song: song, quality: quality, enableUnblock: enableUnblock, strict: strictUnlock)
-                    }
                 }
             } else {
                 (urlString, resolvedThirdParty) = await neteaseResolve(song: song, quality: quality, enableUnblock: enableUnblock, strict: strictUnlock)
@@ -464,11 +454,14 @@ final class PlayerManager: NSObject, ObservableObject {
         // 否则裸 GET 会被拒绝（403），导致播放成功却无声、进度条不动。
         let item: AVPlayerItem
         if url.host?.contains("qq.com") == true {
+            var headers = [
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:80.0) Gecko/20100101 Firefox/80.0",
+                "Referer": "https://y.qq.com/",
+            ]
+            let cookie = QQMusicAuth.shared.cookieHeader
+            if !cookie.isEmpty { headers["Cookie"] = cookie }
             let asset = AVURLAsset(url: url, options: [
-                "AVURLAssetHTTPHeaderFieldsKey": [
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:80.0) Gecko/20100101 Firefox/80.0",
-                    "Referer": "https://y.qq.com/",
-                ]
+                "AVURLAssetHTTPHeaderFieldsKey": headers
             ])
             item = AVPlayerItem(asset: asset)
         } else {

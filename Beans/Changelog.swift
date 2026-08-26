@@ -36,6 +36,20 @@ enum ChangelogStore {
     /// 日志按新到旧排列；每次发版在顶部追加一条
     static let logs: [VersionLog] = [
         VersionLog(
+            id: "1.4.8",
+            version: "1.4.8",
+            title: "修复 QQ 音乐官方播放链路",
+            features: [],
+            fixes: [
+                "修复已登录 QQ 音乐后，会员状态识别失败会跳过官方播放地址的问题",
+                "修复 QQ vkey 播放凭证传递方式，优先使用音乐域登录凭证并携带 authst",
+                "修复 QQ 扫码登录未完整保存 musickey，导致显示已登录但无法播放的问题",
+                "兼容 media_mid、单 MID 与双 MID 文件名，并使用接口返回的可用 CDN 地址",
+                "QQ 官方音频请求补充登录 Cookie，修复部分歌曲一直缓冲或无声的问题",
+            ]
+        ),
+
+        VersionLog(
             id: "1.4.7",
             version: "1.4.7",
             title: "闪退检测 + 歌词进度偏移校正",

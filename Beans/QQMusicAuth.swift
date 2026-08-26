@@ -55,14 +55,15 @@ final class QQMusicAuth: ObservableObject {
         return key.isEmpty ? 5381 : Self.hash5381(key)
     }
 
-    /// 播放接口 loginKey（优先 p_skey，其次 qqmusic_key / musickey）
+    /// 播放接口 authst。QQ vkey 优先识别音乐域凭证，p_skey 仅作旧登录态兜底。
     var loginKey: String {
-        cookies["p_skey"] ?? cookies["qqmusic_key"] ?? cookies["musickey"] ?? ""
+        cookies["qm_keyst"] ?? cookies["qqmusic_key"] ?? cookies["music_key"]
+            ?? cookies["wxskey"] ?? cookies["musickey"] ?? cookies["p_skey"] ?? ""
     }
 
     /// 发给 u.y.qq.com 的 Cookie 串（含 qqmusic_key 时 VIP 歌曲播放成功率最高）
     var cookieHeader: String {
-        let order = ["uin", "p_skey", "skey", "qqmusic_key", "musickey", "pt4_token", "qm_keyst"]
+        let order = ["uin", "p_uin", "qm_keyst", "qqmusic_key", "music_key", "wxskey", "musickey", "p_skey", "skey", "pt4_token"]
         return order.compactMap { key in
             guard let value = cookies[key], !value.isEmpty else { return nil }
             return "\(key)=\(value)"
@@ -98,7 +99,7 @@ final class QQMusicAuth: ObservableObject {
     /// Cookie 是否包含有效登录态（uin 非空且带任一有效凭证）
     func hasValidLogin(_ dict: [String: String]) -> Bool {
         guard let uin = dict["uin"], !uin.isEmpty, uin != "0" else { return false }
-        let credentialKeys = ["p_skey", "skey", "qqmusic_key", "qm_keyst", "musickey", "p_uin"]
+        let credentialKeys = ["p_skey", "skey", "qqmusic_key", "qm_keyst", "music_key", "wxskey", "musickey", "p_uin"]
         return credentialKeys.contains { key in
             guard let value = dict[key] else { return false }
             return !value.isEmpty
@@ -107,7 +108,7 @@ final class QQMusicAuth: ObservableObject {
 
     /// 网页登录关注的 Cookie 名（WKWebView 读取时按此过滤）
     static let webCookieNames: Set<String> = [
-        "uin", "p_uin", "skey", "p_skey", "qqmusic_key", "qm_keyst",
+        "uin", "p_uin", "skey", "p_skey", "qqmusic_key", "qm_keyst", "music_key", "wxskey",
         "musickey", "pt4_token", "pt2gguin", "pt_login_sig", "pt4_aid",
         "qmusic_s", "pgv_pvid", "pgv_info", "ptnick", "nick", "nickname",
     ]
@@ -251,6 +252,10 @@ final class QQMusicAuth: ObservableObject {
             request.setValue(loginCookie, forHTTPHeaderField: "Cookie")
             let (_, response) = try await session.data(for: request)
             collectCookies(from: response)
+            loginCookie = cookieHeader
+            if !qrsig.isEmpty {
+                loginCookie = "qrsig=\(qrsig)" + (loginCookie.isEmpty ? "" : "; " + loginCookie)
+            }
             guard let http = response as? HTTPURLResponse,
                   (300...399).contains(http.statusCode),
                   let location = http.value(forHTTPHeaderField: "Location"),
@@ -266,6 +271,7 @@ final class QQMusicAuth: ObservableObject {
         }
 
         // 2. graph.qq.com oauth2 authorize 换 code
+        loginCookie = cookieHeader
         let gtk = Self.hash5381(cookies["qqmusic_key"] ?? cookies["p_skey"] ?? cookies["skey"] ?? "")
         let fields: [String: String] = [
             "response_type": "code",
@@ -298,6 +304,7 @@ final class QQMusicAuth: ObservableObject {
         }
 
         // 3. musicu.fcg QQConnectLogin 换 musickey（登录态 Cookie 持久化）
+        loginCookie = cookieHeader
         let body = "{\"comm\":{\"g_tk\":5381,\"platform\":\"yqq\",\"ct\":24,\"cv\":0},\"req\":{\"module\":\"QQConnectLogin.LoginServer\",\"method\":\"QQLogin\",\"param\":{\"code\":\"\(code)\"}}}"
         var loginRequest = URLRequest(url: URL(string: "https://u.y.qq.com/cgi-bin/musicu.fcg")!)
         loginRequest.httpMethod = "POST"
@@ -306,8 +313,23 @@ final class QQMusicAuth: ObservableObject {
         loginRequest.setValue("https://y.qq.com/", forHTTPHeaderField: "Referer")
         loginRequest.setValue(loginCookie, forHTTPHeaderField: "Cookie")
         loginRequest.httpBody = body.data(using: .utf8)
-        let (_, loginResponse) = try await session.data(for: loginRequest)
+        let (loginData, loginResponse) = try await session.data(for: loginRequest)
         collectCookies(from: loginResponse)
+        // 部分 QQ 登录响应把音乐域凭证放在 JSON 中而不是 Set-Cookie，必须显式持久化。
+        if let json = try? JSONSerialization.jsonObject(with: loginData) as? [String: Any],
+           let req = json["req"] as? [String: Any],
+           let data = req["data"] as? [String: Any] {
+            if let musicKey = data["musickey"] as? String, !musicKey.isEmpty {
+                cookies["musickey"] = musicKey
+                cookies["qm_keyst"] = musicKey
+                cookies["qqmusic_key"] = musicKey
+            }
+            if let musicID = data["musicid"] as? Int, musicID > 0 {
+                cookies["uin"] = "\(musicID)"
+            } else if let musicID = data["musicid"] as? String, !musicID.isEmpty {
+                cookies["uin"] = musicID
+            }
+        }
     }
 
     // MARK: - 会员状态

@@ -172,6 +172,10 @@ final class QQMusicAPI {
             let interval = (item["interval"] as? Int) ?? 0
             let pay = item["pay"] as? [String: Any]
             let fee = (item["fee"] as? Int) ?? (pay?["pay_play"] as? Int) ?? (pay?["payplay"] as? Int) ?? 0
+            let file = item["file"] as? [String: Any]
+            let mediaMid = file?["media_mid"] as? String
+                ?? item["strMediaMid"] as? String
+                ?? item["media_mid"] as? String
             songs.append(Song(
                 id: songid,
                 name: item["songname"] as? String ?? "",
@@ -181,6 +185,7 @@ final class QQMusicAPI {
                 duration: TimeInterval(interval),
                 source: .qq,
                 qqMid: mid,
+                qqMediaMid: mediaMid,
                 fee: fee
             ))
         }
@@ -411,47 +416,53 @@ final class QQMusicAPI {
     // MARK: - 播放 / 歌词
 
     /// 指定音质获取播放地址（br: M800=320kbps 高质量 / M500=128kbps 低质量），下载用
-    func songURL(songmid: String, br: String) async throws -> String? {
+    func songURL(songmid: String, mediaMid: String? = nil, br: String) async throws -> String? {
         let qqAuth = QQMusicAuth.shared
         let uin = qqAuth.isLoggedIn ? qqAuth.uin : "0"
         let loginKey = qqAuth.isLoggedIn ? qqAuth.loginKey : ""
         let guid = Self.deviceGuid
-        return try await vkeyURL(songmid: songmid, br: br, uin: uin, loginKey: loginKey, guid: guid, qqAuth: qqAuth)
+        return try await vkeyURL(songmid: songmid, mediaMid: mediaMid, br: br, uin: uin, loginKey: loginKey, guid: guid, qqAuth: qqAuth)
     }
 
     /// 通过 vkey 获取 QQ 音乐播放地址（对齐 wp_MusicApi：GET + data JSON + filename + CDN 分发）
     /// 登录后携带 uin/loginKey/Cookie；先试 320kbps(M800)，拿不到再退 128kbps(M500)
-    func songURL(songmid: String) async throws -> String? {
+    func songURL(songmid: String, mediaMid: String? = nil) async throws -> String? {
         let qqAuth = QQMusicAuth.shared
         let uin = qqAuth.isLoggedIn ? qqAuth.uin : "0"
         let loginKey = qqAuth.isLoggedIn ? qqAuth.loginKey : ""
         let guid = Self.deviceGuid
-        if let url = try await vkeyURL(songmid: songmid, br: "M800", uin: uin, loginKey: loginKey, guid: guid, qqAuth: qqAuth) {
+        if let url = try await vkeyURL(songmid: songmid, mediaMid: mediaMid, br: "M800", uin: uin, loginKey: loginKey, guid: guid, qqAuth: qqAuth) {
             return url
         }
-        return try await vkeyURL(songmid: songmid, br: "M500", uin: uin, loginKey: loginKey, guid: guid, qqAuth: qqAuth)
+        return try await vkeyURL(songmid: songmid, mediaMid: mediaMid, br: "M500", uin: uin, loginKey: loginKey, guid: guid, qqAuth: qqAuth)
     }
 
     /// 单次 vkey 请求（GET musicu.fcg，data 参数格式与 wp_MusicApi 完全一致）
-    private func vkeyURL(songmid: String, br: String, uin: String, loginKey: String, guid: String, qqAuth: QQMusicAuth) async throws -> String? {
+    private func vkeyURL(songmid: String, mediaMid: String?, br: String, uin: String, loginKey: String, guid: String, qqAuth: QQMusicAuth) async throws -> String? {
         // 音质与扩展名：M500/M800 为 mp3，F000（无损）为 flac
         let ext = br.hasPrefix("F") ? "flac" : "mp3"
-        let filename = "\(br)\(songmid).\(ext)"
+        let preferredMid = (mediaMid?.isEmpty == false ? mediaMid : nil) ?? songmid
+        // 新接口通常使用 media_mid 单份命名，旧曲库仍可能要求双 songmid；一次请求全部候选。
+        var filenames = [
+            "\(br)\(preferredMid).\(ext)",
+            "\(br)\(songmid)\(songmid).\(ext)",
+            "\(br)\(songmid).\(ext)",
+        ]
+        var seenFilenames = Set<String>()
+        filenames = filenames.filter { seenFilenames.insert($0).inserted }
         var param: [String: Any] = [
-            "filename": [filename],
+            "filename": filenames,
             "guid": guid,
-            "songmid": [songmid],
-            "songtype": [0],
+            "songmid": Array(repeating: songmid, count: filenames.count),
+            "songtype": Array(repeating: 0, count: filenames.count),
             "uin": uin,
             "loginflag": 1,
             "platform": "20",
         ]
-        if !loginKey.isEmpty {
-            param["loginUin"] = uin
-            param["loginKey"] = loginKey
-        }
+        var comm: [String: Any] = ["uin": Int(uin) ?? 0, "format": "json", "ct": loginKey.isEmpty ? 24 : 19, "cv": 0]
+        if !loginKey.isEmpty { comm["authst"] = loginKey }
         let payload: [String: Any] = [
-            "comm": ["uin": Int(uin) ?? 0, "format": "json", "ct": 24, "cv": 0],
+            "comm": comm,
             "req": [
                 "module": "CDN.SrfCdnDispatchServer",
                 "method": "GetCdnDispatch",
@@ -480,10 +491,19 @@ final class QQMusicAPI {
               let json = parseJSON(responseData),
               let req = json["req_0"] as? [String: Any],
               let reqData = req["data"] as? [String: Any],
-              let infos = reqData["midurlinfo"] as? [[String: Any]],
-              let info = infos.first,
-              let purl = info["purl"] as? String, !purl.isEmpty else { return nil }
+              let infos = reqData["midurlinfo"] as? [[String: Any]] else { return nil }
+        guard let info = infos.first(where: { ($0["purl"] as? String)?.isEmpty == false }),
+              let purl = info["purl"] as? String, !purl.isEmpty else {
+            let result = infos.first?["result"] ?? "unknown"
+            BeansLogger.shared.log("QQ vkey 无可播地址：音质=\(br) result=\(result) 已登录=\(qqAuth.isLoggedIn ? "是" : "否")", level: .debug)
+            return nil
+        }
         if purl.hasPrefix("http") { return purl }
+        let sips = reqData["sip"] as? [String] ?? []
+        if let sip = sips.first(where: { $0.hasPrefix("https://") }) ?? sips.first {
+            let secureSip = sip.hasPrefix("http://") ? "https://" + String(sip.dropFirst("http://".count)) : sip
+            return secureSip + purl
+        }
         return "https://isure.stream.qqmusic.qq.com/" + purl
     }
 
@@ -867,6 +887,10 @@ final class QQMusicAPI {
         let interval = item["interval"] as? Int ?? 0
         let pay = item["pay"] as? [String: Any]
         let fee = (item["fee"] as? Int) ?? (pay?["pay_play"] as? Int) ?? (pay?["payplay"] as? Int) ?? 0
+        let file = item["file"] as? [String: Any]
+        let mediaMid = file?["media_mid"] as? String
+            ?? item["strMediaMid"] as? String
+            ?? item["media_mid"] as? String
         return Song(
             id: sid,
             name: item["songname"] as? String ?? (item["name"] as? String ?? ""),
@@ -876,6 +900,7 @@ final class QQMusicAPI {
             duration: TimeInterval(interval),
             source: .qq,
             qqMid: mid.isEmpty ? nil : mid,
+            qqMediaMid: mediaMid,
             fee: fee
         )
     }
@@ -903,4 +928,3 @@ private struct SeededRNG: RandomNumberGenerator {
         return state
     }
 }
-

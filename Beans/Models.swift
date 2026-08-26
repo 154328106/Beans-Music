@@ -53,6 +53,8 @@ struct Song: Identifiable, Hashable, Codable {
     let source: SongSource
     /// QQ 音乐 songmid（source == .qq 时用于获取播放地址与歌词）
     let qqMid: String?
+    /// QQ 音乐音频文件 media_mid；部分歌曲与 songmid 不同，取 vkey 时必须优先使用
+    let qqMediaMid: String?
     /// 付费/VIP 标记（网易云：0 免费、1 VIP、4 付费单曲；QQ 音乐：0 免费、非 0 付费）
     let fee: Int
 
@@ -81,7 +83,7 @@ struct Song: Identifiable, Hashable, Codable {
         }
     }
 
-    init(id: Int, name: String, artists: String, album: String, coverURL: URL?, duration: TimeInterval, source: SongSource = .netease, qqMid: String? = nil, fee: Int = 0) {
+    init(id: Int, name: String, artists: String, album: String, coverURL: URL?, duration: TimeInterval, source: SongSource = .netease, qqMid: String? = nil, qqMediaMid: String? = nil, fee: Int = 0) {
         self.id = id
         self.name = name
         self.artists = artists
@@ -90,6 +92,7 @@ struct Song: Identifiable, Hashable, Codable {
         self.duration = duration
         self.source = source
         self.qqMid = qqMid
+        self.qqMediaMid = qqMediaMid
         self.fee = fee
     }
 
@@ -115,10 +118,11 @@ struct Song: Identifiable, Hashable, Codable {
         duration = Double(ms) / 1000.0
         source = .netease
         qqMid = nil
+        qqMediaMid = nil
         fee = json["fee"] as? Int ?? 0
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, artists, album, coverURL, duration, source, qqMid, fee }
+    private enum CodingKeys: String, CodingKey { case id, name, artists, album, coverURL, duration, source, qqMid, qqMediaMid, fee }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -130,6 +134,7 @@ struct Song: Identifiable, Hashable, Codable {
         duration = try c.decodeIfPresent(TimeInterval.self, forKey: .duration) ?? 0
         source = try c.decodeIfPresent(SongSource.self, forKey: .source) ?? .netease
         qqMid = try c.decodeIfPresent(String.self, forKey: .qqMid)
+        qqMediaMid = try c.decodeIfPresent(String.self, forKey: .qqMediaMid)
         fee = try c.decodeIfPresent(Int.self, forKey: .fee) ?? 0
     }
 
@@ -143,6 +148,7 @@ struct Song: Identifiable, Hashable, Codable {
         try c.encode(duration, forKey: .duration)
         try c.encode(source, forKey: .source)
         try c.encodeIfPresent(qqMid, forKey: .qqMid)
+        try c.encodeIfPresent(qqMediaMid, forKey: .qqMediaMid)
         try c.encode(fee, forKey: .fee)
     }
 }
@@ -390,4 +396,3 @@ struct SongComment: Identifiable, Hashable {
         self.isHot = isHot
     }
 }
-
