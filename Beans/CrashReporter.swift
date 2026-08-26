@@ -74,6 +74,6 @@ final class CrashReporter {
         try? content.data(using: .utf8)?.write(to: file, options: .atomic)
 
         // 同时写入 App 内日志，便于直接查看
-        BeansLogger.shared.log("检测到崩溃/异常：\(text.split(separator: "\n").first ?? text)", level: .error)
+        BeansLogger.shared.log("检测到崩溃/异常：\(text.components(separatedBy: "\n").first ?? text)", level: .error)
     }
 }
