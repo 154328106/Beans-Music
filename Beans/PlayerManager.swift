@@ -1,6 +1,7 @@
 import AVFoundation
 import MediaPlayer
 import SwiftUI
+import UIKit
 
 enum PlayMode: String, CaseIterable, Identifiable {
     case sequential
@@ -328,8 +329,8 @@ final class PlayerManager: NSObject, ObservableObject {
             var urlString: String?
             var resolvedThirdParty: UnblockService.Resolved?
             // 版权受限歌手（周杰伦）：允许第三方音源，但启用严格模式（歌名+歌手+时长三重匹配原唱，校验不过拒绝，绝不播放翻唱）
-            // 免费听歌（灰色歌曲解锁）总开关：默认关闭，需在「我的 → 设置」手动开启
-            let enableUnblock = defaults.object(forKey: "beans.enableUnblock") as? Bool ?? false
+            // 免费听歌（灰色歌曲解锁）总开关：默认开启，优先使用内置预设音源兜底。
+            let enableUnblock = defaults.object(forKey: "beans.enableUnblock") as? Bool ?? true
             let strictUnlock = shouldLockOfficialOnly(song)
             let quality = BeansAudioQuality.current
             BeansLogger.shared.log("▶ 开始播放：\(song.name) - \(song.artists)｜平台=\(song.source.rawValue) id=\(song.id) 音质=\(quality.level) 免费听歌=\(enableUnblock ? "开" : "关") 官方受限=\(strictUnlock ? "是" : "否")", level: .info)
@@ -351,6 +352,7 @@ final class PlayerManager: NSObject, ObservableObject {
                 return
             }
             guard let urlString, let url = URL(string: urlString) else {
+                let thirdPartyAttempted = resolvedThirdParty != nil
                 await MainActor.run {
                     guard generation == self.loadGeneration else { return }
                     self.isBuffering = false
@@ -359,7 +361,7 @@ final class PlayerManager: NSObject, ObservableObject {
                         BeansLogger.shared.log("播放失败：\(song.name) - 未找到原唱音源（官方受限），拒绝翻唱版本", level: .error)
                         ToastCenter.shared.show("《\(song.name)》未找到原唱音源（官方受限），已停止播放，拒绝翻唱版本")
                     } else {
-                        let hint = resolvedThirdParty == nil ? "（第三方音源未命中）" : "（第三方音源尝试后无结果）"
+                        let hint = thirdPartyAttempted ? "（第三方音源尝试后无结果）" : "（第三方音源未命中）"
                         BeansLogger.shared.log("播放失败：\(song.name) - 无法解析播放地址\(hint)｜音质=\(quality.level) 免费听歌=\(enableUnblock ? "开" : "关")", level: .error)
                     }
                 }
@@ -480,6 +482,7 @@ final class PlayerManager: NSObject, ObservableObject {
 
     private func setupPlayer(url: URL) {
         configureAudioSession()
+        UIApplication.shared.beginReceivingRemoteControlEvents()
         removeCurrentObservers()
         // QQ 官方 CDN（isure.stream.qqmusic.qq.com 等）要求 UA/Referer 请求头，
         // 否则裸 GET 会被拒绝（403），导致播放成功却无声、进度条不动。
@@ -533,11 +536,9 @@ final class PlayerManager: NSObject, ObservableObject {
             if let itemDuration = player.currentItem?.duration, itemDuration.isNumeric {
                 self.duration = itemDuration.seconds
             }
-            if let item = player.currentItem {
-                let waiting = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
-                if waiting != self.isBuffering {
-                    self.isBuffering = waiting
-                }
+            let waiting = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
+            if waiting != self.isBuffering {
+                self.isBuffering = waiting
             }
         }
         endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
@@ -692,7 +693,7 @@ final class PlayerManager: NSObject, ObservableObject {
 
     private func updateNowPlaying() {
         guard let song = currentSong else { return }
-        var info: [String: Any] = [
+        let info: [String: Any] = [
             MPMediaItemPropertyTitle: song.name,
             MPMediaItemPropertyArtist: song.artists,
             MPMediaItemPropertyAlbumTitle: song.album,
@@ -714,6 +715,12 @@ final class PlayerManager: NSObject, ObservableObject {
 
     private func setupRemoteCommands() {
         let center = MPRemoteCommandCenter.shared()
+        center.playCommand.isEnabled = true
+        center.pauseCommand.isEnabled = true
+        center.nextTrackCommand.isEnabled = true
+        center.previousTrackCommand.isEnabled = true
+        center.togglePlayPauseCommand.isEnabled = true
+        center.changePlaybackPositionCommand.isEnabled = true
         center.playCommand.addTarget { [weak self] _ in
             self?.player?.playImmediately(atRate: Float(self?.rate ?? 1.0))
             self?.isPlaying = true
@@ -747,9 +754,9 @@ final class PlayerManager: NSObject, ObservableObject {
 
     // MARK: - 与其他音频同时播放
 
-    /// 与其他 App 音频混合播放（不打断其他音频，默认开启：打开其他音频软件也能继续播放）
+    /// 与其他 App 音频混合播放。默认关闭，让系统把 Beans 作为主播放 App 显示到锁屏/灵动岛。
     var mixesWithOthers: Bool {
-        get { defaults.object(forKey: audioMixKey) as? Bool ?? true }
+        get { defaults.object(forKey: audioMixKey) as? Bool ?? false }
         set {
             defaults.set(newValue, forKey: audioMixKey)
             sessionConfigured = false

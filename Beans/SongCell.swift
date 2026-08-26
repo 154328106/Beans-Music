@@ -12,6 +12,7 @@ struct SongCell: View {
     var onTap: (() -> Void)?
 
     @State private var showAddToPlaylist = false
+    @State private var appeared = false
 
     private var isCurrent: Bool {
         player.currentSong?.identityKey == song.identityKey
@@ -53,6 +54,8 @@ struct SongCell: View {
         }
         .padding(.vertical, 6)
         .contentShape(Rectangle())
+        .scaleEffect(isCurrent ? 1.012 : 1)
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isCurrent)
         .onTapGesture {
             onTap?()
         }
@@ -85,14 +88,20 @@ struct SongCell: View {
 
     var body: some View {
         let _ = theme.accent
-        if glassRow {
-            rowContent
-                .padding(.horizontal, 10)
-                .background {
-                                        BeansGlass(shape: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                }
-        } else {
-            rowContent
+        Group {
+            if glassRow {
+                rowContent
+                    .padding(.horizontal, 10)
+                    .background {
+                                            BeansGlass(shape: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+            } else {
+                rowContent
+            }
         }
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 8)
+        .animation(.easeOut(duration: 0.28), value: appeared)
+        .onAppear { appeared = true }
     }
 }

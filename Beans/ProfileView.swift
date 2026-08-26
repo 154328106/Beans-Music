@@ -814,7 +814,9 @@ struct SettingsView: View {
     /// 底栏是否显示文字（关闭后只显示图标）
     @AppStorage("beans.tabLabelsVisible") private var tabLabelsVisible = true
     /// 官方地址不可用时，是否尝试用户导入的音源
-    @AppStorage("beans.enableUnblock") private var enableImportedSources = false
+    @AppStorage("beans.enableUnblock") private var enableImportedSources = true
+    /// 可选高刷新率动效，默认关闭以降低发热
+    @AppStorage("beans.enableHighRefresh") private var enableHighRefresh = false
     @ObservedObject private var sourceStore = UnblockSourceStore.shared
 
     @State private var appearanceExpanded = false
@@ -977,23 +979,6 @@ struct SettingsView: View {
             }
             .buttonStyle(GlassPressButtonStyle(scale: 0.98))
 
-            // 底栏是否显示文字（关闭后底栏只显示图标）
-            Toggle(isOn: $tabLabelsVisible) {
-                HStack(spacing: 12) {
-                    Image(systemName: "rectangle.3.group")
-                        .font(.system(size: 14))
-                        .foregroundStyle(Color.beansAmber)
-                        .frame(width: 28)
-                    Text("底栏显示文字")
-                        .font(BeansFont.appFont(15))
-                        .foregroundStyle(Color.beansLabel)
-                }
-            }
-            .toggleStyle(.switch)
-            .tint(Color.beansAmber)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 6)
-
             if appearanceExpanded {
             VStack(alignment: .leading, spacing: 14) {
                 Picker("主题模式", selection: $themeModeRaw) {
@@ -1002,6 +987,27 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+
+                Toggle(isOn: $tabLabelsVisible) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "rectangle.3.group")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.beansAmber)
+                            .frame(width: 28)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("底栏显示文字")
+                                .font(BeansFont.appFont(15))
+                                .foregroundStyle(Color.beansLabel)
+                            Text("关闭后底栏只保留图标，界面更简洁")
+                                .font(BeansFont.appFont(11))
+                                .foregroundStyle(Color.beansComment)
+                        }
+                    }
+                }
+                .toggleStyle(.switch)
+                .tint(Color.beansAmber)
+
+                Divider().overlay(Color.beansComment.opacity(0.15))
 
                 // 玻璃材质：液态玻璃仅 iOS 26+ 可用，低版本隐藏该开关（自动使用磨砂玻璃）
                 if #available(iOS 26, *) {
@@ -1296,7 +1302,28 @@ struct SettingsView: View {
                             Text("与其他音频同时播放")
                                 .font(BeansFont.appFont(15))
                                 .foregroundStyle(Color.beansLabel)
-                            Text("开启：播放音乐时打开其他音频软件也能继续播放；关闭：其他音频开始播放时自动暂停")
+                            Text("默认关闭以显示锁屏/灵动岛；开启后可与其他 App 声音同时播放")
+                                .font(BeansFont.appFont(11))
+                                .foregroundStyle(Color.beansComment)
+                        }
+                    }
+                }
+                .toggleStyle(.switch)
+                .tint(Color.beansAmber)
+
+                Divider().overlay(Color.beansComment.opacity(0.15))
+
+                Toggle(isOn: $enableHighRefresh) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "speedometer")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.beansAmber)
+                            .frame(width: 28)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("高刷新动效")
+                                .font(BeansFont.appFont(15))
+                                .foregroundStyle(Color.beansLabel)
+                            Text("默认关闭以降低发热；开启后在支持 ProMotion 的设备上动画更丝滑")
                                 .font(BeansFont.appFont(11))
                                 .foregroundStyle(Color.beansComment)
                         }

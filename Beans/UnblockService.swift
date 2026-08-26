@@ -12,8 +12,8 @@ enum UnblockService {
 
     private static let session: URLSession = {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 12
-        config.timeoutIntervalForResource = 25
+        config.timeoutIntervalForRequest = 7
+        config.timeoutIntervalForResource = 12
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         return URLSession(configuration: config)
     }()
@@ -21,7 +21,7 @@ enum UnblockService {
     /// 统一的 GET 请求（带移动端 UA，提升第三方接口可用性）
     private static func get(_ url: URL) async -> Data? {
         var request = URLRequest(url: url)
-        request.timeoutInterval = 12
+        request.timeoutInterval = 7
         request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         guard let (data, resp) = try? await session.data(for: request),
@@ -29,7 +29,7 @@ enum UnblockService {
         return data
     }
 
-    /// 入口：按用户导入的自定义音源（已开启的）依次尝试，返回第一个可用地址
+    /// 入口：并发尝试可用于当前平台的音源，返回第一个可用地址。
     static func resolve(
         name: String,
         artists: String,
@@ -43,23 +43,49 @@ enum UnblockService {
             .joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !keyword.isEmpty else { return nil }
-        let store = UnblockSourceStore.shared
-        // 用户导入的自定义源按导入顺序尝试。
-        for source in store.customSources where source.enabled {
-            if source.kind == "lx-script" {
-                if let r = await lxScript(source: source, songSource: songSource, neteaseID: neteaseID, qqMid: qqMid) { return r }
-            } else if source.kind == "lx" {
-                if let r = await lx(source: source, keyword: keyword) { return r }
-            } else if let r = await custom(
-                source: source,
-                name: name,
-                artists: artists,
-                neteaseID: neteaseID,
-                songSource: songSource,
-                qqMid: qqMid
-            ) { return r }
+        let sources = UnblockSourceStore.shared.customSources
+            .filter { $0.enabled && canUse(source: $0, songSource: songSource, neteaseID: neteaseID, qqMid: qqMid) }
+        guard !sources.isEmpty else { return nil }
+
+        // 慢源/失效源不要拖住播放：全部候选一起请求，最快命中的播放地址直接返回。
+        return await withTaskGroup(of: Resolved?.self) { group in
+            for source in sources {
+                group.addTask {
+                    if source.kind == "lx-script" {
+                        return await lxScript(source: source, songSource: songSource, neteaseID: neteaseID, qqMid: qqMid)
+                    } else if source.kind == "lx" {
+                        return await lx(source: source, keyword: keyword)
+                    } else {
+                        return await custom(
+                            source: source,
+                            name: name,
+                            artists: artists,
+                            neteaseID: neteaseID,
+                            songSource: songSource,
+                            qqMid: qqMid
+                        )
+                    }
+                }
+            }
+            for await result in group {
+                if let result {
+                    group.cancelAll()
+                    return result
+                }
+            }
+            return nil
         }
-        return nil
+    }
+
+    private static func canUse(source: ThirdPartySource, songSource: SongSource, neteaseID: Int, qqMid: String?) -> Bool {
+        let expectedProvider = songSource == .qq ? "tx" : "wy"
+        if let provider = source.headers["source"], !provider.isEmpty, provider != expectedProvider {
+            return false
+        }
+        if songSource == .qq {
+            return qqMid?.isEmpty == false
+        }
+        return neteaseID > 0
     }
 
     // MARK: - 洛雪音源脚本转换配置
@@ -84,7 +110,7 @@ enum UnblockService {
         for quality in qualities {
             guard let url = URL(string: "\(base)/url/\(provider)/\(songID)/\(quality)") else { continue }
             var request = URLRequest(url: url)
-            request.timeoutInterval = 12
+            request.timeoutInterval = 7
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             request.setValue("lx-music-mobile/1.0", forHTTPHeaderField: "User-Agent")
             if let apiKey = source.headers["apiKey"], !apiKey.isEmpty {
@@ -150,7 +176,7 @@ enum UnblockService {
         urlString = urlString.replacingOccurrences(of: "{artist}", with: urlEncoded(artists))
         guard let url = URL(string: urlString) else { return nil }
         var request = URLRequest(url: url)
-        request.timeoutInterval = 12
+        request.timeoutInterval = 7
         let metadataKeys: Set<String> = ["source", "quality", "br", "apiKey"]
         for (key, value) in source.headers where !metadataKeys.contains(key) {
             request.setValue(value, forHTTPHeaderField: key)
@@ -169,7 +195,7 @@ enum UnblockService {
             return nil
         }
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let value = valueAtPath(obj, source.urlPath),
+              let value = valueAtAnyPath(obj, source.urlPath),
               let resolvedURL = value as? String, !resolvedURL.isEmpty,
               let playURL = URL(string: resolvedURL) else {
             BeansLogger.shared.log("导入音源响应中没有播放地址：\(source.name)", level: .debug)
@@ -217,6 +243,16 @@ enum UnblockService {
               let playURL = URL(string: urlStr)
         else { return nil }
         return Resolved(url: playURL, source: "落雪 (\(lxSource))")
+    }
+
+    /// 多个点分路径取值：data.music|data.url|url。
+    private static func valueAtAnyPath(_ obj: Any, _ paths: String) -> Any? {
+        for path in paths.split(separator: "|") {
+            if let value = valueAtPath(obj, String(path)) {
+                return value
+            }
+        }
+        return nil
     }
 
     /// 点分路径取值：url / data.url / data.audioUrl ...

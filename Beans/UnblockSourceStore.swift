@@ -6,7 +6,7 @@ import Foundation
 /// urlPath：响应 JSON 中播放地址的字段路径（支持点分，如 url / data.url / data.audioUrl）
 /// headers：可选的附加请求头
 /// enabled：导入后用户可自行选择开启 / 关闭
-struct ThirdPartySource: Identifiable, Codable, Hashable {
+struct ThirdPartySource: Identifiable, Codable, Hashable, Sendable {
     var id = UUID().uuidString
     var name: String
     var kind: String = "keyword"
@@ -43,6 +43,23 @@ struct ThirdPartySource: Identifiable, Codable, Hashable {
 final class UnblockSourceStore: ObservableObject {
     static let shared = UnblockSourceStore()
 
+    static let guoyuePresetSources: [ThirdPartySource] = [
+        ThirdPartySource(
+            name: "guoyue2010 · QQ 稳定源",
+            kind: "template-api",
+            template: "https://cyapi.top/API/qq_music.php?apikey=1ffdf5733f5d538760e63d7e46ba17438d9f7b9dfc18c51be1109386fd74c3a1&type=json&mid={id}",
+            urlPath: "url",
+            headers: ["source": "tx"]
+        ),
+        ThirdPartySource(
+            name: "guoyue2010 · 网易云统一源",
+            kind: "template-api",
+            template: "https://music-api.gdstudio.xyz/api.php?types=url&source=netease&id={id}&br=999",
+            urlPath: "url",
+            headers: ["source": "wy"]
+        ),
+    ]
+
     /// 用户导入的自定义源
     @Published var customSources: [ThirdPartySource] {
         didSet { save() }
@@ -50,14 +67,20 @@ final class UnblockSourceStore: ObservableObject {
 
     private let defaults = UserDefaults.standard
     private let customKey = "beans.unblock.custom"
+    private let presetSeedKey = "beans.unblock.guoyuePreset.v1"
+    private let freeListenSeedKey = "beans.unblock.freeListenPreset.v1"
 
     private init() {
+        let savedSources: [ThirdPartySource]
         if let data = defaults.data(forKey: customKey),
            let list = try? JSONDecoder().decode([ThirdPartySource].self, from: data) {
-            customSources = list
+            savedSources = list
         } else {
-            customSources = []
+            savedSources = []
         }
+        customSources = Self.seedGuoyuePresets(into: savedSources, defaults: defaults, seedKey: presetSeedKey)
+        enableFreeListenForPresetIfNeeded()
+        save()
     }
 
     func add(_ source: ThirdPartySource) {
@@ -83,5 +106,25 @@ final class UnblockSourceStore: ObservableObject {
         if let data = try? JSONEncoder().encode(customSources) {
             defaults.set(data, forKey: customKey)
         }
+    }
+
+    private static func seedGuoyuePresets(into savedSources: [ThirdPartySource], defaults: UserDefaults, seedKey: String) -> [ThirdPartySource] {
+        guard !defaults.bool(forKey: seedKey) else { return savedSources }
+        defaults.set(true, forKey: seedKey)
+        var seeded = savedSources
+        for preset in guoyuePresetSources.reversed() where !seeded.contains(where: {
+            $0.kind == preset.kind
+                && $0.template == preset.template
+                && $0.headers["source"] == preset.headers["source"]
+        }) {
+            seeded.insert(preset, at: 0)
+        }
+        return seeded
+    }
+
+    private func enableFreeListenForPresetIfNeeded() {
+        guard !defaults.bool(forKey: freeListenSeedKey) else { return }
+        defaults.set(true, forKey: freeListenSeedKey)
+        defaults.set(true, forKey: "beans.enableUnblock")
     }
 }

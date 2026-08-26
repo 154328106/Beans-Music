@@ -15,8 +15,8 @@ struct PlayerView: View {
     @EnvironmentObject private var player: PlayerManager
     @EnvironmentObject private var auth: AuthStore
     @EnvironmentObject private var favorites: FavoritesStore
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
+    @Binding var isPresented: Bool
 
     @State private var lyrics: [LyricLine] = []
     @State private var showLyrics = false
@@ -50,10 +50,14 @@ struct PlayerView: View {
     @AppStorage("beans.lyricSpacing") private var lyricLineSpacing = 24
     /// 播放器氛围：背景流动开关 / 速度 / 呼吸光晕强度
     @AppStorage("beans.playerBreath") private var playerBreath = 0.6
+    /// 播放控件颜色是否跟随封面主色；关闭后使用全局主题色
+    @AppStorage("beans.playerControlsUseCoverColor") private var controlsUseCoverColor = true
     /// 显示歌词翻译（借鉴 Kumone：网易云 tlyric）
     @AppStorage("beans.lyricTranslation") private var lyricTranslation = true
     /// 进度条样式：0 流光 / 1 辉光 / 2 极光 / 3 波浪
     @AppStorage("beans.progressBarStyle") private var progressBarStyle = 0
+    /// 进度条单独强调色；空值时跟随播放控件颜色
+    @AppStorage("beans.progressAccentHex") private var progressAccentHex = ""
     /// 底部布局自由调整：开关 + 各组件 x/y/z 数据 + 当前选中组件
     @AppStorage("beans.playerLayoutMode") private var layoutMode = false
     @State private var layoutData: [String: PlayerLayoutEntry] = PlayerLayoutStore.load()
@@ -85,6 +89,9 @@ struct PlayerView: View {
     @AppStorage("beans.lyricOffset") private var lyricOffset = 0.0
     /// 侧边滑动手势当前位移（刷视频式切歌过渡）
     @State private var swipeOffset: CGFloat = 0
+    @State private var coverDrag: CGSize = .zero
+    @State private var coverSwitchPulse = false
+    @State private var animatedSongKey = ""
 
     private var song: Song? { player.currentSong }
     private let rateOptions: [Double] = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
@@ -114,6 +121,21 @@ struct PlayerView: View {
             return CoverPalette.make(dominant: dominantColor, colorScheme: colorScheme)
         }
         return CoverPalette.fallback(colorScheme: colorScheme)
+    }
+
+    private var controlAccent: Color {
+        controlsUseCoverColor ? palette.accent : Color.beansAmber
+    }
+
+    private var controlAccentSoft: Color {
+        controlsUseCoverColor ? palette.accentSoft : Color.beansAmber.opacity(0.28)
+    }
+
+    private var progressAccent: Color {
+        if progressAccentHex.hasPrefix("#"), let color = Color(hex: progressAccentHex) {
+            return color
+        }
+        return controlAccent
     }
 
     /// 当前行歌词颜色（可自定义；配色模式关闭时自动跟随封面取色）
@@ -217,7 +239,21 @@ struct PlayerView: View {
             }
         }
         .task(id: song?.identityKey) {
+            let songKey = song?.identityKey ?? ""
             dominantColor = nil
+            await MainActor.run {
+                coverDrag = .zero
+                let shouldPulse = !animatedSongKey.isEmpty && animatedSongKey != songKey
+                animatedSongKey = songKey
+                coverSwitchPulse = shouldPulse
+                if shouldPulse {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                        withAnimation(.easeOut(duration: 0.20)) {
+                            coverSwitchPulse = false
+                        }
+                    }
+                }
+            }
             await loadLyrics()
             await extractCoverPalette()
         }
@@ -324,7 +360,7 @@ struct PlayerView: View {
         HStack(spacing: 12) {
             Button {
                 BeansHaptics.tap()
-                dismiss()
+                closePlayer()
             } label: {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 15, weight: .semibold))
@@ -508,6 +544,7 @@ struct PlayerView: View {
                     // 封面（静态）
                     CoverImage(url: song?.coverURL, size: size, cornerRadius: coverRadius, emptyHint: player.isBuffering ? "等待开始播放…" : nil)
                         .matchedGeometryEffect(id: "playerCover", in: coverNS)
+                        .id(song?.identityKey ?? "empty-cover")
                         .modifier(CoverSpin(enabled: circularCover && circularCoverSpin, isPlaying: player.isPlaying))
                         .overlay {
                             RoundedRectangle(cornerRadius: coverRadius, style: .continuous)
@@ -525,6 +562,13 @@ struct PlayerView: View {
                         }
                         .clipShape(RoundedRectangle(cornerRadius: coverRadius, style: .continuous))
                         .shadow(color: .black.opacity(0.38), radius: 24, y: 12)
+                        .scaleEffect(coverSwitchPulse ? 0.94 : 1)
+                        .blur(radius: coverSwitchPulse ? 2 : 0)
+                        .rotation3DEffect(.degrees(Double(coverDrag.height / -18)), axis: (x: 1, y: 0, z: 0), perspective: 0.55)
+                        .rotation3DEffect(.degrees(Double(coverDrag.width / 18)), axis: (x: 0, y: 1, z: 0), perspective: 0.55)
+                        .offset(x: coverDrag.width * 0.05, y: coverDrag.height * 0.05)
+                        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: coverDrag)
+                        .animation(.easeOut(duration: 0.24), value: coverSwitchPulse)
                 }
                 .frame(width: size * 1.10, height: size * 1.10)
                 // 封面上的滑动切歌手势：与轻点（切歌词）互斥，拖动时不会误触
@@ -532,6 +576,7 @@ struct PlayerView: View {
                     DragGesture(minimumDistance: 15)
                         .onChanged { value in
                             guard swipeSwitchSong else { return }
+                            coverDrag = value.translation
                             let h = value.translation.height
                             if abs(h) > abs(value.translation.width) {
                                 swipeOffset = h
@@ -587,11 +632,12 @@ struct PlayerView: View {
         .opacity(1 - min(abs(swipeOffset) / 260, 0.35))
         .gesture(
             DragGesture(minimumDistance: 15)
-                .onChanged { value in
-                    guard swipeSwitchSong else { return }
-                    let h = value.translation.height
-                    if abs(h) > abs(value.translation.width) {
-                        swipeOffset = h
+                        .onChanged { value in
+                            guard swipeSwitchSong else { return }
+                            coverDrag = value.translation
+                            let h = value.translation.height
+                            if abs(h) > abs(value.translation.width) {
+                                swipeOffset = h
                     }
                 }
                 .onEnded { value in
@@ -769,7 +815,7 @@ struct PlayerView: View {
                 .foregroundStyle(palette.secondary)
             Button {
                 BeansHaptics.tap()
-                dismiss()
+                closePlayer()
             } label: {
                 Text("返回")
                     .font(BeansFont.appFont(14, .semibold))
@@ -806,25 +852,46 @@ struct PlayerView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - 底部控制栏（普通材质圆角面板：进度 / 主控制 / 工具行）
+    // MARK: - 底部控制栏（悬浮玻璃控制台：进度 / 主控制）
 
     /// 底部控制栏估算高度（单行控制后降低，给歌词视口更多空间）
     /// 底部控制栏预留高度（越小歌词视口越大；需 >= 控制栏实际高度避免遮挡；可视化开启时控制栏更高）
-    private var deckInset: CGFloat { 116 }
+    private var deckInset: CGFloat { 148 }
 
     private func controlDeck(bottomInset: CGFloat) -> some View {
-        VStack(spacing: 0) {
-            progressBlock
-                .modifier(Layoutable(part: .progress, enabled: layoutMode, data: $layoutData))
-            deckRow
-                .modifier(Layoutable(part: .controls, enabled: layoutMode, data: $layoutData))
+        VStack(spacing: 7) {
+            VStack(spacing: 10) {
+                progressBlock
+                    .modifier(Layoutable(part: .progress, enabled: layoutMode, data: $layoutData))
+                deckRow
+                    .modifier(Layoutable(part: .controls, enabled: layoutMode, data: $layoutData))
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 14)
+            .background {
+                BeansGlass(shape: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [.white.opacity(0.16), .clear, progressAccent.opacity(0.10)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .strokeBorder(.white.opacity(0.18), lineWidth: 0.8)
+                    }
+            }
+            .shadow(color: .black.opacity(0.20), radius: 18, y: 10)
             deckGrabber
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 0)
-        .padding(.bottom, bottomInset)
+        .padding(.horizontal, 18)
+        .padding(.bottom, bottomInset + 2)
         .frame(maxWidth: .infinity)
-        // 底部控件直接悬浮在模糊背景上：旋律可视化 + 进度 + 单行控制 + 指示线，歌词视口更大
     }
 
     /// 底部指示线：只有在指示线附近上滑才呼出评论区（避免误触控制按钮）
@@ -874,7 +941,7 @@ struct PlayerView: View {
 
     private var progressBlock: some View {
         VStack(spacing: 1) {
-            SeekBar(accent: palette.accent, track: palette.secondary.opacity(0.3), style: progressBarStyle)
+            SeekBar(accent: progressAccent, track: palette.secondary.opacity(0.3), style: progressBarStyle)
             HStack(spacing: 6) {
                 seekPillButton("gobackward.15") { player.seekBy(-15) }
                 Text(beansTimeString(player.progress))
@@ -929,7 +996,7 @@ struct PlayerView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 24)
+        .padding(.horizontal, 8)
     }
 
     /// 循环 / 随机播放按钮（随机模式高亮）
@@ -940,8 +1007,8 @@ struct PlayerView: View {
         } label: {
             Image(systemName: player.playMode.icon)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(player.playMode == .shuffle ? palette.accent : palette.secondary)
-                .frame(width: 24, height: 24)
+                .foregroundStyle(player.playMode == .shuffle ? controlAccent : palette.secondary)
+                .frame(width: 36, height: 36)
                 .background {
                                         BeansGlass(shape: Circle())
                 }
@@ -959,7 +1026,7 @@ struct PlayerView: View {
             Image(systemName: "list.bullet")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(palette.secondary)
-                .frame(width: 24, height: 24)
+                .frame(width: 36, height: 36)
                 .background {
                                         BeansGlass(shape: Circle())
                 }
@@ -975,8 +1042,8 @@ struct PlayerView: View {
         } label: {
             Image(systemName: icon)
                 .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(accent ? palette.accent : palette.text)
-                .frame(width: 34, height: 34)
+                .foregroundStyle(accent ? controlAccent : palette.text)
+                .frame(width: 42, height: 42)
                 .background {
                                         BeansGlass(shape: Circle())
                 }
@@ -991,19 +1058,15 @@ struct PlayerView: View {
             BeansHaptics.tap()
             player.togglePlayPause()
         } label: {
-            Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                .font(.system(size: 22, weight: .semibold))
+            PlayPauseMorphIcon(isPlaying: player.isPlaying, size: 22)
                 .foregroundStyle(Color.white)
-                .modifier(BeansSymbolReplace())
-                .scaleEffect(player.isPlaying ? 1.0 : 0.88)
-                .animation(.spring(response: 0.32, dampingFraction: 0.6), value: player.isPlaying)
-                .frame(width: 44, height: 44)
+                .frame(width: 56, height: 56)
                 .background {
                                         BeansGlass(shape: Circle())
                     .overlay {
                         Circle().fill(
                             LinearGradient(
-                                colors: [palette.accent.opacity(0.55), palette.accentSoft.opacity(0.55)],
+                                colors: [controlAccent.opacity(0.55), controlAccentSoft.opacity(0.55)],
                                 startPoint: .top, endPoint: .bottom
                             )
                         )
@@ -1013,7 +1076,7 @@ struct PlayerView: View {
                     }
                 }
                 .clipShape(Circle())
-                .shadow(color: palette.accent.opacity(0.4), radius: 14, y: 7)
+                .shadow(color: controlAccent.opacity(0.4), radius: 14, y: 7)
         }
         .buttonStyle(GlassPressButtonStyle(scale: 0.9))
     }
@@ -1221,18 +1284,29 @@ struct PlayerView: View {
         }
     }
 
+    private func closePlayer() {
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.88)) {
+            isPresented = false
+        }
+    }
+
     /// 刷抖音式切歌：松手后旧封面继续飞出屏幕，新封面从对侧滑入（上滑下一首：旧向上飞、新从底部上来；下滑反之）
     private func handleSwipeEnd(height: CGFloat) {
         guard swipeSwitchSong else { return }
         let h = height
         if h < -70 {
             BeansHaptics.tap()
+            coverDrag = .zero
             flySwipe(direction: -1)
         } else if h > 70 {
             BeansHaptics.tap()
+            coverDrag = .zero
             flySwipe(direction: 1)
         } else {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) { swipeOffset = 0 }
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+                swipeOffset = 0
+                coverDrag = .zero
+            }
         }
     }
 
@@ -1245,7 +1319,10 @@ struct PlayerView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.17) {
             // 动画期间开关被关闭：面板直接复位，避免卡在屏幕外
             guard swipeSwitchSong else {
-                withAnimation(.easeOut(duration: 0.2)) { swipeOffset = 0 }
+                withAnimation(.easeOut(duration: 0.2)) {
+                    swipeOffset = 0
+                    coverDrag = .zero
+                }
                 return
             }
             if direction < 0 { player.next() } else { player.previous() }
@@ -1301,6 +1378,7 @@ struct SeekBar: View {
     @State private var scrubValue: Double = 0
     /// 流光样式：光点游动相位（0→1 往返）
     @State private var flowPhase: CGFloat = 0
+    @State private var lastPreviewSecond: Int?
 
     private var progress: Double {
         scrubbing ? scrubValue : player.progress
@@ -1368,7 +1446,7 @@ struct SeekBar: View {
                         .animation(.spring(response: 0.25, dampingFraction: 0.7), value: scrubbing)
                 case 3:
                     // 波浪：正弦波形，已播放段高亮发光
-                    WaveBar(ratio: ratio, accent: accent, track: track, width: width)
+                    WaveBar(ratio: ratio, accent: accent, track: track, width: width, isPlaying: player.isPlaying)
                 default:
                     // 流光：清透轨道 + 渐变已播放段 + 顶部高光 + 游动光点
                     Capsule()
@@ -1393,53 +1471,88 @@ struct SeekBar: View {
                                 .frame(height: 2.5)
                                 .clipShape(Capsule())
                         }
-                    // 游动光点（在已播放段上往返移动，柔圆光晕）
-                    ZStack {
-                        Circle()
-                            .fill(.white.opacity(0.35))
-                            .blur(radius: 4)
-                            .frame(width: 14, height: 14)
-                        Circle()
-                            .fill(.white.opacity(0.95))
-                            .frame(width: 5, height: 5)
-                            .shadow(color: .white.opacity(0.7), radius: 2)
+                    if player.isPlaying {
+                        // 游动光点仅在播放中运行，暂停后不保留 repeatForever 动画。
+                        ZStack {
+                            Circle()
+                                .fill(.white.opacity(0.35))
+                                .blur(radius: 4)
+                                .frame(width: 14, height: 14)
+                            Circle()
+                                .fill(.white.opacity(0.95))
+                                .frame(width: 5, height: 5)
+                                .shadow(color: .white.opacity(0.7), radius: 2)
+                        }
+                        .offset(x: max(2, thumbX - 5) * flowPhase)
+                        .animation(.linear(duration: 2.4).repeatForever(autoreverses: true), value: flowPhase)
                     }
-                    .offset(x: max(2, thumbX - 5) * flowPhase)
-                    .animation(.linear(duration: 2.4).repeatForever(autoreverses: true), value: flowPhase)
                 }
 
                 // 滑块（流光/辉光/波浪用发光圆点；极光自带大滑块）
                 if style != 2 {
                     Circle()
                         .fill(.white)
-                        .frame(width: scrubbing ? 20 : 14, height: scrubbing ? 20 : 14)
+                        .frame(width: scrubbing ? 22 : 14, height: scrubbing ? 22 : 14)
                         .overlay {
                             Circle().strokeBorder(.white.opacity(0.95), lineWidth: 0.8)
                         }
-                        .shadow(color: accent.opacity(0.55), radius: scrubbing ? 6 : 3.5, y: scrubbing ? 2 : 1)
-                        .offset(x: thumbX - (scrubbing ? 10 : 7))
-                        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: scrubbing)
+                        .shadow(color: accent.opacity(0.7), radius: scrubbing ? 10 : 3.5, y: scrubbing ? 3 : 1)
+                        .offset(x: thumbX - (scrubbing ? 11 : 7))
+                        .animation(.spring(response: 0.24, dampingFraction: 0.76), value: scrubbing)
+                }
+
+                if scrubbing {
+                    Text(beansTimeString(scrubValue))
+                        .font(BeansFont.appFont(11, .semibold, .monospaced))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background {
+                            Capsule()
+                                .fill(.black.opacity(0.48))
+                                .overlay {
+                                    Capsule().strokeBorder(.white.opacity(0.22), lineWidth: 0.7)
+                                }
+                        }
+                        .shadow(color: accent.opacity(0.35), radius: 10, y: 4)
+                        .offset(x: min(max(thumbX - 31, 0), max(width - 62, 0)), y: -25)
+                        .transition(.scale(scale: 0.92).combined(with: .opacity))
                 }
             }
-            .frame(width: width, height: 26)
+            .frame(width: width, height: 42)
             .onAppear {
-                if flowPhase == 0 { flowPhase = 1 }
+                if player.isPlaying, flowPhase == 0 { flowPhase = 1 }
+            }
+            .onChange(of: player.isPlaying) { playing in
+                flowPhase = playing ? 1 : 0
             }
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
+                        if !scrubbing {
+                            BeansHaptics.medium()
+                        }
                         scrubbing = true
-                        scrubValue = min(max(value.location.x / width, 0), 1) * total
+                        let raw = min(max(value.location.x / width, 0), 1) * total
+                        let snapped = raw.rounded()
+                        scrubValue = snapped
+                        let previewSecond = Int(snapped)
+                        if previewSecond != lastPreviewSecond, previewSecond % 15 == 0 {
+                            BeansHaptics.select()
+                        }
+                        lastPreviewSecond = previewSecond
                     }
                     .onEnded { _ in
                         BeansHaptics.tap()
                         player.seek(to: scrubValue)
                         scrubbing = false
+                        lastPreviewSecond = nil
                     }
             )
         }
-        .frame(height: 26)
+        .frame(height: 42)
+        .animation(.spring(response: 0.24, dampingFraction: 0.82), value: scrubbing)
     }
 }
 
@@ -1475,6 +1588,7 @@ private struct WaveBar: View {
     let accent: Color
     let track: Color
     let width: CGFloat
+    let isPlaying: Bool
 
     @State private var phase: CGFloat = 0
 
@@ -1510,9 +1624,12 @@ private struct WaveBar: View {
         }
         .frame(height: 20)
         .onAppear {
-            if phase == 0 { phase = 1 }
+            if isPlaying, phase == 0 { phase = 1 }
         }
-        .animation(.linear(duration: 3).repeatForever(autoreverses: false), value: phase)
+        .onChange(of: isPlaying) { playing in
+            phase = playing ? 1 : 0
+        }
+        .animation(isPlaying ? .linear(duration: 3).repeatForever(autoreverses: false) : .default, value: phase)
     }
 }
 
@@ -1828,7 +1945,9 @@ struct LyricPreset {
 
 struct PlayerSettingsSheet: View {
     @AppStorage("beans.playerBreath") private var breath = 0.6
+    @AppStorage("beans.playerControlsUseCoverColor") private var controlsUseCoverColor = true
     @AppStorage("beans.progressBarStyle") private var progressBarStyle = 0
+    @AppStorage("beans.progressAccentHex") private var progressAccentHex = ""
     @AppStorage("beans.lyricFontSize") private var fontSize = 17
     @AppStorage("beans.lyricSpacing") private var lineSpacing = 24
     @AppStorage("beans.lyricGlow") private var glowLevel = 1
@@ -1934,6 +2053,19 @@ struct PlayerSettingsSheet: View {
         )
     }
 
+    /// 进度条单独颜色：留空时跟随播放控件颜色
+    private var progressAccentColor: Binding<Color> {
+        Binding(
+            get: {
+                if progressAccentHex.hasPrefix("#"), let c = Color(hex: progressAccentHex) { return c }
+                return Color.beansAmber
+            },
+            set: { newValue in
+                progressAccentHex = "#" + UIColor(newValue).hexString
+            }
+        )
+    }
+
     /// 渐变起始色：空值时自动用主题强调色
     private var gradStart: Binding<Color> {
         Binding(
@@ -2035,6 +2167,9 @@ struct PlayerSettingsSheet: View {
     /// 播放卡片：切歌 / 进度条样式 / 背景光晕 / DJ 视觉
     private var playingCard: some View {
         settingCard("播放") {
+            settingToggle("播放控件跟随封面取色", isOn: $controlsUseCoverColor,
+                          caption: "开启：播放键、进度条和高亮跟随封面；关闭：使用你设置的主题色")
+            Divider().opacity(0.5)
             settingToggle("播放页上下滑动切换歌曲", isOn: $swipeSwitchSong,
                           caption: "上下滑动像刷视频一样切歌：上滑下一首、下滑上一首")
             Divider().opacity(0.5)
@@ -2042,6 +2177,32 @@ struct PlayerSettingsSheet: View {
                 .font(BeansFont.appFont(13))
                 .foregroundStyle(Color.beansLabel)
             progressStyleGrid
+            Divider().opacity(0.5)
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("进度条颜色")
+                        .font(BeansFont.appFont(13))
+                        .foregroundStyle(Color.beansLabel)
+                    Text(progressAccentHex.isEmpty ? "跟随播放控件颜色" : "使用自定义颜色")
+                        .font(BeansFont.appFont(12))
+                        .foregroundStyle(Color.beansComment)
+                }
+                Spacer()
+                ColorPicker("", selection: progressAccentColor)
+                    .labelsHidden()
+                Button {
+                    progressAccentHex = ""
+                    BeansHaptics.select()
+                } label: {
+                    Text("跟随")
+                        .font(BeansFont.appFont(12, .semibold))
+                        .foregroundStyle(Color.beansAmber)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.ultraThinMaterial, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
             Divider().opacity(0.5)
             settingSlider("背景光晕强度", valueText: "\(Int((breath * 100).rounded()))%") {
                 Slider(value: $breath, in: 0...1, step: 0.05)
@@ -2058,7 +2219,7 @@ struct PlayerSettingsSheet: View {
             }
             Divider().opacity(0.5)
             settingToggle("与其他音频同时播放", isOn: Binding(get: { player.mixesWithOthers }, set: { player.mixesWithOthers = $0 }),
-                          caption: "开启：打开其他音频软件也能继续播放；关闭：其他音频开始播放时自动暂停")
+                          caption: "默认关闭以显示锁屏/灵动岛；开启后可与其他 App 声音同时播放")
         }
     }
 
@@ -2331,7 +2492,7 @@ struct CoverSpin: ViewModifier {
 
     func body(content: Content) -> some View {
         if enabled {
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isPlaying)) { context in
+            TimelineView(.animation(minimumInterval: 1.0 / 20.0, paused: !isPlaying)) { context in
                 let angle = (context.date.timeIntervalSinceReferenceDate * 15)
                     .truncatingRemainder(dividingBy: 360)
                 return content

@@ -199,6 +199,35 @@ struct BeansSymbolReplace: ViewModifier {
     }
 }
 
+/// 播放/暂停 morph 图标：三角播放态与双竖线暂停态共享一个固定画布，避免按钮尺寸跳动。
+struct PlayPauseMorphIcon: View {
+    let isPlaying: Bool
+    var size: CGFloat = 22
+
+    private var progress: CGFloat { isPlaying ? 1 : 0 }
+
+    var body: some View {
+        ZStack {
+            Image(systemName: "play.fill")
+                .font(.system(size: size, weight: .semibold))
+                .opacity(1 - progress)
+                .scaleEffect(1 - progress * 0.18)
+                .offset(x: progress * 5)
+            HStack(spacing: max(3, size * 0.18)) {
+                RoundedRectangle(cornerRadius: max(1.5, size * 0.08), style: .continuous)
+                    .frame(width: max(4, size * 0.24), height: size * 0.86)
+                RoundedRectangle(cornerRadius: max(1.5, size * 0.08), style: .continuous)
+                    .frame(width: max(4, size * 0.24), height: size * 0.86)
+            }
+            .opacity(progress)
+            .scaleEffect(0.82 + progress * 0.18)
+            .offset(x: (1 - progress) * -5)
+        }
+        .frame(width: size + 6, height: size + 6)
+        .animation(.spring(response: 0.28, dampingFraction: 0.78), value: isPlaying)
+    }
+}
+
 
 // MARK: - iOS 15 兼容包装（低版本自动降级）
 

@@ -122,6 +122,23 @@ final class QQMusicAPI {
         return URL(string: "https://y.gtimg.cn/music/photo_new/T001R\(size)M000\(mid).jpg")
     }
 
+    private static func normalizedQQImageURL(_ raw: Any?) -> URL? {
+        guard var value = raw as? String else { return nil }
+        value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        value = value.replacingOccurrences(of: "\\/", with: "/")
+        if value.hasPrefix("http://") {
+            value = "https://" + String(value.dropFirst(7))
+        } else if value.hasPrefix("//") {
+            value = "https:" + value
+        } else if value.hasPrefix("/") {
+            value = "https://y.gtimg.cn" + value
+        } else if !value.hasPrefix("https://") {
+            value = "https://y.gtimg.cn/" + value.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        }
+        return URL(string: value)
+    }
+
     private func musicuSearchPayload(keyword: String, limit: Int, type: QQSearchType) -> [String: Any] {
         [
             "comm": ["ct": 19, "cv": 1859, "uin": "0", "format": "json"],
@@ -223,12 +240,10 @@ final class QQMusicAPI {
                 guard !name.isEmpty else { continue }
                 let mid = item["mid"] as? String
                 let numericID = item["id"] as? String ?? ""
-                var pic = item["pic"] as? String ?? ""
-                if pic.hasPrefix("http://") { pic = "https://" + pic.dropFirst(7) }
                 artists.append(Artist(
                     id: mid ?? "qq-\(numericID)-\(name)",
                     name: name,
-                    coverURL: pic.isEmpty ? Self.singerPhotoURL(mid) : URL(string: pic),
+                    coverURL: Self.normalizedQQImageURL(item["pic"]) ?? Self.singerPhotoURL(mid),
                     source: .qq
                 ))
             }
@@ -738,14 +753,12 @@ final class QQMusicAPI {
             guard let id = item["id"] as? Int else { continue }
             let songs = (item["songList"] as? [[String: Any]]) ?? []
             let topNames = songs.compactMap { $0["songname"] as? String }.prefix(3).map { $0 }
-            var pic = item["picUrl"] as? String ?? ""
-            if pic.hasPrefix("http://") { pic = "https://" + pic.dropFirst(7) }
             result.append(QQTopInfo(
                 id: id,
                 name: item["topTitle"] as? String ?? (item["title"] as? String ?? ""),
                 subTitle: item["subTitle"] as? String ?? "",
                 topSongNames: topNames,
-                coverURL: pic.isEmpty ? nil : URL(string: pic)
+                coverURL: Self.normalizedQQImageURL(item["picUrl"])
             ))
         }
         return result
@@ -834,13 +847,25 @@ final class QQMusicAPI {
         guard let id, id > 0 else { return nil }
         let name = item["diss_name"] as? String ?? (item["name"] as? String ?? item["title"] as? String ?? "")
         guard !name.isEmpty else { return nil }
-        var cover = item["diss_cover"] as? String ?? (item["logo"] as? String ?? item["picurl"] as? String ?? item["cover"] as? String ?? "")
-        if cover.hasPrefix("http://") { cover = "https://" + cover.dropFirst(7) }
-        // fcg 接口返回的 diss_cover 可能是相对路径（/music/photo_new/...），补全 y.gtimg.cn 域名
-        if cover.hasPrefix("/") { cover = "https://y.gtimg.cn" + cover }
-        if cover.hasPrefix("//") { cover = "https:" + cover }
-        let count = item["song_cnt"] as? Int ?? (item["songnum"] as? Int ?? item["total_song_num"] as? Int ?? item["song_count"] as? Int ?? 0)
-        return Playlist(id: id, name: name, coverURL: cover.isEmpty ? nil : URL(string: cover), trackCount: count, source: .qq)
+        let coverURL = [
+            "diss_cover",
+            "dir_pic_url",
+            "logo",
+            "picurl",
+            "pic_url",
+            "cover",
+            "cover_url",
+            "headurl",
+            "imgurl",
+        ].lazy.compactMap { normalizedQQImageURL(item[$0]) }.first
+        let count = item["song_cnt"] as? Int
+            ?? (item["songnum"] as? Int)
+            ?? (item["total_song_num"] as? Int)
+            ?? (item["song_count"] as? Int)
+            ?? Int(item["song_cnt"] as? String ?? "")
+            ?? Int(item["songnum"] as? String ?? "")
+            ?? 0
+        return Playlist(id: id, name: name, coverURL: coverURL, trackCount: count, source: .qq)
     }
 
     /// QQ 推荐歌单
@@ -859,9 +884,9 @@ final class QQMusicAPI {
         for item in list {
             guard let id = item["tid"] as? Int ?? (item["id"] as? Int) else { continue }
             let name = item["title"] as? String ?? ""
-            let pic = item["cover"] as? String ?? (item["pic_url"] as? String ?? "")
+            let pic = Self.normalizedQQImageURL(item["cover"]) ?? Self.normalizedQQImageURL(item["pic_url"])
             let songNum = item["songnum"] as? Int ?? 0
-            playlists.append(Playlist(id: id, name: name, coverURL: pic.isEmpty ? nil : URL(string: pic), trackCount: songNum))
+            playlists.append(Playlist(id: id, name: name, coverURL: pic, trackCount: songNum, source: .qq))
         }
         return playlists
     }
@@ -931,13 +956,11 @@ final class QQMusicAPI {
             let albumName = item["albumName"] as? String ?? ""
             guard !albumName.isEmpty else { continue }
             let albumMid = item["albumMID"] as? String ?? ""
-            var pic = item["pic"] as? String ?? ""
-            if pic.hasPrefix("http://") { pic = "https://" + pic.dropFirst(7) }
             albums.append(Album(
                 id: "qq-album-\(albumMid)-\(albumName)",
                 name: albumName,
                 artistName: name,
-                coverURL: pic.isEmpty ? Self.photoURL(albumMid.isEmpty ? nil : albumMid) : URL(string: pic),
+                coverURL: Self.normalizedQQImageURL(item["pic"]) ?? Self.photoURL(albumMid.isEmpty ? nil : albumMid),
                 source: .qq,
                 trackCount: item["songnum"] as? Int
             ))

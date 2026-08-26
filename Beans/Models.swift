@@ -31,7 +31,7 @@ enum BeansAudioQuality: String, CaseIterable, Identifiable {
 }
 
 /// 歌曲来源（网易云 / QQ音乐）
-enum SongSource: String, Codable {
+enum SongSource: String, Codable, Sendable {
     case netease
     case qq
 

@@ -41,6 +41,8 @@ struct RootView: View {
     @AppStorage("beans.disclaimerAccepted") private var disclaimerAccepted = false
     /// 底栏是否显示文字（关闭后只显示图标）
     @AppStorage("beans.tabLabelsVisible") private var tabLabelsVisible = true
+    /// 可选高刷新率，默认关闭，降低静止页面发热
+    @AppStorage("beans.enableHighRefresh") private var enableHighRefresh = false
     /// 版本更新说明弹窗
     @State private var showWhatsNew = false
     /// 自动检测更新结果
@@ -86,12 +88,13 @@ struct RootView: View {
         }
         .preferredColorScheme(themeMode.colorScheme)
         .fullScreenCover(isPresented: $showPlayer) {
-            PlayerView()
+            PlayerView(isPresented: $showPlayer)
                 .environmentObject(favorites)
                 .environmentObject(player)
                 .environmentObject(auth)
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.86), value: player.currentSong?.id)
+        .animation(.easeInOut(duration: 0.22), value: selection)
         .overlay(alignment: .bottom) {
             ToastView(center: ToastCenter.shared)
         }
@@ -102,6 +105,10 @@ struct RootView: View {
             if disclaimerAccepted, ChangelogStore.shouldShowWhatsNew {
                 showWhatsNew = true
             }
+            HighRefreshKeeper.shared.configure(enabled: enableHighRefresh)
+        }
+        .onChange(of: enableHighRefresh) { enabled in
+            HighRefreshKeeper.shared.configure(enabled: enabled)
         }
         .onChange(of: disclaimerAccepted) { accepted in
             // 首次进入：确认免责声明后弹出更新说明

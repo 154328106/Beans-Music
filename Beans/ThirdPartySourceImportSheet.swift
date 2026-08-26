@@ -143,22 +143,7 @@ struct ThirdPartySourceImportSheet: View {
         guard url.host?.lowercased() == "github.com" else { return nil }
         let path = url.path.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard path == "guoyue2010/lxmusic-" || path == "guoyue2010/lxmusic-.git" else { return nil }
-        return [
-            ThirdPartySource(
-                name: "guoyue2010 · QQ 稳定源",
-                kind: "template-api",
-                template: "https://cyapi.top/API/qq_music.php?apikey=1ffdf5733f5d538760e63d7e46ba17438d9f7b9dfc18c51be1109386fd74c3a1&type=json&mid={id}",
-                urlPath: "url",
-                headers: ["source": "tx"]
-            ),
-            ThirdPartySource(
-                name: "guoyue2010 · 网易云统一源",
-                kind: "template-api",
-                template: "https://music-api.gdstudio.xyz/api.php?types=url&source=netease&id={id}&br=999",
-                urlPath: "url",
-                headers: ["source": "wy"]
-            ),
-        ]
+        return UnblockSourceStore.guoyuePresetSources
     }
 
     /// 从文件导入：读取文本后走同一套解析
@@ -188,6 +173,9 @@ struct ThirdPartySourceImportSheet: View {
         guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else { return [] }
         if let lxSources = parseLXScript(trimmed), !lxSources.isEmpty {
             return lxSources
+        }
+        if let eventSources = parseLXEventScript(trimmed), !eventSources.isEmpty {
+            return eventSources
         }
         if let list = try? JSONDecoder().decode([ThirdPartySource].self, from: data), !list.isEmpty {
             return list
@@ -234,6 +222,44 @@ struct ThirdPartySourceImportSheet: View {
             ))
         }
         return sources
+    }
+
+    /// 将“非常刀”等 LX 事件脚本里声明的直链接口转换为 Beans 模板配置，不执行任意 JavaScript。
+    private func parseLXEventScript(_ text: String) -> [ThirdPartySource]? {
+        guard text.contains("globalThis.lx"),
+              text.contains("EVENT_NAMES.request"),
+              text.contains("musicUrl") else { return nil }
+
+        var sources: [ThirdPartySource] = []
+        if let qqAPI = firstCapture(#"const\s+SUYIN_QQ_API\s*=\s*['\"]([^'\"]+)['\"]"#, in: text),
+           let qqKey = firstCapture(#"const\s+SUYIN_QQ_KEY\s*=\s*['\"]([^'\"]+)['\"]"#, in: text) {
+            sources.append(ThirdPartySource(
+                name: "LX 脚本 · QQ 溯音",
+                kind: "template-api",
+                template: "\(qqAPI)?key=\(qqKey)&type=json&br=5&n=1&mid={id}",
+                urlPath: "data.music|data.url|url",
+                headers: ["source": "tx"]
+            ))
+        }
+        if let xinghaiAPI = firstCapture(#"const\s+XINGHAI_API\s*=\s*['\"]([^'\"]+)['\"]"#, in: text) {
+            sources.append(ThirdPartySource(
+                name: "LX 脚本 · 网易云星海",
+                kind: "template-api",
+                template: "\(xinghaiAPI)&types=url&source=netease&id={id}&br=999",
+                urlPath: "url",
+                headers: ["source": "wy"]
+            ))
+        }
+        if let chkszAPI = firstCapture(#"const\s+CHKSZ_API\s*=\s*['\"]([^'\"]+)['\"]"#, in: text) {
+            sources.append(ThirdPartySource(
+                name: "LX 脚本 · 网易云 CHKSZ",
+                kind: "template-api",
+                template: "\(chkszAPI)/163_music?id={id}&level=lossless",
+                urlPath: "data.url|url",
+                headers: ["source": "wy", "Referer": "https://cp.chksz.top/"]
+            ))
+        }
+        return sources.isEmpty ? nil : sources
     }
 
     private func firstCapture(_ pattern: String, in text: String) -> String? {

@@ -66,8 +66,7 @@ struct MiniPlayerView: View {
                     BeansHaptics.tap()
                     player.togglePlayPause()
                 } label: {
-                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 16, weight: .semibold))
+                    PlayPauseMorphIcon(isPlaying: player.isPlaying, size: 16)
                         .foregroundStyle(Color.beansLabel)
                         .frame(width: 38, height: 38)
                         .contentShape(Circle())
@@ -115,6 +114,8 @@ struct MiniPlayerView: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .shadow(color: .black.opacity(0.16), radius: 12, y: 6)
+            .scaleEffect(showPlayer ? 0.985 : 1)
+            .animation(.spring(response: 0.34, dampingFraction: 0.86), value: showPlayer)
         }
         .buttonStyle(GlassPressButtonStyle(scale: 0.97))
         .padding(.horizontal, 12)
