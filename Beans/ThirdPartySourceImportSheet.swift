@@ -90,6 +90,10 @@ struct ThirdPartySourceImportSheet: View {
             return
         }
         if let url = URL(string: input), ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+            if let sources = repositoryPresetSources(for: url) {
+                finishImport(sources)
+                return
+            }
             isImporting = true
             errorMessage = nil
             Task {
@@ -121,6 +125,10 @@ struct ThirdPartySourceImportSheet: View {
             errorMessage = "未识别到兼容的音源配置"
             return
         }
+        finishImport(sources)
+    }
+
+    private func finishImport(_ sources: [ThirdPartySource]) {
         for source in sources {
             store.add(source)
         }
@@ -128,6 +136,29 @@ struct ThirdPartySourceImportSheet: View {
         BeansHaptics.success()
         ToastCenter.shared.show(sources.count > 1 ? "已导入 \(sources.count) 个音源" : "已导入「\(sources.first?.name ?? "")」")
         dismiss()
+    }
+
+    /// guoyue2010/lxmusic- 是音源集合而非单一脚本，导入仓库地址时选用已验证的兼容接口。
+    private func repositoryPresetSources(for url: URL) -> [ThirdPartySource]? {
+        guard url.host?.lowercased() == "github.com" else { return nil }
+        let path = url.path.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard path == "guoyue2010/lxmusic-" || path == "guoyue2010/lxmusic-.git" else { return nil }
+        return [
+            ThirdPartySource(
+                name: "guoyue2010 · QQ 稳定源",
+                kind: "template-api",
+                template: "https://cyapi.top/API/qq_music.php?apikey=1ffdf5733f5d538760e63d7e46ba17438d9f7b9dfc18c51be1109386fd74c3a1&type=json&mid={id}",
+                urlPath: "url",
+                headers: ["source": "tx"]
+            ),
+            ThirdPartySource(
+                name: "guoyue2010 · 网易云统一源",
+                kind: "template-api",
+                template: "https://music-api.gdstudio.xyz/api.php?types=url&source=netease&id={id}&br=999",
+                urlPath: "url",
+                headers: ["source": "wy"]
+            ),
+        ]
     }
 
     /// 从文件导入：读取文本后走同一套解析

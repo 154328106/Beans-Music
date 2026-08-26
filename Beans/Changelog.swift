@@ -36,6 +36,21 @@ enum ChangelogStore {
     /// 日志按新到旧排列；每次发版在顶部追加一条
     static let logs: [VersionLog] = [
         VersionLog(
+            id: "1.6.0",
+            version: "1.6.0",
+            title: "支持导入 guoyue2010 音源仓库",
+            features: [
+                "支持直接粘贴 guoyue2010/lxmusic- 仓库地址，一次导入 QQ音乐与网易云兼容源",
+                "QQ 通用音源使用歌曲 songmid，网易云通用音源使用歌曲 ID",
+                "后导入的音源优先尝试，方便替换已经失效的旧音源",
+            ],
+            fixes: [
+                "音源请求失败时记录网络错误、HTTP 状态码和响应格式问题",
+                "避免把音源平台、音质等配置字段错误发送为 HTTP 请求头",
+            ]
+        ),
+
+        VersionLog(
             id: "1.5.0",
             version: "1.5.0",
             title: "支持导入洛雪音源脚本",

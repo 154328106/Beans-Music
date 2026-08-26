@@ -70,7 +70,8 @@ final class UnblockSourceStore: ObservableObject {
             updated.id = customSources[index].id
             customSources[index] = updated
         } else {
-            customSources.append(source)
+            // 后导入的音源优先尝试，便于替换已经失效的旧源。
+            customSources.insert(source, at: 0)
         }
     }
 

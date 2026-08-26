@@ -50,7 +50,14 @@ enum UnblockService {
                 if let r = await lxScript(source: source, songSource: songSource, neteaseID: neteaseID, qqMid: qqMid) { return r }
             } else if source.kind == "lx" {
                 if let r = await lx(source: source, keyword: keyword) { return r }
-            } else if let r = await custom(source: source, name: name, artists: artists, neteaseID: neteaseID) { return r }
+            } else if let r = await custom(
+                source: source,
+                name: name,
+                artists: artists,
+                neteaseID: neteaseID,
+                songSource: songSource,
+                qqMid: qqMid
+            ) { return r }
         }
         return nil
     }
@@ -84,9 +91,18 @@ enum UnblockService {
                 request.setValue(apiKey, forHTTPHeaderField: "X-Request-Key")
             }
             guard let (data, response) = try? await session.data(for: request),
-                  let http = response as? HTTPURLResponse,
-                  http.statusCode == 200,
-                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+                  let http = response as? HTTPURLResponse else {
+                BeansLogger.shared.log("导入音源请求失败：\(source.name) 平台=\(provider) 音质=\(quality)", level: .debug)
+                continue
+            }
+            guard http.statusCode == 200 else {
+                BeansLogger.shared.log("导入音源 HTTP 失败：\(source.name) 状态=\(http.statusCode) 平台=\(provider) 音质=\(quality)", level: .debug)
+                continue
+            }
+            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                BeansLogger.shared.log("导入音源响应格式错误：\(source.name)", level: .debug)
+                continue
+            }
             let code = object["code"] as? Int ?? Int(object["code"] as? String ?? "") ?? -1
             guard code == 0,
                   let urlString = object["url"] as? String,
@@ -102,10 +118,31 @@ enum UnblockService {
         return nil
     }
 
-    private static func custom(source: ThirdPartySource, name: String, artists: String, neteaseID: Int) async -> Resolved? {
+    private static func custom(
+        source: ThirdPartySource,
+        name: String,
+        artists: String,
+        neteaseID: Int,
+        songSource: SongSource,
+        qqMid: String?
+    ) async -> Resolved? {
         guard !source.template.isEmpty else { return nil }
+        let expectedProvider = songSource == .qq ? "tx" : "wy"
+        if let provider = source.headers["source"], !provider.isEmpty, provider != expectedProvider {
+            return nil
+        }
+        let songID: String
+        switch songSource {
+        case .netease where neteaseID > 0:
+            songID = String(neteaseID)
+        case .qq:
+            guard let qqMid, !qqMid.isEmpty else { return nil }
+            songID = qqMid
+        default:
+            return nil
+        }
         var urlString = source.template
-        urlString = urlString.replacingOccurrences(of: "{id}", with: String(neteaseID))
+        urlString = urlString.replacingOccurrences(of: "{id}", with: songID)
         urlString = urlString.replacingOccurrences(of: "{name}", with: urlEncoded(name))
         let keyword = ([name, artists].filter { !$0.isEmpty }).joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -114,15 +151,31 @@ enum UnblockService {
         guard let url = URL(string: urlString) else { return nil }
         var request = URLRequest(url: url)
         request.timeoutInterval = 12
-        for (key, value) in source.headers {
+        let metadataKeys: Set<String> = ["source", "quality", "br", "apiKey"]
+        for (key, value) in source.headers where !metadataKeys.contains(key) {
             request.setValue(value, forHTTPHeaderField: key)
         }
-        guard let (data, resp) = try? await session.data(for: request),
-              let http = resp as? HTTPURLResponse, http.statusCode == 200,
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            BeansLogger.shared.log("导入音源请求失败：\(source.name) \(error.localizedDescription)", level: .debug)
+            return nil
+        }
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            BeansLogger.shared.log("导入音源 HTTP 失败：\(source.name) 状态=\(status)", level: .debug)
+            return nil
+        }
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let value = valueAtPath(obj, source.urlPath),
-              let urlString = value as? String, !urlString.isEmpty,
-              let playURL = URL(string: urlString) else { return nil }
+              let resolvedURL = value as? String, !resolvedURL.isEmpty,
+              let playURL = URL(string: resolvedURL) else {
+            BeansLogger.shared.log("导入音源响应中没有播放地址：\(source.name)", level: .debug)
+            return nil
+        }
+        BeansLogger.shared.log("导入音源命中：\(source.name) 平台=\(expectedProvider)", level: .info)
         return Resolved(url: playURL, source: source.name)
     }
 
