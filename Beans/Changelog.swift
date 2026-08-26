@@ -36,6 +36,19 @@ enum ChangelogStore {
     /// 日志按新到旧排列；每次发版在顶部追加一条
     static let logs: [VersionLog] = [
         VersionLog(
+            id: "1.4.9",
+            version: "1.4.9",
+            title: "修复 QQ 独家 VIP 歌曲播放",
+            features: [],
+            fixes: [
+                "播放前补拉 QQ 歌曲详情，使用独家版权歌曲真实的 media_mid 生成官方文件地址",
+                "恢复 QQ 官方 songmid + media_mid 文件名格式，兼容 media_mid 与 songmid 不同的曲目",
+                "新增 320K、128K、M4A 三级音质回退",
+                "播放前验证 QQ CDN 音频地址，遇到 404 自动切换文件候选、CDN 与音质",
+            ]
+        ),
+
+        VersionLog(
             id: "1.4.8",
             version: "1.4.8",
             title: "修复 QQ 音乐官方播放链路",

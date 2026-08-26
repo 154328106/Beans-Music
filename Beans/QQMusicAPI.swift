@@ -421,7 +421,8 @@ final class QQMusicAPI {
         let uin = qqAuth.isLoggedIn ? qqAuth.uin : "0"
         let loginKey = qqAuth.isLoggedIn ? qqAuth.loginKey : ""
         let guid = Self.deviceGuid
-        return try await vkeyURL(songmid: songmid, mediaMid: mediaMid, br: br, uin: uin, loginKey: loginKey, guid: guid, qqAuth: qqAuth)
+        let resolvedMediaMid = await resolveMediaMid(songmid: songmid, provided: mediaMid, qqAuth: qqAuth)
+        return try await vkeyURL(songmid: songmid, mediaMid: resolvedMediaMid, br: br, uin: uin, loginKey: loginKey, guid: guid, qqAuth: qqAuth)
     }
 
     /// 通过 vkey 获取 QQ 音乐播放地址（对齐 wp_MusicApi：GET + data JSON + filename + CDN 分发）
@@ -431,19 +432,56 @@ final class QQMusicAPI {
         let uin = qqAuth.isLoggedIn ? qqAuth.uin : "0"
         let loginKey = qqAuth.isLoggedIn ? qqAuth.loginKey : ""
         let guid = Self.deviceGuid
-        if let url = try await vkeyURL(songmid: songmid, mediaMid: mediaMid, br: "M800", uin: uin, loginKey: loginKey, guid: guid, qqAuth: qqAuth) {
-            return url
+        let resolvedMediaMid = await resolveMediaMid(songmid: songmid, provided: mediaMid, qqAuth: qqAuth)
+        // 独家 VIP 曲库并不保证所有 MP3 档位都存在；按 320K、128K、M4A 依次验证回退。
+        for br in ["M800", "M500", "C400"] {
+            if let url = try await vkeyURL(songmid: songmid, mediaMid: resolvedMediaMid, br: br, uin: uin, loginKey: loginKey, guid: guid, qqAuth: qqAuth) {
+                return url
+            }
         }
-        return try await vkeyURL(songmid: songmid, mediaMid: mediaMid, br: "M500", uin: uin, loginKey: loginKey, guid: guid, qqAuth: qqAuth)
+        return nil
+    }
+
+    /// 搜索接口经常不返回 file.media_mid；独家 VIP 歌曲的 media_mid 又常与 songmid 不同，必须补拉详情。
+    private func resolveMediaMid(songmid: String, provided: String?, qqAuth: QQMusicAuth) async -> String {
+        if let provided, !provided.isEmpty { return provided }
+        let payload: [String: Any] = [
+            "comm": ["ct": 24, "cv": 0, "uin": qqAuth.isLoggedIn ? qqAuth.uin : "0"],
+            "songinfo": [
+                "module": "music.pf_song_detail_svr",
+                "method": "get_song_detail_yqq",
+                "param": ["song_mid": songmid],
+            ],
+        ]
+        guard let json = try? await musicu(payload, cookie: qqAuth.isLoggedIn ? qqAuth.cookieHeader : ""),
+              let block = json["songinfo"] as? [String: Any],
+              let data = block["data"] as? [String: Any],
+              let track = data["track_info"] as? [String: Any],
+              let file = track["file"] as? [String: Any],
+              let mediaMid = file["media_mid"] as? String,
+              !mediaMid.isEmpty else {
+            BeansLogger.shared.log("QQ 歌曲详情未返回 media_mid，回退 songmid", level: .debug)
+            return songmid
+        }
+        BeansLogger.shared.log("QQ 歌曲详情：media_mid=已获取 是否不同=\(mediaMid == songmid ? "否" : "是")", level: .debug)
+        return mediaMid
     }
 
     /// 单次 vkey 请求（GET musicu.fcg，data 参数格式与 wp_MusicApi 完全一致）
     private func vkeyURL(songmid: String, mediaMid: String?, br: String, uin: String, loginKey: String, guid: String, qqAuth: QQMusicAuth) async throws -> String? {
         // 音质与扩展名：M500/M800 为 mp3，F000（无损）为 flac
-        let ext = br.hasPrefix("F") ? "flac" : "mp3"
+        let ext: String
+        if br.hasPrefix("F") {
+            ext = "flac"
+        } else if br.hasPrefix("C") {
+            ext = "m4a"
+        } else {
+            ext = "mp3"
+        }
         let preferredMid = (mediaMid?.isEmpty == false ? mediaMid : nil) ?? songmid
-        // 新接口通常使用 media_mid 单份命名，旧曲库仍可能要求双 songmid；一次请求全部候选。
+        // QQ 官方 Web 格式为 prefix + songmid + media_mid；其余格式用于兼容不同年代接口。
         var filenames = [
+            "\(br)\(songmid)\(preferredMid).\(ext)",
             "\(br)\(preferredMid).\(ext)",
             "\(br)\(songmid)\(songmid).\(ext)",
             "\(br)\(songmid).\(ext)",
@@ -492,19 +530,52 @@ final class QQMusicAPI {
               let req = json["req_0"] as? [String: Any],
               let reqData = req["data"] as? [String: Any],
               let infos = reqData["midurlinfo"] as? [[String: Any]] else { return nil }
-        guard let info = infos.first(where: { ($0["purl"] as? String)?.isEmpty == false }),
-              let purl = info["purl"] as? String, !purl.isEmpty else {
+        let playableInfos = infos.filter { ($0["purl"] as? String)?.isEmpty == false }
+        guard !playableInfos.isEmpty else {
             let result = infos.first?["result"] ?? "unknown"
             BeansLogger.shared.log("QQ vkey 无可播地址：音质=\(br) result=\(result) 已登录=\(qqAuth.isLoggedIn ? "是" : "否")", level: .debug)
             return nil
         }
-        if purl.hasPrefix("http") { return purl }
         let sips = reqData["sip"] as? [String] ?? []
-        if let sip = sips.first(where: { $0.hasPrefix("https://") }) ?? sips.first {
-            let secureSip = sip.hasPrefix("http://") ? "https://" + String(sip.dropFirst("http://".count)) : sip
-            return secureSip + purl
+        let cdnBases = sips.isEmpty ? ["https://isure.stream.qqmusic.qq.com/"] : sips
+        for info in playableInfos {
+            guard let purl = info["purl"] as? String, !purl.isEmpty else { continue }
+            let candidateURLs: [String]
+            if purl.hasPrefix("http") {
+                candidateURLs = [purl]
+            } else {
+                candidateURLs = cdnBases.map { base in
+                    let secureBase = base.hasPrefix("http://") ? "https://" + String(base.dropFirst("http://".count)) : base
+                    return secureBase + purl
+                }
+            }
+            for candidate in candidateURLs {
+                guard let url = URL(string: candidate) else { continue }
+                if await probeAudioURL(url, cookie: qqAuth.isLoggedIn ? qqAuth.cookieHeader : "") {
+                    let filename = info["filename"] as? String ?? "unknown"
+                    BeansLogger.shared.log("QQ 音频地址验证成功：音质=\(br) 文件=\(filename)", level: .debug)
+                    return candidate
+                }
+            }
         }
-        return "https://isure.stream.qqmusic.qq.com/" + purl
+        BeansLogger.shared.log("QQ vkey 返回地址但 CDN 验证失败：音质=\(br) 候选=\(playableInfos.count)", level: .debug)
+        return nil
+    }
+
+    /// 在交给 AVPlayer 前验证 CDN，避免 purl 非空但实际 404 的假成功地址。
+    private func probeAudioURL(_ url: URL, cookie: String) async -> Bool {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 6
+        request.setValue("bytes=0-2047", forHTTPHeaderField: "Range")
+        request.setValue("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:80.0) Gecko/20100101 Firefox/80.0", forHTTPHeaderField: "User-Agent")
+        request.setValue("https://y.qq.com/", forHTTPHeaderField: "Referer")
+        if !cookie.isEmpty { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
+        guard let (data, response) = try? await session.data(for: request),
+              let http = response as? HTTPURLResponse,
+              http.statusCode == 200 || http.statusCode == 206,
+              !data.isEmpty else { return false }
+        let contentType = (http.value(forHTTPHeaderField: "Content-Type") ?? "").lowercased()
+        return !contentType.contains("text/html") && !contentType.contains("application/json")
     }
 
     /// 固定设备 GUID（持久化）：vkey 与 guid 强相关，随机 guid 会导致播放地址失效
