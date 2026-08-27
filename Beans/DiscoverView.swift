@@ -251,6 +251,7 @@ struct DiscoverView: View {
         switch source {
         case .netease: return neteaseTopLists.count
         case .qq: return qqTopLists.count
+        case .kugou: return 0
         }
     }
 
@@ -263,6 +264,7 @@ struct DiscoverView: View {
         switch source {
         case .netease: return !topLists.isEmpty
         case .qq: return !qqTopLists.isEmpty
+        case .kugou: return false
         }
     }
 
@@ -578,6 +580,8 @@ struct DiscoverView: View {
             snapshot.dailySongs = dr
             snapshot.personalized = pp
             if !cats.isEmpty { playlistCats = cats }
+        case .kugou:
+            break
         }
         return snapshot
     }
