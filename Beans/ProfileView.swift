@@ -307,7 +307,7 @@ struct ProfileView: View {
                 platformChip(imageName: "BrandQQ", name: "QQ 音乐", status: qqAuth.nickname.isEmpty ? "已登录" : qqAuth.nickname, badge: qqAuth.vipBadge)
             }
             if kugouAuth.isLoggedIn {
-                platformChip(systemName: "music.note", name: "酷狗音乐", status: kugouAuth.nickname.isEmpty ? "已登录" : kugouAuth.nickname, badge: kugouAuth.vipBadge)
+                platformChip(imageName: "BrandKugou", name: "酷狗音乐", status: kugouAuth.nickname.isEmpty ? "已登录" : kugouAuth.nickname, badge: kugouAuth.vipBadge)
             }
         }
         .padding(.top, 2)
@@ -318,28 +318,6 @@ struct ProfileView: View {
             Image(imageName)
                 .resizable()
                 .scaledToFit()
-                .frame(width: 16, height: 16)
-            Text(name)
-                .font(BeansFont.appFont(12, .semibold))
-                .foregroundStyle(Color.beansLabel)
-            Text(status)
-                .font(BeansFont.appFont(11))
-                .foregroundStyle(Color.beansComment)
-                .lineLimit(1)
-            if let badge {
-                VIPBadgeView(text: badge)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(.ultraThinMaterial, in: Capsule())
-    }
-
-    private func platformChip(systemName: String, name: String, status: String, badge: String?) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemName)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color(red: 0.20, green: 0.62, blue: 1.0))
                 .frame(width: 16, height: 16)
             Text(name)
                 .font(BeansFont.appFont(12, .semibold))
@@ -851,14 +829,12 @@ struct AccountHubSheet: View {
             if kugouAuth.isLoggedIn { confirmKugouLogout = true } else { showKugouLogin = true }
         } label: {
             HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(red: 0.10, green: 0.38, blue: 0.82).opacity(0.18))
-                        .frame(width: 48, height: 48)
-                    Image(systemName: "music.note")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(Color(red: 0.26, green: 0.68, blue: 1.0))
-                }
+                Image("BrandKugou")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 48, height: 48)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .shadow(color: Color(red: 0.08, green: 0.43, blue: 1.0).opacity(0.22), radius: 10, y: 4)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("酷狗音乐")
                         .font(BeansFont.appFont(15, .semibold))

@@ -167,7 +167,7 @@ struct OnboardingView: View {
                 .font(BeansFont.appFont(30, .bold))
                 .foregroundStyle(Color.beansLabel)
 
-            Text("iOS 26 原生液态玻璃 · 聚合网易云 / QQ\n纯 SwiftUI · 完全开源")
+            Text("iOS 26 原生液态玻璃 · 聚合网易云 / QQ / 酷狗\n纯 SwiftUI · 完全开源")
                 .font(BeansFont.appFont(15))
                 .foregroundStyle(Color.beansSecondary)
                 .multilineTextAlignment(.center)
@@ -250,7 +250,7 @@ struct OnboardingView: View {
         .beansCardShadow(radius: 8, y: 3)
     }
 
-    // MARK: 第 3 页 · 双平台
+    // MARK: 第 3 页 · 三平台
 
     private var platformPage: some View {
         VStack(spacing: 20) {
@@ -259,11 +259,11 @@ struct OnboardingView: View {
                 .font(.system(size: 40))
                 .foregroundStyle(LinearGradient.beansAccent)
 
-            Text("双平台聚合，一个 App 全听遍")
+            Text("三平台聚合，一个 App 全听遍")
                 .font(BeansFont.appFont(26, .bold))
                 .foregroundStyle(Color.beansLabel)
 
-            Text("网易云 + QQ 音乐，一键切换数据源")
+            Text("网易云 + QQ 音乐 + 酷狗歌单同步")
                 .font(BeansFont.appFont(14))
                 .foregroundStyle(Color.beansSecondary)
 
@@ -274,6 +274,9 @@ struct OnboardingView: View {
                 platformRow(imageName: "BrandQQ", tint: Color(red: 0.13, green: 0.51, blue: 0.95),
                             title: "QQ 音乐",
                             detail: "扫码 / 网页 / Cookie 登录，同步歌单与 VIP")
+                platformRow(imageName: "BrandKugou", tint: Color(red: 0.12, green: 0.55, blue: 1.0),
+                            title: "酷狗音乐",
+                            detail: "官方 App 扫码登录，同步酷狗云端歌单")
             }
             .padding(.horizontal, 28)
 
@@ -332,6 +335,7 @@ struct OnboardingView: View {
                 Text("· Beans Music 只用作个人学习研究，禁止用于商业及非法用途，如产生法律纠纷与本人无关。")
                 Text("· 音乐 API 来自于 GitHub 开源项目（非官方版 API），本软件不提供任何音频存储服务，如需下载音频，请支持正版！")
                 Text("· 音乐版权归各网站所有，本站不承担任何法律责任和连带责任。")
+                Text("· 酷狗音乐名称及蓝底 K 图标归酷狗音乐 / 腾讯音乐娱乐相关权利方所有，本软件仅作为平台标识展示。")
             }
             .font(BeansFont.appFont(13))
             .foregroundStyle(Color.beansSecondary)

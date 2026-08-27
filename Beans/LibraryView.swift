@@ -25,6 +25,13 @@ enum LibraryProvider: String, CaseIterable, Identifiable {
         case .kugou: return "music.note"
         }
     }
+
+    var brandImageName: String? {
+        switch self {
+        case .kugou: return "BrandKugou"
+        default: return nil
+        }
+    }
 }
 
 struct LibraryView: View {
@@ -330,8 +337,15 @@ struct LibraryView: View {
                     if source != p { source = p }
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: p.icon)
-                            .font(.system(size: 11, weight: .semibold))
+                        if let brandImageName = p.brandImageName {
+                            Image(brandImageName)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 16, height: 16)
+                        } else {
+                            Image(systemName: p.icon)
+                                .font(.system(size: 11, weight: .semibold))
+                        }
                         Text(p.rawValue)
                             .font(BeansFont.appFont(13, .semibold))
                     }
