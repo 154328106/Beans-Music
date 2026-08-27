@@ -461,20 +461,44 @@ final class PlayerManager: NSObject, ObservableObject {
     private func kugouFallback(song: Song, enableUnblock: Bool) async -> UnblockService.Resolved? {
         guard enableUnblock else { return nil }
         let kugouID = song.kugouAlbumAudioId ?? song.kugouHash ?? ""
-        guard !kugouID.isEmpty else {
+        if kugouID.isEmpty {
             BeansLogger.shared.log("酷狗兜底跳过：缺少 album_audio_id/hash", level: .debug)
-            return nil
+        } else {
+            let resolved = await UnblockService.resolve(
+                name: song.name,
+                artists: song.artists,
+                durationMS: Int(song.duration * 1000),
+                neteaseID: 0,
+                songSource: .kugou,
+                kugouID: kugouID
+            )
+            if let resolved {
+                BeansLogger.shared.log("酷狗兜底：\(song.name) 酷狗音源=命中", level: .debug)
+                return resolved
+            }
         }
-        let resolved = await UnblockService.resolve(
+
+        let strict = shouldLockOfficialOnly(song)
+        if let matched = await matchNetEaseSong(
             name: song.name,
             artists: song.artists,
             durationMS: Int(song.duration * 1000),
-            neteaseID: 0,
-            songSource: .kugou,
-            kugouID: kugouID
-        )
-        BeansLogger.shared.log("酷狗会员兜底：\(song.name) 第三方=\(resolved != nil ? "命中" : "未命中")", level: .debug)
-        return resolved
+            strict: strict
+        ) {
+            let resolved = await UnblockService.resolve(
+                name: matched.name,
+                artists: matched.artists,
+                durationMS: Int(matched.duration * 1000),
+                neteaseID: matched.id,
+                songSource: .netease,
+                strict: strict
+            )
+            BeansLogger.shared.log("酷狗兜底转网易云音源：\(song.name) -> \(matched.name) 第三方=\(resolved != nil ? "命中" : "未命中")", level: .debug)
+            return resolved
+        }
+
+        BeansLogger.shared.log("酷狗兜底：\(song.name) 第三方=未命中", level: .debug)
+        return nil
     }
 
     /// 版权受限歌手名单：这些歌手的歌曲必须严格校验原唱（第三方搜索会误匹配翻唱，如周杰伦）

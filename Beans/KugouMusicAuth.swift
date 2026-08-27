@@ -29,15 +29,20 @@ final class KugouMusicAuth: ObservableObject {
     var hasMembership: Bool { vipType > 0 }
 
     var cookieHeader: String {
-        [
+        var items = [
             ("userid", userId),
             ("token", token),
             ("KUGOU_API_MID", mid),
             ("dfid", dfid),
         ]
-        .filter { !$0.1.isEmpty }
-        .map { "\($0.0)=\($0.1)" }
-        .joined(separator: "; ")
+        if vipType > 0 {
+            items.append(("vipType", "\(vipType)"))
+            items.append(("viptype", "\(vipType)"))
+        }
+        return items
+            .filter { !$0.1.isEmpty }
+            .map { "\($0.0)=\($0.1)" }
+            .joined(separator: "; ")
     }
 
     func prepareDevice() {

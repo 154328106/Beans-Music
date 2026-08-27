@@ -406,7 +406,7 @@ final class KugouMusicAPI {
 
     private func songURL(hashes: [String], albumAudioId: String?, albumId: String?) async throws -> String? {
         let auth = KugouMusicAuth.shared
-        let vipTypes = Self.vipTypeCandidates(auth.vipType)
+        let vipTypes = Self.vipTypeCandidates(auth.vipType, loggedIn: auth.isLoggedIn)
         var lastCode = 0
         var lastStatus = 0
         for hash in hashes {
@@ -423,20 +423,29 @@ final class KugouMusicAPI {
             }
             // 酷狗新版客户端使用 v5/url。旧版 i/v2 在部分新曲和会员曲目上
             // 只返回 status，不返回播放地址，因此再尝试一次官方新版通道。
-            let v5 = try await songURLV5Once(hash: hash, albumAudioId: albumAudioId, albumId: albumId)
-            lastCode = v5.code
-            lastStatus = v5.status
-            if let url = v5.url, !url.isEmpty {
-                return url
+            for vipType in vipTypes {
+                let v5 = try await songURLV5Once(hash: hash, albumAudioId: albumAudioId, albumId: albumId, vipType: vipType)
+                lastCode = v5.code
+                lastStatus = v5.status
+                if let url = v5.url, !url.isEmpty {
+                    if vipType != auth.vipType {
+                        BeansLogger.shared.log("酷狗 v5 播放地址命中：hash=\(hash.prefix(8)) vipType=\(vipType)", level: .debug)
+                    }
+                    return url
+                }
             }
+            let web = try await songURLWebOnce(hash: hash, albumAudioId: albumAudioId, albumId: albumId)
+            lastCode = web.code
+            lastStatus = web.status
+            if let url = web.url, !url.isEmpty { return url }
         }
         let vipTypeText = vipTypes.map(String.init).joined(separator: "/")
-        BeansLogger.shared.log("酷狗播放地址为空：hash候选=\(hashes.count) vipType=\(vipTypeText) status=\(lastStatus) code=\(lastCode)", level: .debug)
+        BeansLogger.shared.log("酷狗播放地址为空：hash候选=\(hashes.count) vipType=\(vipTypeText) 已登录=\(auth.isLoggedIn ? "是" : "否") token=\(auth.token.isEmpty ? "无" : "有") dfid=\(auth.dfid.isEmpty ? "无" : "有") status=\(lastStatus) code=\(lastCode)", level: .debug)
         return nil
     }
 
     /// 酷狗官方新版播放地址接口，参数结构与酷狗客户端的 v5/url 通道一致。
-    private func songURLV5Once(hash: String, albumAudioId: String?, albumId: String?) async throws -> (url: String?, status: Int, code: Int) {
+    private func songURLV5Once(hash: String, albumAudioId: String?, albumId: String?, vipType: Int) async throws -> (url: String?, status: Int, code: Int) {
         let auth = KugouMusicAuth.shared
         var components = URLComponents(string: "\(gateway)/v5/url")!
         let quality: String
@@ -473,8 +482,8 @@ final class KugouMusicAPI {
             "mid": auth.mid,
             "userid": userId,
             "token": auth.token,
-            "vipType": "\(auth.vipType)",
-            "IsFreePart": auth.hasMembership ? "0" : "1",
+            "vipType": "\(vipType)",
+            "IsFreePart": vipType > 0 ? "0" : "1",
             "key": "\(fileHash)\(playSignSalt)\(playAppid)\(auth.mid)\(userId)".kgMD5Hex,
         ]
         if let albumAudioId, !albumAudioId.isEmpty {
@@ -486,6 +495,36 @@ final class KugouMusicAPI {
         request.setValue("trackercdn.kugou.com", forHTTPHeaderField: "x-router")
         request.setValue(auth.dfid, forHTTPHeaderField: "dfid")
         request.setValue(auth.mid, forHTTPHeaderField: "mid")
+        request.setValue(auth.cookieHeader, forHTTPHeaderField: "Cookie")
+        let (data, response) = try await session.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else { return (nil, 0, -1) }
+        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        let status = Self.deepInt(json, names: ["status", "result"])
+        let code = Self.deepInt(json, names: ["error_code", "errcode", "code"])
+        let raw = Self.deepString(json, names: ["play_url", "play_backup_url", "url", "src", "backup_url"])
+        return (raw.isEmpty ? nil : raw, status, code)
+    }
+
+    /// 网页播放通道。部分帐号登录态在移动端 tracker 返回 20006 时，网页接口仍会返回授权后的播放地址。
+    private func songURLWebOnce(hash: String, albumAudioId: String?, albumId: String?) async throws -> (url: String?, status: Int, code: Int) {
+        let auth = KugouMusicAuth.shared
+        var components = URLComponents(string: "https://wwwapi.kugou.com/yy/index.php")!
+        var params: [String: String] = [
+            "r": "play/getdata",
+            "hash": hash.uppercased(),
+            "appid": "1014",
+            "platid": "4",
+            "mid": auth.mid,
+            "dfid": auth.dfid,
+            "userid": auth.userId.isEmpty ? "0" : auth.userId,
+            "token": auth.token,
+        ]
+        if let albumId, !albumId.isEmpty { params["album_id"] = albumId }
+        if let albumAudioId, !albumAudioId.isEmpty { params["album_audio_id"] = albumAudioId }
+        components.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
+        var request = URLRequest(url: components.url!)
+        request.setValue(Self.browserUA, forHTTPHeaderField: "User-Agent")
+        request.setValue("https://www.kugou.com/", forHTTPHeaderField: "Referer")
         request.setValue(auth.cookieHeader, forHTTPHeaderField: "Cookie")
         let (data, response) = try await session.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { return (nil, 0, -1) }
@@ -648,20 +687,37 @@ final class KugouMusicAPI {
             json = response.json
         } catch {
             BeansLogger.shared.log("酷狗评论 POST 失败：\(error.localizedDescription)，尝试 GET 兜底", level: .debug)
-            json = try await gatewayCommentJSON(params: params)
+            do {
+                json = try await gatewayCommentJSON(params: params)
+            } catch {
+                BeansLogger.shared.log("酷狗评论全部失败：\(error.localizedDescription)", level: .debug)
+                return KugouCommentPage(comments: [], total: 0)
+            }
         }
         return Self.parseComments(json: json, page: page, songName: mixSongID)
     }
 
     private func gatewayCommentJSON(params: [String: String]) async throws -> [String: Any] {
-        let response = try await gatewayRequest(
-            "/mcomment/v1/cmtlist",
-            baseURL: gateway,
-            method: "GET",
-            params: params,
-            headers: ["x-router": "mcomment.service.kugou.com"]
-        )
-        return response.json
+        do {
+            let response = try await gatewayRequest(
+                "/mcomment/v1/cmtlist",
+                baseURL: gateway,
+                method: "GET",
+                params: params,
+                headers: ["x-router": "mcomment.service.kugou.com"]
+            )
+            return response.json
+        } catch {
+            BeansLogger.shared.log("酷狗评论 GET 失败：\(error.localizedDescription)，尝试备用路由", level: .debug)
+            let response = try await gatewayRequest(
+                "/m.comment.service/v1/cmtlist",
+                baseURL: gateway,
+                method: "GET",
+                params: params,
+                headers: ["x-router": "m.comment.service.kugou.com"]
+            )
+            return response.json
+        }
     }
 
     private static func parseComments(json: [String: Any], page: Int, songName: String) -> KugouCommentPage {
@@ -978,8 +1034,8 @@ final class KugouMusicAPI {
         return result
     }
 
-    private static func vipTypeCandidates(_ vipType: Int) -> [Int] {
-        var values = [vipType, 1, 6, 0]
+    private static func vipTypeCandidates(_ vipType: Int, loggedIn: Bool) -> [Int] {
+        let values = vipType > 0 ? [vipType, 6, 1, 0] : (loggedIn ? [1, 6, 0] : [0])
         var seen = Set<Int>()
         return values.filter { seen.insert($0).inserted }
     }
