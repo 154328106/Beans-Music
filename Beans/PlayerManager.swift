@@ -623,7 +623,9 @@ final class PlayerManager: NSObject, ObservableObject {
             pendingThirdPartyVIPNotice = nil
             return
         }
-        ToastCenter.shared.show(notice.message)
+        Task { @MainActor in
+            ToastCenter.shared.show(notice.message)
+        }
         BeansLogger.shared.log("第三方音源会员歌提醒：\(notice.message)", level: .info)
         pendingThirdPartyVIPNotice = nil
     }
