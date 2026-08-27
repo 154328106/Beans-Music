@@ -52,6 +52,14 @@ final class KugouMusicAuth: ObservableObject {
         ]
         var used = Set<String>()
         var parts: [String] = []
+        if userid > 0, cookies["userid"]?.isEmpty ?? true {
+            used.insert("userid")
+            parts.append("userid=\(userid)")
+        }
+        if !token.isEmpty, cookies["token"]?.isEmpty ?? true {
+            used.insert("token")
+            parts.append("token=\(token)")
+        }
         for key in preferred {
             guard let value = cookies[key], !value.isEmpty else { continue }
             used.insert(key)

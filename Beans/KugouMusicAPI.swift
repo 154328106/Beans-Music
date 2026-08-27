@@ -130,15 +130,15 @@ final class KugouMusicAPI {
         BeansLogger.shared.log("酷狗歌单同步开始：userid=\(auth.userid) token=有", level: .debug)
         let requests = userPlaylistRequests(auth: auth)
         var lastError: Error?
-        for req in requests {
+        for (index, req) in requests.enumerated() {
             do {
                 let json = try await json(for: req)
                 let playlists = parseUserPlaylists(from: json)
-                BeansLogger.shared.log("酷狗歌单同步：返回 \(playlists.count) 个", level: playlists.isEmpty ? .debug : .info)
+                BeansLogger.shared.log("酷狗歌单同步[\(index + 1)/\(requests.count)]：\(requestLabel(req)) 返回 \(playlists.count) 个", level: playlists.isEmpty ? .debug : .info)
                 if !playlists.isEmpty { return playlists }
             } catch {
                 lastError = error
-                BeansLogger.shared.log("酷狗歌单同步接口失败：\(error.localizedDescription)", level: .debug)
+                BeansLogger.shared.log("酷狗歌单同步[\(index + 1)/\(requests.count)]：\(requestLabel(req)) 失败 \(error.localizedDescription)", level: .debug)
             }
         }
         if let lastError { throw lastError }
@@ -236,6 +236,15 @@ final class KugouMusicAPI {
             seen.insert(playlist.id)
             return playlist
         }
+    }
+
+    private func requestLabel(_ request: URLRequest) -> String {
+        let host = request.url?.host ?? "unknown"
+        let type = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first(where: { $0.name == "type" })?
+            .value ?? "?"
+        return host.contains("gateway") ? "网关签名 type=\(type)" : "旧直连 type=\(type)"
     }
 
     func songURL(song: Song, quality: BeansAudioQuality = .current) async throws -> String? {
