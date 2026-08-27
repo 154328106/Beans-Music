@@ -195,7 +195,8 @@ final class KugouMusicAPI {
                 }
             }
         }
-        BeansLogger.shared.log("酷狗播放地址为空：hash候选=\(hashes.count) vipType=\(vipTypes.map(String.init).joined(separator: \"/\")) status=\(lastStatus) code=\(lastCode)", level: .debug)
+        let vipTypeText = vipTypes.map(String.init).joined(separator: "/")
+        BeansLogger.shared.log("酷狗播放地址为空：hash候选=\(hashes.count) vipType=\(vipTypeText) status=\(lastStatus) code=\(lastCode)", level: .debug)
         return nil
     }
 
