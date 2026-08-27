@@ -28,8 +28,9 @@ enum LibraryProvider: String, CaseIterable, Identifiable {
 
     var brandImageName: String? {
         switch self {
+        case .netease: return "BrandNetease"
+        case .qq: return "BrandQQ"
         case .kugou: return "BrandKugou"
-        default: return nil
         }
     }
 }

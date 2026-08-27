@@ -18,13 +18,13 @@ struct DiscoverView: View {
     /// 主页板块顺序（每日推荐 / 排行榜 / 歌单广场，可自定义）
     @State private var homeOrder = SectionOrderStore.load(SectionOrderStore.homeKey, defaults: SectionOrderStore.homeDefaults)
 
-    /// 当前平台可排序的板块：QQ 没有网易云分类歌单广场，保留推荐歌单区
+    /// 当前平台可排序的板块：三个平台都保留主页推荐、排行榜和歌单广场位置。
     private var availableSections: [String] {
-        source == .netease ? SectionOrderStore.homeDefaults : Array(SectionOrderStore.homeDefaults.dropLast()) + ["歌单广场"]
+        SectionOrderStore.homeDefaults
     }
     /// 首页数据源：记住上次选择，下次打开仍保持该平台（默认网易云）
     @AppStorage("beans.homeSource") private var homeSourceRaw = SearchProvider.netease.rawValue
-    private let homeProviders: [SearchProvider] = [.netease, .qq]
+    private let homeProviders: [SearchProvider] = [.netease, .qq, .kugou]
     /// 首页数据源：网易云 / QQ音乐（与搜索页同一控件样式）
     private var source: SearchProvider {
         guard let saved = SearchProvider(rawValue: homeSourceRaw), homeProviders.contains(saved) else {
@@ -169,7 +169,7 @@ struct DiscoverView: View {
         .padding(.top, 8)
     }
 
-    /// 平台选择（网易云 / QQ音乐，样式与搜索页一致）
+    /// 平台选择（网易云 / QQ音乐 / 酷狗音乐，样式与搜索页一致）
     private var providerPicker: some View {
         HStack(spacing: 4) {
             ForEach(homeProviders) { p in
@@ -178,8 +178,15 @@ struct DiscoverView: View {
                     if source != p { homeSourceRaw = p.rawValue }
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: p.icon)
-                            .font(.system(size: 11, weight: .semibold))
+                        if let imageName = p.brandImageName {
+                            Image(imageName)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 14, height: 14)
+                        } else {
+                            Image(systemName: p.icon)
+                                .font(.system(size: 11, weight: .semibold))
+                        }
                         Text(p.rawValue)
                             .font(BeansFont.appFont(13, .semibold))
                     }
@@ -447,7 +454,7 @@ struct DiscoverView: View {
 
     private var personalizedSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "歌单广场")
+            SectionHeader(title: source == .qq ? "QQ歌单广场" : "歌单广场")
             if source == .netease {
                 // 官方分类标签：点击切换分类（「全部」为官方精品歌单）
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -581,7 +588,9 @@ struct DiscoverView: View {
             snapshot.personalized = pp
             if !cats.isEmpty { playlistCats = cats }
         case .kugou:
-            break
+            // 酷狗公开主页使用酷狗官方搜索接口提供推荐歌曲，避免依赖不稳定的聚合接口。
+            let songs = try await KugouMusicAPI.shared.searchSongs(keyword: "热门歌曲", limit: 30)
+            snapshot.dailySongs = songs
         }
         return snapshot
     }

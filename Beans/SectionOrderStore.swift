@@ -79,6 +79,13 @@ struct SectionOrderSheet: View {
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("恢复默认") {
+                        withAnimation(.default) {
+                            order = sections
+                        }
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") { dismiss() }
                 }

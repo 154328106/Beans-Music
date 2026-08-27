@@ -139,13 +139,11 @@ final class KugouMusicAPI {
     /// 酷狗自有移动端搜索接口：搜索结果携带 hash、专辑和封面，可直接复用酷狗播放地址解析。
     /// 该接口只用于公开歌曲搜索，不依赖登录态。
     func searchSongs(keyword: String, limit: Int = 30) async throws -> [Song] {
-        var components = URLComponents(string: "https://mobilecdn.kugou.com/api/v3/search/song")!
+        var components = URLComponents(string: "https://songsearch.kugou.com/song_search_v2")!
         components.queryItems = [
-            URLQueryItem(name: "format", value: "json"),
             URLQueryItem(name: "keyword", value: keyword),
             URLQueryItem(name: "page", value: "1"),
             URLQueryItem(name: "pagesize", value: "\(min(max(limit, 1), 100))"),
-            URLQueryItem(name: "showtype", value: "1"),
         ]
         guard let url = components.url else {
             throw NetEaseError.unknown("酷狗搜索地址无效")
@@ -155,6 +153,15 @@ final class KugouMusicAPI {
         let songs = raw.compactMap(Self.mapTrack)
         BeansLogger.shared.log("酷狗搜索完成：\(keyword) 结果=\(songs.count)", level: .info)
         return songs
+    }
+
+    /// 酷狗搜索页专用热词。酷狗没有稳定公开的热搜 JSON 合约时使用独立词表，
+    /// 确保切换到酷狗后不会继续显示网易云热搜。
+    func hotWords() async -> [String] {
+        [
+            "周杰伦", "林俊杰", "陈奕迅", "薛之谦", "邓紫棋",
+            "凤凰传奇", "五月天", "毛不易", "告五人", "热门歌曲"
+        ]
     }
 
     func playlistSongs(listID: Int) async throws -> [Song] {
