@@ -115,6 +115,8 @@ struct ProfileView: View {
                             EmptyView()
                         }
                     }
+                    // 更新入口固定放在“我的”页面最底部，避免被板块排序隐藏。
+                    updateLinkCard
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
