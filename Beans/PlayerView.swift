@@ -213,6 +213,10 @@ struct PlayerView: View {
         let _ = theme.accent
         GeometryReader { geo in
             ZStack {
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+
                 background
                     .ignoresSafeArea()
 
@@ -221,10 +225,14 @@ struct PlayerView: View {
                     content(geo: geo)
                 }
                 .foregroundStyle(palette.text)
+                .offset(y: swipeOffset)
+                .opacity(1 - min(abs(swipeOffset) / 560, 0.28))
 
                 controlDeck(bottomInset: geo.safeAreaInsets.bottom)
                     .frame(maxWidth: .infinity)
                     .frame(maxHeight: .infinity, alignment: .bottom)
+                    .offset(y: swipeOffset)
+                    .opacity(1 - min(abs(swipeOffset) / 560, 0.28))
 
                 // 布局编辑工具栏：组件选择 + X/Y/Z 滑杆 + 恢复默认 + 完成
                 if layoutMode {
@@ -571,21 +579,6 @@ struct PlayerView: View {
                         .animation(.easeOut(duration: 0.24), value: coverSwitchPulse)
                 }
                 .frame(width: size * 1.10, height: size * 1.10)
-                // 封面上的滑动切歌手势：与轻点（切歌词）互斥，拖动时不会误触
-                .gesture(
-                    DragGesture(minimumDistance: 15)
-                        .onChanged { value in
-                            guard swipeSwitchSong else { return }
-                            coverDrag = value.translation
-                            let h = value.translation.height
-                            if abs(h) > abs(value.translation.width) {
-                                swipeOffset = h
-                            }
-                        }
-                        .onEnded { value in
-                            handleSwipeEnd(height: value.translation.height)
-                        }
-                )
             }
             .buttonStyle(GlassPressButtonStyle(scale: 0.96))
 
@@ -628,16 +621,15 @@ struct PlayerView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // 侧边上下滑动切歌（抖音式刷视频交互）：上滑下一首、下滑上一首，仅响应纵向手势
         // 使用 .gesture 与封面点击互斥：拖动时不会误触点击封面（避免切歌瞬间跳到歌词页）
-        .offset(y: swipeOffset)
-        .opacity(1 - min(abs(swipeOffset) / 260, 0.35))
-        .gesture(
+        .contentShape(Rectangle())
+        .highPriorityGesture(
             DragGesture(minimumDistance: 15)
-                        .onChanged { value in
-                            guard swipeSwitchSong else { return }
-                            coverDrag = value.translation
-                            let h = value.translation.height
-                            if abs(h) > abs(value.translation.width) {
-                                swipeOffset = h
+                .onChanged { value in
+                    guard swipeSwitchSong else { return }
+                    coverDrag = value.translation
+                    let h = value.translation.height
+                    if abs(h) > abs(value.translation.width) {
+                        swipeOffset = h
                     }
                 }
                 .onEnded { value in
@@ -1208,7 +1200,7 @@ struct PlayerView: View {
         return [text]
     }
 
-    /// 各平台歌曲链接（网易云 / QQ音乐）
+    /// 各平台歌曲链接（网易云 / QQ音乐 / 酷狗音乐）
     private func shareURL(for song: Song) -> URL? {
         switch song.source {
         case .netease:
@@ -1219,6 +1211,12 @@ struct PlayerView: View {
             }
             let encoded = song.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? song.name
             return URL(string: "https://y.qq.com/n/ryqq/search?w=\(encoded)")
+        case .kugou:
+            if let hash = song.kugouHash, !hash.isEmpty {
+                return URL(string: "https://www.kugou.com/song/#hash=\(hash)")
+            }
+            let encoded = song.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? song.name
+            return URL(string: "https://www.kugou.com/yy/html/search.html#searchType=song&searchKeyWord=\(encoded)")
         }
     }
 
@@ -1339,6 +1337,10 @@ struct PlayerView: View {
         guard let song else { return }
         if song.source == .qq, let mid = song.qqMid {
             if let raw = try? await QQMusicAPI.shared.lyric(songmid: mid) {
+                lyrics = LyricParser.parse(raw)
+            }
+        } else if song.source == .kugou {
+            if let raw = try? await KugouMusicAPI.shared.lyric(song: song) {
                 lyrics = LyricParser.parse(raw)
             }
         } else {

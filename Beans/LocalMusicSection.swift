@@ -296,9 +296,15 @@ struct LocalSearchAddSheet: View {
             searching = true
             defer { if !Task.isCancelled { searching = false } }
             do {
-                let songs = provider == .netease
-                    ? try await NetEaseAPI.shared.search(keyword: trimmed, limit: 30)
-                    : try await QQMusicAPI.shared.searchSongs(keyword: trimmed)
+                let songs: [Song]
+                switch provider {
+                case .netease:
+                    songs = try await NetEaseAPI.shared.search(keyword: trimmed, limit: 30)
+                case .qq:
+                    songs = try await QQMusicAPI.shared.searchSongs(keyword: trimmed)
+                case .kugou:
+                    songs = try await KugouMusicAPI.shared.searchSongs(keyword: trimmed, limit: 30)
+                }
                 guard !Task.isCancelled else { return }
                 results = songs
             } catch {
