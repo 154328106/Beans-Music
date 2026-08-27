@@ -48,6 +48,13 @@ struct RootView: View {
     /// 自动检测更新结果
     @State private var updateInfo: UpdateChecker.ReleaseInfo?
     @State private var showUpdateAlert = false
+    /// 更新包下载后交给系统分享面板
+    @ObservedObject private var ipaDownloader = IPADownloader.shared
+    @State private var showUpdateDownloadOverlay = false
+    @State private var updateShareFile: ShareFileItem?
+    @State private var updateShareFileURL: URL?
+    @State private var updateDownloadError = ""
+    @State private var showUpdateDownloadError = false
     private var themeMode: BeansThemeMode {
         BeansThemeMode(rawValue: themeModeRaw) ?? .system
     }
@@ -126,11 +133,206 @@ struct RootView: View {
                 showUpdateAlert = true
             }
         }
-        .alert("发现新版本", isPresented: $showUpdateAlert, presenting: updateInfo) { info in
-            Button("前往更新") { UIApplication.shared.open(info.htmlURL) }
-            Button("以后再说", role: .cancel) {}
-        } message: { info in
-            Text("Beans Music 有新版本 \(info.version) 啦，是否前往 GitHub 下载更新？")
+        .overlay {
+            if showUpdateAlert, let info = updateInfo {
+                UpdatePromptOverlay(
+                    info: info,
+                    onOpen: {
+                        showUpdateAlert = false
+                        if let assetURL = info.assetURL {
+                            startUpdateDownload(info: info, assetURL: assetURL)
+                        } else {
+                            UIApplication.shared.open(info.htmlURL)
+                        }
+                    },
+                    onRemindLater: {
+                        UpdateChecker.suppress(version: info.version)
+                        showUpdateAlert = false
+                    },
+                    onDismiss: {
+                        // 点击弹窗外空白处仅关闭本次提示，不记录“以后再说”。
+                        showUpdateAlert = false
+                    }
+                )
+                .transition(.opacity)
+                .zIndex(20)
+            }
+        }
+        .overlay {
+            if showUpdateDownloadOverlay {
+                updateDownloadProgressOverlay
+                    .zIndex(21)
+            }
+        }
+        .sheet(item: $updateShareFile, onDismiss: cleanupUpdateShareFile) { item in
+            ShareSheet(items: [item.url])
+        }
+        .alert("更新下载失败", isPresented: $showUpdateDownloadError) {
+            Button("好", role: .cancel) {}
+            Button("打开 GitHub") {
+                UIApplication.shared.open(UpdateChecker.releasePageURL)
+            }
+        } message: {
+            Text("\(updateDownloadError)\n如果长时间无反应，可能需要特殊网络环境才能访问 GitHub。")
+        }
+    }
+
+    private func startUpdateDownload(info: UpdateChecker.ReleaseInfo, assetURL: URL) {
+        showUpdateDownloadOverlay = true
+        Task {
+            do {
+                let url = try await ipaDownloader.download(assetURL: assetURL, version: info.version)
+                await MainActor.run {
+                    showUpdateDownloadOverlay = false
+                    updateShareFileURL = url
+                    updateShareFile = ShareFileItem(url: url)
+                }
+            } catch {
+                await MainActor.run {
+                    showUpdateDownloadOverlay = false
+                    updateDownloadError = error.localizedDescription
+                    showUpdateDownloadError = true
+                }
+            }
+        }
+    }
+
+    private func cleanupUpdateShareFile() {
+        guard let url = updateShareFileURL else { return }
+        try? FileManager.default.removeItem(at: url)
+        updateShareFile = nil
+        updateShareFileURL = nil
+    }
+
+    private var updateDownloadProgressOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.35)
+                .ignoresSafeArea()
+            VStack(spacing: 14) {
+                HStack(spacing: 10) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(Color.beansHighlight)
+                    Text("正在下载最新版 IPA")
+                        .font(BeansFont.appFont(15, .semibold))
+                        .foregroundStyle(Color.beansLabel)
+                }
+                if ipaDownloader.progress >= 0 {
+                    ProgressView(value: ipaDownloader.progress)
+                        .progressViewStyle(.linear)
+                        .tint(Color.beansAmber)
+                    Text("\(Int(ipaDownloader.progress * 100))%")
+                        .font(BeansFont.appFont(12))
+                        .foregroundStyle(Color.beansComment)
+                } else {
+                    ProgressView()
+                        .tint(Color.beansAmber)
+                    Text("正在连接下载服务器…")
+                        .font(BeansFont.appFont(12))
+                        .foregroundStyle(Color.beansComment)
+                }
+                Text("下载完成后将自动打开系统分享面板")
+                    .font(BeansFont.appFont(11))
+                    .foregroundStyle(Color.beansComment.opacity(0.8))
+            }
+            .padding(22)
+            .frame(maxWidth: 300)
+            .background {
+                BeansGlass(shape: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            }
+            .beansCardShadow(radius: 12, y: 6)
+            .padding(32)
+        }
+    }
+}
+
+/// 支持点击外部空白关闭的更新提示。
+/// 外部关闭和“前往更新”都不会抑制版本提醒，只有明确点击“以后再说”才会停止提醒。
+private struct UpdatePromptOverlay: View {
+    let info: UpdateChecker.ReleaseInfo
+    let onOpen: () -> Void
+    let onRemindLater: () -> Void
+    let onDismiss: () -> Void
+
+    private var details: String {
+        let body = info.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        return body.isEmpty ? "本次更新暂无详细说明。" : body
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.38)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onDismiss)
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("发现新版本")
+                            .font(BeansFont.appFont(20, .bold))
+                            .foregroundStyle(Color.beansLabel)
+                        Text("Beans Music \(info.version)")
+                            .font(BeansFont.appFont(13, .semibold))
+                            .foregroundStyle(Color.beansAmber)
+                    }
+                    Spacer(minLength: 8)
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Color.beansComment)
+                            .frame(width: 30, height: 30)
+                            .background(Color.beansGlassFill, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("关闭")
+                }
+
+                Divider()
+                    .overlay(Color.beansComment.opacity(0.16))
+                    .padding(.vertical, 14)
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("更新内容")
+                            .font(BeansFont.appFont(14, .semibold))
+                            .foregroundStyle(Color.beansLabel)
+                        Text(details)
+                            .font(BeansFont.appFont(13))
+                            .foregroundStyle(Color.beansComment)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 260)
+
+                VStack(spacing: 10) {
+                    Button(action: onOpen) {
+                        Text("立即更新")
+                            .font(BeansFont.appFont(14, .semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Capsule().fill(Color.beansAmber))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button("以后再说", action: onRemindLater)
+                        .font(BeansFont.appFont(13, .semibold))
+                        .foregroundStyle(Color.beansComment)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
+                        .buttonStyle(.plain)
+                }
+                .padding(.top, 18)
+            }
+            .padding(20)
+            .frame(maxWidth: 360)
+            .background {
+                BeansGlass(shape: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            }
+            .beansCardShadow(radius: 16, y: 8)
+            .padding(.horizontal, 24)
         }
     }
 }

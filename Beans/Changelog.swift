@@ -33,14 +33,15 @@ enum ChangelogStore {
 
     static let logs: [VersionLog] = [
         VersionLog(
-            id: "1.5.1",
-            version: "1.5.1",
-            title: "更新入口整合",
+            id: "1.5.0",
+            version: "1.5.0",
+            title: "更新提醒优化",
             features: [
-                "将 GitHub 更新地址与检查更新整合到「我的」页面底部",
+                "更新弹窗现在会直接显示本次版本的更新内容",
             ],
             fixes: [
-                "修复更新入口偶尔不显示的问题",
+                "修复更新提醒同一天只检测一次，导致重新打开软件不再提示的问题",
+                "只有点击“以后再说”后才会停止提醒当前版本",
             ]
         ),
         VersionLog(

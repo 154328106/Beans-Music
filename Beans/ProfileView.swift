@@ -36,6 +36,8 @@ struct ProfileView: View {
     @State private var downloadOutcome: DownloadOutcome?
     @State private var showDownloadOutcome = false
     @State private var pendingUpdateInfo: UpdateChecker.ReleaseInfo?
+    @State private var updateShareFile: ShareFileItem?
+    @State private var updateShareFileURL: URL?
     @ObservedObject private var qqAuth = QQMusicAuth.shared
     @ObservedObject private var kugouAuth = KugouMusicAuth.shared
 
@@ -150,10 +152,13 @@ struct ProfileView: View {
         .sheet(isPresented: $showUsageGuide) {
             UsageGuideSheet()
         }
+        .sheet(item: $updateShareFile, onDismiss: cleanupUpdateShareFile) { item in
+            ShareSheet(items: [item.url])
+        }
         .alert("检查更新", isPresented: $showUpdateResult, presenting: updateResult) { result in
             switch result {
             case .update(let info):
-                Button("前往更新") { UIApplication.shared.open(info.htmlURL) }
+                Button("立即更新") { UIApplication.shared.open(info.htmlURL) }
                 Button("取消", role: .cancel) {}
             case .upToDate:
                 Button("好", role: .cancel) {}
@@ -188,7 +193,7 @@ struct ProfileView: View {
         } message: { outcome in
             switch outcome {
             case .success(let fileName):
-                Text("新版 IPA 已下载到「文件」App → Beans → Downloads\n文件名：\(fileName)")
+                Text("新版 IPA 已下载完成，但未能打开分享面板。\n文件名：\(fileName)")
             case .failure(let message):
                 Text("下载失败：\(message)\n如果长时间无反应，可能需要特殊网络环境（代理 / VPN）才能访问 GitHub")
             }
@@ -222,7 +227,7 @@ struct ProfileView: View {
                         .font(BeansFont.appFont(12))
                         .foregroundStyle(Color.beansComment)
                 }
-                Text("下载完成后可在「文件」App → Beans → Downloads 中查看")
+                Text("下载完成后将自动打开系统分享面板")
                     .font(BeansFont.appFont(11))
                     .foregroundStyle(Color.beansComment.opacity(0.8))
                     .multilineTextAlignment(.center)
@@ -544,8 +549,8 @@ struct ProfileView: View {
                 let url = try await ipaDownloader.download(assetURL: assetURL, version: info.version)
                 await MainActor.run {
                     showDownloadOverlay = false
-                    downloadOutcome = .success(fileName: url.lastPathComponent)
-                    showDownloadOutcome = true
+                    updateShareFileURL = url
+                    updateShareFile = ShareFileItem(url: url)
                 }
             } catch {
                 await MainActor.run {
@@ -555,6 +560,13 @@ struct ProfileView: View {
                 }
             }
         }
+    }
+
+    private func cleanupUpdateShareFile() {
+        guard let url = updateShareFileURL else { return }
+        try? FileManager.default.removeItem(at: url)
+        updateShareFile = nil
+        updateShareFileURL = nil
     }
 
     /// 更新地址 + 检查更新（GitHub 项目，可点击交互）

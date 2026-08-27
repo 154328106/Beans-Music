@@ -3,12 +3,11 @@ import Foundation
 // MARK: - 更新检测（GitHub Releases API）
 
 /// 检测 GitHub 最新 Release 并与当前版本比较，发现新版时用于弹窗提示。
-/// 自动检查每天最多一次，手动检查随时可用。
+/// 自动检查每次启动一次，手动检查随时可用。
 struct UpdateChecker {
     static let repoPath = "XIaodou0416/Beans-Music"
     static let releasePageURL = URL(string: "https://github.com/\(repoPath)/releases/latest")!
     private static let latestAPI = URL(string: "https://api.github.com/repos/\(repoPath)/releases/latest")!
-    private static let lastCheckKey = "beans.updateCheck.lastDate"
     private static let suppressedVersionKey = "beans.updateCheck.suppressedVersion"
 
     /// 最新 Release 信息
@@ -32,11 +31,8 @@ struct UpdateChecker {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
     }
 
-    /// 自动检查：同一天最多请求一次；发现新版返回信息，否则返回 nil（失败静默不打扰）
+    /// 自动检查：每次启动请求一次。用户选择“以后再说”后，才不再提醒当前版本。
     static func checkIfNeeded() async -> ReleaseInfo? {
-        let today = dayString(Date())
-        if UserDefaults.standard.string(forKey: lastCheckKey) == today { return nil }
-        UserDefaults.standard.set(today, forKey: lastCheckKey)
         guard let info = try? await fetchLatest(), isNewer(info.version, than: currentVersion) else { return nil }
         if UserDefaults.standard.string(forKey: suppressedVersionKey) == info.version { return nil }
         return info
@@ -102,9 +98,4 @@ struct UpdateChecker {
         return false
     }
 
-    private static func dayString(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: date)
-    }
 }
