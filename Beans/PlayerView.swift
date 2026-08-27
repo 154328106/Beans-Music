@@ -1212,7 +1212,7 @@ struct PlayerView: View {
         return [text]
     }
 
-    /// 各平台歌曲链接（网易云 / QQ音乐）
+    /// 各平台歌曲链接（网易云 / QQ音乐 / 酷狗音乐）
     private func shareURL(for song: Song) -> URL? {
         switch song.source {
         case .netease:
@@ -1223,6 +1223,9 @@ struct PlayerView: View {
             }
             let encoded = song.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? song.name
             return URL(string: "https://y.qq.com/n/ryqq/search?w=\(encoded)")
+        case .kugou:
+            let encoded = song.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? song.name
+            return URL(string: "https://www.kugou.com/yy/html/search.html#searchType=song&searchKeyWord=\(encoded)")
         }
     }
 
@@ -1341,13 +1344,21 @@ struct PlayerView: View {
     private func loadLyrics() async {
         lyrics = []
         guard let song else { return }
-        if song.source == .qq, let mid = song.qqMid {
+        let identity = song.identityKey
+        func apply(_ parsed: [LyricLine]) {
+            guard self.song?.identityKey == identity else { return }
+            self.lyrics = parsed
+        }
+        if song.source == .kugou, let hash = song.kugouHash {
+            let raw = await KugouMusicAPI.shared.lyric(hash: hash, duration: song.duration)
+            apply(LyricParser.parse(raw))
+        } else if song.source == .qq, let mid = song.qqMid {
             if let raw = try? await QQMusicAPI.shared.lyric(songmid: mid) {
-                lyrics = LyricParser.parse(raw)
+                apply(LyricParser.parse(raw))
             }
         } else {
             if let (lrc, tlyric) = try? await NetEaseAPI.shared.lyricWithTranslation(id: song.id) {
-                lyrics = LyricParser.parse(lrc ?? "", translationRaw: tlyric)
+                apply(LyricParser.parse(lrc ?? "", translationRaw: tlyric))
             }
         }
     }

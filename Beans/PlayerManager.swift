@@ -334,7 +334,9 @@ final class PlayerManager: NSObject, ObservableObject {
             let strictUnlock = shouldLockOfficialOnly(song)
             let quality = BeansAudioQuality.current
             BeansLogger.shared.log("▶ 开始播放：\(song.name) - \(song.artists)｜平台=\(song.source.rawValue) id=\(song.id) 音质=\(quality.level) 免费听歌=\(enableUnblock ? "开" : "关") 官方受限=\(strictUnlock ? "是" : "否")", level: .info)
-            if song.source == .qq, let mid = song.qqMid {
+            if song.source == .kugou {
+                urlString = try? await KugouMusicAPI.shared.songURL(song: song)
+            } else if song.source == .qq, let mid = song.qqMid {
                 // 是否有播放权益以 vkey 实际返回为准；会员接口识别失败时也必须尝试官方地址。
                 urlString = try? await QQMusicAPI.shared.songURL(songmid: mid, mediaMid: song.qqMediaMid)
                 if urlString == nil {
@@ -498,6 +500,17 @@ final class PlayerManager: NSObject, ObservableObject {
                 "AVURLAssetHTTPHeaderFieldsKey": headers
             ])
             item = AVPlayerItem(asset: asset)
+        } else if url.host?.contains("kugou.com") == true || url.host?.contains("kgimg.com") == true {
+            var headers = [
+                "User-Agent": "Android15-1070-11440-46-0-DiscoveryDRADProtocol-wifi",
+                "Referer": "https://www.kugou.com/",
+            ]
+            let cookie = KugouMusicAuth.shared.cookieHeader
+            if !cookie.isEmpty { headers["Cookie"] = cookie }
+            let asset = AVURLAsset(url: url, options: [
+                "AVURLAssetHTTPHeaderFieldsKey": headers
+            ])
+            item = AVPlayerItem(asset: asset)
         } else {
             item = AVPlayerItem(url: url)
         }
@@ -530,7 +543,7 @@ final class PlayerManager: NSObject, ObservableObject {
             bumpPlayCount(song)
             lastCountedSongID = song.identityKey
         }
-        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1.0, preferredTimescale: 600), queue: .main) { [weak self] time in
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.2, preferredTimescale: 600), queue: .main) { [weak self] time in
             guard let self, let player = self.player else { return }
             self.progress = player.currentTime().seconds
             if let itemDuration = player.currentItem?.duration, itemDuration.isNumeric {

@@ -41,6 +41,8 @@ struct CommentsSheet: View {
                     ErrorStateView(message: errorMessage) {
                         Task { await load(reset: true) }
                     }
+                } else if song.source == .kugou {
+                    EmptyStateView(icon: "bubble.left", text: "暂未接入酷狗评论")
                 } else if song.source == .qq {
                     qqCommentList
                 } else if let page {
@@ -100,7 +102,11 @@ struct CommentsSheet: View {
         }
         errorMessage = nil
         do {
-            if song.source == .qq {
+            if song.source == .kugou {
+                qqComments = []
+                loading = false
+                return
+            } else if song.source == .qq {
                 let result = try await QQMusicAPI.shared.comments(songID: song.id, limit: qqPageSize, pagenum: qqPageNum)
                 if reset {
                     qqComments = result.comments

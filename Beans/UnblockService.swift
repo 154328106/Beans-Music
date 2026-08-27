@@ -82,6 +82,9 @@ enum UnblockService {
         if let provider = source.headers["source"], !provider.isEmpty, provider != expectedProvider {
             return false
         }
+        if songSource == .kugou {
+            return false
+        }
         if songSource == .qq {
             return qqMid?.isEmpty == false
         }
@@ -209,6 +212,7 @@ enum UnblockService {
         switch source {
         case .netease: return "wy"
         case .qq: return "tx"
+        case .kugou: return "kg"
         }
     }
 
