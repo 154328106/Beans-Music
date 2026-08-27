@@ -206,11 +206,11 @@ final class KugouMusicAPI {
             throw NetEaseError.decoding("酷狗排行榜数据格式异常")
         }
         return list.prefix(limit).compactMap { item in
-            let id = int(item["rankid"] ?? item["id"])
+            let id = Self.int(item["rankid"] ?? item["id"])
             guard id > 0 else { return nil }
-            let name = string(item["rankname"] ?? item["name"])
+            let name = Self.string(item["rankname"] ?? item["name"])
             guard !name.isEmpty else { return nil }
-            let cover = string(item["album_img_9"] ?? item["img_9"] ?? item["imgurl"])
+            let cover = Self.string(item["album_img_9"] ?? item["img_9"] ?? item["imgurl"])
                 .replacingOccurrences(of: "{size}", with: "400")
             return KugouTopInfo(
                 id: id,
@@ -243,17 +243,17 @@ final class KugouMusicAPI {
         let json = try await getJSON(url, ua: Self.browserUA)
         let rows = (((json["plist"] as? [String: Any])?["list"] as? [String: Any])?["info"] as? [[String: Any]]) ?? []
         return rows.prefix(limit).compactMap { item in
-            let id = int(item["specialid"] ?? item["id"])
+            let id = Self.int(item["specialid"] ?? item["id"])
             guard id > 0 else { return nil }
-            let name = string(item["specialname"] ?? item["name"] ?? item["title"])
+            let name = Self.string(item["specialname"] ?? item["name"] ?? item["title"])
             guard !name.isEmpty else { return nil }
-            let cover = string(item["imgurl"] ?? item["pic"] ?? item["cover"])
+            let cover = Self.string(item["imgurl"] ?? item["pic"] ?? item["cover"])
                 .replacingOccurrences(of: "{size}", with: "400")
             return Playlist(
                 id: id,
                 name: name,
                 coverURL: URL(string: cover),
-                trackCount: int(item["songcount"] ?? item["song_count"]),
+                trackCount: Self.int(item["songcount"] ?? item["song_count"]),
                 source: .kugou
             )
         }
