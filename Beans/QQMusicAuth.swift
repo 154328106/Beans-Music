@@ -91,6 +91,7 @@ final class QQMusicAuth: ObservableObject {
         self.nickname = nickname ?? Self.fallbackNickname(dict)
         defaults.set(cookies, forKey: cookieKey)
         defaults.set(self.nickname, forKey: nickKey)
+        NotificationCenter.default.post(name: .beansQQLoginDidUpdate, object: nil)
         // 登录成功后异步刷新会员标识与真实昵称（失败静默降级）
         Task { await self.fetchVIPStatus() }
         Task { await self.fetchProfile() }

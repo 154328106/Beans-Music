@@ -36,6 +36,7 @@ final class AuthStore: ObservableObject {
         if let data = try? JSONEncoder().encode(account) {
             defaults.set(data, forKey: userKey)
         }
+        NotificationCenter.default.post(name: .beansNeteaseLoginDidUpdate, object: nil)
     }
 
     /// 刷新账号资料（VIP 状态等），登录后保持最新会员标识

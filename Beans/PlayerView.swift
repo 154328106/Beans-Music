@@ -1126,22 +1126,34 @@ struct PlayerView: View {
                 }
                 .buttonStyle(.plain)
             }
-            Picker("组件", selection: $layoutPart) {
-                ForEach(PlayerLayoutPart.allCases) { part in
-                    Text(part.rawValue).tag(part)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(PlayerLayoutPart.allCases) { part in
+                        Button {
+                            BeansHaptics.select()
+                            layoutPart = part
+                        } label: {
+                            Text(part.rawValue)
+                                .font(BeansFont.appFont(12, .semibold))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .foregroundStyle(layoutPart == part ? Color.white : palette.secondary)
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 7)
+                                .background {
+                                    Capsule().fill(layoutPart == part ? Color.beansAmber : Color.beansGlassFill)
+                                }
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
-            .pickerStyle(.segmented)
             layoutSlider("X", value: selectedLayoutEntry.x, range: layoutXRange)
             layoutSlider("Y", value: selectedLayoutEntry.y, range: layoutYRange)
             layoutSlider("大小", value: selectedLayoutEntry.scale, range: 0.6...1.5, step: 0.05, format: "%.2f")
             HStack(spacing: 10) {
                 Button {
-                    layoutData = [:]
-                    PlayerLayoutStore.save(layoutData)
-                    lyricOffsetX = 0
-                    lyricAnchorY = 0
-                    lyricScale = 1
+                    resetCurrentLayoutPart()
                     BeansHaptics.success()
                 } label: {
                     Label("恢复默认", systemImage: "arrow.counterclockwise")
@@ -1160,6 +1172,18 @@ struct PlayerView: View {
             BeansGlass(shape: RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
         .padding(.horizontal, 12)
+    }
+
+    private func resetCurrentLayoutPart() {
+        switch layoutPart {
+        case .lyric:
+            lyricOffsetX = 0
+            lyricAnchorY = 0
+            lyricScale = 1
+        default:
+            layoutData.removeValue(forKey: layoutPart.rawValue)
+            PlayerLayoutStore.save(layoutData)
+        }
     }
 
     private func layoutSlider(_ title: String, value: Binding<CGFloat>, range: ClosedRange<CGFloat>, step: CGFloat = 1, format: String = "%.0f") -> some View {

@@ -102,6 +102,14 @@ struct DiscoverView: View {
                     Task { await load(force: true) }
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .beansNeteaseLoginDidUpdate)) { _ in
+                homeSourceRaw = SearchProvider.netease.rawValue
+                Task { await load(force: true) }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .beansQQLoginDidUpdate)) { _ in
+                homeSourceRaw = SearchProvider.qq.rawValue
+                Task { await load(force: true) }
+            }
             .sheet(item: $selectedTopList) { topList in
                 TopListDetailView(topList: topList)
                     .environmentObject(player)

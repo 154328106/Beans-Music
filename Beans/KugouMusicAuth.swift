@@ -82,6 +82,7 @@ final class KugouMusicAuth: ObservableObject {
         self.nickname = nickname ?? Self.fallbackNickname(dict)
         defaults.set(cookies, forKey: cookieKey)
         defaults.set(self.nickname, forKey: nickKey)
+        NotificationCenter.default.post(name: .beansKugouLoginDidUpdate, object: nil)
         Task { await self.fetchVIPStatus() }
         return true
     }

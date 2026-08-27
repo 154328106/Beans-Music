@@ -67,13 +67,17 @@ enum PlayerLayoutStore {
     static func defaultEntry(for part: PlayerLayoutPart) -> PlayerLayoutEntry {
         switch part {
         case .progress:
-            return PlayerLayoutEntry(x: 0, y: 0, scale: 1)
+            return PlayerLayoutEntry(x: 0, y: 17, scale: 1)
         case .controls:
-            return PlayerLayoutEntry(x: 0, y: 0, scale: 1)
-        case .loop, .previous, .next, .queue:
+            return PlayerLayoutEntry(x: 0, y: 14, scale: 1.05)
+        case .loop:
+            return PlayerLayoutEntry(x: 5, y: 0, scale: 1.15)
+        case .queue:
+            return PlayerLayoutEntry(x: 0, y: -5, scale: 1.15)
+        case .previous, .next:
             return PlayerLayoutEntry(x: 0, y: 0, scale: 1)
         case .grabber:
-            return PlayerLayoutEntry(x: 0, y: 0, scale: 1)
+            return PlayerLayoutEntry(x: 0, y: 27, scale: 0.7)
         case .lyric:
             return PlayerLayoutEntry(x: 0, y: 0, scale: 1)
         }

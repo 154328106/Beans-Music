@@ -77,6 +77,18 @@ struct LibraryView: View {
                 await loadKugouPlaylists()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .beansNeteaseLoginDidUpdate)) { _ in
+            source = .netease
+            Task { await auth.loadLibrary() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .beansQQLoginDidUpdate)) { _ in
+            source = .qq
+            Task { await loadQQPlaylists(force: true) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .beansKugouLoginDidUpdate)) { _ in
+            source = .kugou
+            Task { await loadKugouPlaylists(force: true) }
+        }
         .sheet(isPresented: $showHistory) {
             HistoryView()
                 .environmentObject(player)

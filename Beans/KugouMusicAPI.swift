@@ -3,6 +3,11 @@ import Foundation
 final class KugouMusicAPI {
     static let shared = KugouMusicAPI()
 
+    private enum PlaylistPayload {
+        case json([String: Any])
+        case html(String)
+    }
+
     private let session: URLSession
     private let ua = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
@@ -132,9 +137,12 @@ final class KugouMusicAPI {
         var lastError: Error?
         for (index, req) in requests.enumerated() {
             do {
-                let json = try await json(for: req)
-                let playlists = parseUserPlaylists(from: json)
+                let payload = try await playlistPayload(for: req)
+                let playlists = parseUserPlaylists(from: payload)
                 BeansLogger.shared.log("酷狗歌单同步[\(index + 1)/\(requests.count)]：\(requestLabel(req)) 返回 \(playlists.count) 个", level: playlists.isEmpty ? .debug : .info)
+                if playlists.isEmpty {
+                    BeansLogger.shared.log("酷狗歌单响应摘要[\(index + 1)]：\(Self.responseSummary(payload))", level: .debug)
+                }
                 if !playlists.isEmpty { return playlists }
             } catch {
                 lastError = error
@@ -146,6 +154,7 @@ final class KugouMusicAPI {
     }
 
     private func userPlaylistRequests(auth: KugouMusicAuth) -> [URLRequest] {
+        var requests = publicUserPlaylistRequests(auth: auth)
         let appid = "1005"
         let clientver = "20489"
         let clienttime = "\(Int(Date().timeIntervalSince1970))"
@@ -161,7 +170,6 @@ final class KugouMusicAPI {
             "plat": "1"
         ]
         let types = ["2", "1", "0"]
-        var requests: [URLRequest] = []
         for type in types {
             let body = #"{"userid":\#(auth.userid),"token":"\#(auth.token)","total_ver":979,"type":\#(type),"page":1,"pagesize":200}"#
             var params = baseParams
@@ -183,11 +191,32 @@ final class KugouMusicAPI {
             req.setValue("cloudlist.service.kugou.com", forHTTPHeaderField: "x-router")
             req.setValue(auth.cookieHeader, forHTTPHeaderField: "Cookie")
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.setValue(type, forHTTPHeaderField: "X-Beans-Kugou-Type")
             req.httpBody = body.data(using: .utf8)
             requests.append(req)
         }
         requests.append(contentsOf: legacyUserPlaylistRequests(auth: auth))
         return requests
+    }
+
+    private func publicUserPlaylistRequests(auth: KugouMusicAuth) -> [URLRequest] {
+        let candidates = [
+            "https://www.kugou.com/yy/user/special/\(auth.userid).html",
+            "https://www.kugou.com/yy/special/index/1-\(auth.userid)-1.html",
+            "https://www.kugou.com/yy/special/index/1-\(auth.userid)-2.html",
+            "https://www.kugou.com/yy/special/index/1-\(auth.userid)-3.html"
+        ]
+        return candidates.compactMap { text in
+            guard let url = URL(string: text) else { return nil }
+            var req = URLRequest(url: url)
+            req.httpMethod = "GET"
+            req.timeoutInterval = 18
+            req.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
+            req.setValue("https://www.kugou.com/", forHTTPHeaderField: "Referer")
+            req.setValue(auth.cookieHeader, forHTTPHeaderField: "Cookie")
+            req.setValue("public", forHTTPHeaderField: "X-Beans-Kugou-Type")
+            return req
+        }
     }
 
     private func legacyUserPlaylistRequests(auth: KugouMusicAuth) -> [URLRequest] {
@@ -238,13 +267,58 @@ final class KugouMusicAPI {
         }
     }
 
+    private func parseUserPlaylists(from payload: PlaylistPayload) -> [Playlist] {
+        switch payload {
+        case .json(let json):
+            return parseUserPlaylists(from: json)
+        case .html(let html):
+            return parsePublicPlaylists(fromHTML: html)
+        }
+    }
+
+    private func parsePublicPlaylists(fromHTML html: String) -> [Playlist] {
+        var items: [Playlist] = []
+        var seen = Set<Int>()
+
+        let linkPattern = #"<a[^>]+href=["'][^"']*/yy/special/single/(\d+)\.html[^"']*["'][^>]*>(.*?)</a>"#
+        for match in Self.regexMatches(linkPattern, in: html) {
+            guard let id = Self.int(match.group(1)), id > 0, !seen.contains(id) else { continue }
+            let rawName = Self.cleanedHTML(match.group(2))
+            let name = rawName.isEmpty ? Self.nearbyPlaylistName(in: html, around: match.range) : rawName
+            guard !name.isEmpty else { continue }
+            seen.insert(id)
+            items.append(Playlist(id: id, name: name, coverURL: Self.nearbyImageURL(in: html, around: match.range), trackCount: 0, source: .kugou))
+        }
+
+        let idPatterns = [
+            #"specialid["']?\s*[:=]\s*["']?(\d+)"#,
+            #"special_id["']?\s*[:=]\s*["']?(\d+)"#,
+            #"data-id=["'](\d+)["']"#,
+            #"/yy/special/single/(\d+)\.html"#
+        ]
+        for pattern in idPatterns {
+            for match in Self.regexMatches(pattern, in: html) {
+                guard let id = Self.int(match.group(1)), id > 0, !seen.contains(id) else { continue }
+                let name = Self.nearbyPlaylistName(in: html, around: match.range)
+                guard !name.isEmpty else { continue }
+                seen.insert(id)
+                items.append(Playlist(id: id, name: name, coverURL: Self.nearbyImageURL(in: html, around: match.range), trackCount: 0, source: .kugou))
+            }
+        }
+        return items
+    }
+
     private func requestLabel(_ request: URLRequest) -> String {
         let host = request.url?.host ?? "unknown"
-        let type = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?
+        let queryType = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?
             .queryItems?
             .first(where: { $0.name == "type" })?
-            .value ?? "?"
-        return host.contains("gateway") ? "网关签名 type=\(type)" : "旧直连 type=\(type)"
+            .value
+        let headerType = request.value(forHTTPHeaderField: "X-Beans-Kugou-Type")
+        let type = queryType ?? headerType ?? "?"
+        if host.contains("gateway") { return "网关签名 type=\(type)" }
+        if host.contains("www.kugou.com") { return "公开主页 type=\(type)" }
+        return "旧直连 type=\(type)"
     }
 
     func songURL(song: Song, quality: BeansAudioQuality = .current) async throws -> String? {
@@ -348,6 +422,18 @@ final class KugouMusicAPI {
             throw NetEaseError.decoding(String(data: data.prefix(160), encoding: .utf8) ?? "")
         }
         return json
+    }
+
+    private func playlistPayload(for request: URLRequest) async throws -> PlaylistPayload {
+        let (data, response) = try await session.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw NetEaseError.httpStatus(http.statusCode, String(data: data.prefix(160), encoding: .utf8) ?? "")
+        }
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            return .json(json)
+        }
+        let text = String(data: data, encoding: .utf8) ?? String(decoding: data, as: Unicode.UTF8.self)
+        return .html(text)
     }
 
     private func song(from item: [String: Any]) -> Song? {
@@ -492,6 +578,122 @@ final class KugouMusicAPI {
             }
         }
         return arrays
+    }
+
+    private static func responseSummary(_ payload: PlaylistPayload) -> String {
+        switch payload {
+        case .json(let json):
+            let root = json["data"] as? [String: Any] ?? json
+            let keys = Array(json.keys.sorted().prefix(12)).joined(separator: ",")
+            let rootKeys = Array(root.keys.sorted().prefix(16)).joined(separator: ",")
+            let status = string(json["status"]).isEmpty ? string(json["errcode"]) : string(json["status"])
+            let code = [
+                string(json["error_code"]),
+                string(json["errorCode"]),
+                string(json["code"]),
+                string(root["error_code"]),
+                string(root["code"])
+            ].first { !$0.isEmpty } ?? ""
+            let message = [
+                json["msg"] as? String,
+                json["message"] as? String,
+                json["error_msg"] as? String,
+                root["msg"] as? String,
+                root["message"] as? String
+            ].compactMap { $0 }.first ?? ""
+            let arraySizes = findArrays(in: root).prefix(6).map { "\($0.count)" }.joined(separator: "/")
+            return "JSON keys=\(keys) dataKeys=\(rootKeys) status=\(status) code=\(code) msg=\(message.prefix(48)) arrays=\(arraySizes)"
+        case .html(let html):
+            let lower = html.lowercased()
+            let markers = [
+                "specialid": lower.contains("specialid"),
+                "special/single": lower.contains("special/single"),
+                "global_collection_id": lower.contains("global_collection_id"),
+                "data-id": lower.contains("data-id"),
+                "login": lower.contains("login")
+            ]
+            let hit = markers.filter { $0.value }.map { $0.key }.joined(separator: ",")
+            return "HTML bytes=\(html.utf8.count) markers=\(hit.isEmpty ? "none" : hit) title=\(cleanedHTML(firstRegexGroup(#"<title[^>]*>(.*?)</title>"#, in: html) ?? "").prefix(48))"
+        }
+    }
+
+    private struct RegexMatch {
+        let groups: [String]
+        let range: Range<String.Index>
+
+        func group(_ index: Int) -> String {
+            groups.indices.contains(index) ? groups[index] : ""
+        }
+    }
+
+    private static func regexMatches(_ pattern: String, in text: String) -> [RegexMatch] {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else {
+            return []
+        }
+        let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.matches(in: text, range: nsRange).compactMap { result in
+            guard let full = Range(result.range(at: 0), in: text) else { return nil }
+            let groups = (0..<result.numberOfRanges).map { idx -> String in
+                guard result.range(at: idx).location != NSNotFound,
+                      let range = Range(result.range(at: idx), in: text) else { return "" }
+                return String(text[range])
+            }
+            return RegexMatch(groups: groups, range: full)
+        }
+    }
+
+    private static func firstRegexGroup(_ pattern: String, in text: String) -> String? {
+        regexMatches(pattern, in: text).first?.group(1)
+    }
+
+    private static func nearbyPlaylistName(in html: String, around range: Range<String.Index>) -> String {
+        let window = nearbyHTML(in: html, around: range)
+        let patterns = [
+            #"specialname["']?\s*[:=]\s*["']([^"']+)["']"#,
+            #"special_name["']?\s*[:=]\s*["']([^"']+)["']"#,
+            #"title=["']([^"']+)["']"#,
+            #"alt=["']([^"']+)["']"#,
+            #"<span[^>]*class=["'][^"']*(?:name|title)[^"']*["'][^>]*>(.*?)</span>"#,
+            #"<p[^>]*class=["'][^"']*(?:name|title)[^"']*["'][^>]*>(.*?)</p>"#,
+            #"<h[1-6][^>]*>(.*?)</h[1-6]>"#
+        ]
+        for pattern in patterns {
+            let name = cleanedHTML(firstRegexGroup(pattern, in: window) ?? "")
+            if isUsefulPlaylistName(name) { return name }
+        }
+        return ""
+    }
+
+    private static func nearbyImageURL(in html: String, around range: Range<String.Index>) -> URL? {
+        let window = nearbyHTML(in: html, around: range)
+        let raw = firstRegexGroup(#"(?:src|data-src)=["']([^"']+)["']"#, in: window) ?? ""
+        return imageURL(cleanedHTML(raw))
+    }
+
+    private static func nearbyHTML(in html: String, around range: Range<String.Index>) -> String {
+        let lower = html.index(range.lowerBound, offsetBy: -500, limitedBy: html.startIndex) ?? html.startIndex
+        let upper = html.index(range.upperBound, offsetBy: 700, limitedBy: html.endIndex) ?? html.endIndex
+        return String(html[lower..<upper])
+    }
+
+    private static func cleanedHTML(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: #"<script[\s\S]*?</script>"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"<style[\s\S]*?</style>"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"<[^>]+>"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func isUsefulPlaylistName(_ text: String) -> Bool {
+        guard text.count >= 2, text.count <= 80 else { return false }
+        let blocked = ["酷狗音乐", "登录", "注册", "播放", "下载", "分享", "评论", "更多"]
+        return !blocked.contains(text)
     }
 
     private static func md5(_ text: String) -> String {
