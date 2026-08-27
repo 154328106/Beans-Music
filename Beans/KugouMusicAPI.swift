@@ -15,10 +15,15 @@ final class KugouMusicAPI {
     private let androidSignKey = "LnT6xpN3khm36zse0QzvmgTZ3waWdRSA"
     private let webSignKey = "NVPh5oo715z5DIWAeQlhMDsWXXQV4hwt"
     private let playSalt = "kgcloudv2"
+    private let playSignSalt = "57ae12eb6890223e355ccfcb74edf70d"
+    private let playAppid = "1005"
+    private let playClientver = "20489"
     private let androidUA = "Android15-1070-11440-46-0-DiscoveryDRADProtocol-wifi"
+    private let playbackUA = "Android15-1070-11083-46-0-DiscoveryDRADProtocol-wifi"
     private let rsaPublicKeyBase64 = "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDECi0Np2UR87scwrvTr72L6oO01rBbbBPriSDFPxr3Z5syug0O24QyQO8bg27+0+4kBzTBTBOZ/WWU0WryL1JSXRTXLgFVxtzIY41Pe7lPOgsfTCn5kZcvKhYKJesKnnJDNr5/abvTGf+rHG3YRwsCHcQ08/q6ifSioBszvb3QiwIDAQAB"
 
     private let session: URLSession
+    private var lastMembershipProbeAt: Date?
 
     private init() {
         let config = URLSessionConfiguration.default
@@ -95,12 +100,14 @@ final class KugouMusicAPI {
         let vip = Self.deepInt(json, names: ["vip_type", "vipType", "viptype", "isvip", "is_vip", "vip"])
         KugouMusicAuth.shared.saveLogin(userId: userId, token: token, nickname: nick, avatar: avatar, vipType: vip)
         await registerDevice()
+        await refreshMembershipStatusIfNeeded(force: true)
         return .success(nick.isEmpty ? "酷狗音乐用户 \(userId)" : nick)
     }
 
     func userPlaylists() async throws -> [Playlist] {
         let auth = KugouMusicAuth.shared
         guard auth.isLoggedIn else { return [] }
+        await refreshMembershipStatusIfNeeded()
         let dataBody: [String: Any] = [
             "total_ver": 979,
             "type": 2,
@@ -375,9 +382,22 @@ final class KugouMusicAPI {
     }
 
     func songURL(song: Song) async throws -> String? {
-        let hashes = Self.qualityHashCandidates(primary: song.kugouHash, qualityHashes: song.kugouQualityHashes)
+        await refreshMembershipStatusIfNeeded()
+        var primary = song.kugouHash
+        var qualityHashes = song.kugouQualityHashes
+        var albumAudioId = song.kugouAlbumAudioId
+        var albumId = song.kugouAlbumId
+        if Self.qualityHashCandidates(primary: primary, qualityHashes: qualityHashes).isEmpty,
+           let completed = try? await completePlaybackMetadata(for: song) {
+            primary = completed.kugouHash ?? primary
+            qualityHashes = completed.kugouQualityHashes ?? qualityHashes
+            albumAudioId = completed.kugouAlbumAudioId ?? albumAudioId
+            albumId = completed.kugouAlbumId ?? albumId
+            BeansLogger.shared.log("酷狗播放元数据补齐：\(song.name) hash=\((primary ?? "").isEmpty ? "无" : "有") albumAudioId=\(albumAudioId ?? "")", level: .debug)
+        }
+        let hashes = Self.qualityHashCandidates(primary: primary, qualityHashes: qualityHashes)
         guard !hashes.isEmpty else { return nil }
-        return try await songURL(hashes: hashes, albumAudioId: song.kugouAlbumAudioId, albumId: song.kugouAlbumId)
+        return try await songURL(hashes: hashes, albumAudioId: albumAudioId, albumId: albumId)
     }
 
     func songURL(hash: String, albumAudioId: String?, albumId: String?) async throws -> String? {
@@ -418,7 +438,7 @@ final class KugouMusicAPI {
     /// 酷狗官方新版播放地址接口，参数结构与酷狗客户端的 v5/url 通道一致。
     private func songURLV5Once(hash: String, albumAudioId: String?, albumId: String?) async throws -> (url: String?, status: Int, code: Int) {
         let auth = KugouMusicAuth.shared
-        var components = URLComponents(string: "https://trackercdn.kugou.com/v5/url")!
+        var components = URLComponents(string: "\(gateway)/v5/url")!
         let quality: String
         switch BeansAudioQuality.current {
         case .standard:
@@ -428,12 +448,14 @@ final class KugouMusicAPI {
         case .lossless:
             quality = "flac"
         case .hires:
-            quality = "high"
+            quality = "hires"
         }
+        let userId = auth.userId.isEmpty ? "0" : auth.userId
+        let fileHash = hash.lowercased()
         var params: [String: String] = [
             "album_id": albumId ?? "0",
             "area_code": "1",
-            "hash": hash.lowercased(),
+            "hash": fileHash,
             "ssa_flag": "is_fromtrack",
             "version": "11430",
             "quality": quality,
@@ -441,26 +463,29 @@ final class KugouMusicAPI {
             "pid": "2",
             "pidversion": "3001",
             "cmd": "26",
+            "appid": playAppid,
             "page_id": "151369488",
             "ppage_id": "463467626,350369493,788954147",
             "cdnBackup": "1",
             "module": "",
-            "clientver": clientver,
+            "clientver": playClientver,
             "dfid": auth.dfid,
             "mid": auth.mid,
+            "userid": userId,
+            "token": auth.token,
+            "vipType": "\(auth.vipType)",
+            "IsFreePart": auth.hasMembership ? "0" : "1",
+            "key": "\(fileHash)\(playSignSalt)\(playAppid)\(auth.mid)\(userId)".kgMD5Hex,
         ]
         if let albumAudioId, !albumAudioId.isEmpty {
             params["album_audio_id"] = albumAudioId
         }
-        if !auth.userId.isEmpty {
-            params["userid"] = auth.userId
-            params["token"] = auth.token
-            params["vipType"] = "\(auth.vipType)"
-        }
         components.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
         var request = URLRequest(url: components.url!)
-        request.setValue(androidUA, forHTTPHeaderField: "User-Agent")
+        request.setValue(playbackUA, forHTTPHeaderField: "User-Agent")
         request.setValue("trackercdn.kugou.com", forHTTPHeaderField: "x-router")
+        request.setValue(auth.dfid, forHTTPHeaderField: "dfid")
+        request.setValue(auth.mid, forHTTPHeaderField: "mid")
         request.setValue(auth.cookieHeader, forHTTPHeaderField: "Cookie")
         let (data, response) = try await session.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { return (nil, 0, -1) }
@@ -469,6 +494,25 @@ final class KugouMusicAPI {
         let code = Self.deepInt(json, names: ["error_code", "errcode", "code"])
         let raw = Self.deepString(json, names: ["play_url", "play_backup_url", "url", "src", "backup_url"])
         return (raw.isEmpty ? nil : raw, status, code)
+    }
+
+    private func completePlaybackMetadata(for song: Song) async throws -> Song? {
+        let keyword = ([song.name, song.artists].filter { !$0.isEmpty }).joined(separator: " ")
+        guard !keyword.isEmpty else { return nil }
+        let candidates = try await searchSongs(keyword: keyword, limit: 8)
+        let targetDuration = song.duration
+        return candidates.first { candidate in
+            if let expected = song.kugouAlbumAudioId,
+               let actual = candidate.kugouAlbumAudioId,
+               !expected.isEmpty,
+               expected == actual {
+                return true
+            }
+            let nameOK = candidate.name == song.name
+            let artistOK = song.artists.isEmpty || candidate.artists.contains(song.artists) || song.artists.contains(candidate.artists)
+            let durationOK = targetDuration <= 0 || abs(candidate.duration - targetDuration) < 12
+            return nameOK && artistOK && durationOK
+        } ?? candidates.first
     }
 
     private func songURLOnce(hash: String, albumAudioId: String?, albumId: String?, vipType: Int) async throws -> (url: String?, status: Int, code: Int) {
@@ -503,6 +547,43 @@ final class KugouMusicAPI {
         let code = Self.deepInt(json, names: ["error_code", "errcode", "code"])
         let raw = Self.deepString(json, names: ["play_url", "play_backup_url", "url", "src", "backup_url"])
         return (raw.isEmpty ? nil : raw, status, code)
+    }
+
+    private func refreshMembershipStatusIfNeeded(force: Bool = false) async {
+        let auth = KugouMusicAuth.shared
+        guard auth.isLoggedIn, !auth.hasMembership else { return }
+        if !force, let lastMembershipProbeAt, Date().timeIntervalSince(lastMembershipProbeAt) < 300 {
+            return
+        }
+        lastMembershipProbeAt = Date()
+        for listID in ["3", "2"] {
+            do {
+                let body: [String: Any] = [
+                    "listid": listID,
+                    "page": 1,
+                    "pagesize": 1,
+                    "area_code": 1,
+                    "show_relate_goods": 0,
+                    "allplatform": 1,
+                    "show_cover": 1,
+                    "type": 0,
+                    "userid": Int(auth.userId) ?? 0,
+                    "token": auth.token,
+                ]
+                let json = try await cloudlistRequest("/v4/get_list_all_file", params: ["listid": listID, "page": "1", "pagesize": "1"], data: body)
+                guard let first = Self.deepArrays(json, names: ["songs", "songlist", "list", "info", "files", "data"]).first else { continue }
+                guard let song = Self.mapTrack(first), let hash = song.kugouHash, !hash.isEmpty else { continue }
+                let probe = try await songURLOnce(hash: hash, albumAudioId: song.kugouAlbumAudioId, albumId: song.kugouAlbumId, vipType: 1)
+                if let url = probe.url, !url.isEmpty {
+                    KugouMusicAuth.shared.updateVIPType(1)
+                    BeansLogger.shared.log("酷狗会员状态补齐：播放探测成功 listid=\(listID) vipType=1", level: .debug)
+                    return
+                }
+                BeansLogger.shared.log("酷狗会员状态探测未命中：listid=\(listID) status=\(probe.status) code=\(probe.code)", level: .debug)
+            } catch {
+                BeansLogger.shared.log("酷狗会员状态探测失败：listid=\(listID) \(error.localizedDescription)", level: .debug)
+            }
+        }
     }
 
     func lyric(hash: String, duration: TimeInterval) async -> String {
@@ -832,16 +913,7 @@ final class KugouMusicAPI {
             kugouAlbumAudioId: albumAudioId,
             kugouAlbumId: string(raw["album_id"] ?? raw["albumid"] ?? raw["AlbumID"] ?? raw["albumId"]),
             kugouQualityHashes: qualityHashes.isEmpty ? nil : qualityHashes,
-            fee: max(
-                int(raw["feetype"]),
-                int(raw["pay_type"]),
-                int(raw["pay_type_320"]),
-                int(raw["pay_type_sq"]),
-                int(raw["privilege"]),
-                int(raw["320privilege"]),
-                int(raw["sqprivilege"]),
-                deepFee(raw)
-            )
+            fee: kugouVIPFee(raw)
         )
     }
 
@@ -906,18 +978,37 @@ final class KugouMusicAPI {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func deepFee(_ object: Any) -> Int {
-        let keys: Set<String> = [
-            "fee", "feetype", "pay_type", "paytype", "pay_type_320",
-            "pay_type_sq", "privilege", "media_privilege", "media_pay_type",
-            "320privilege", "sqprivilege"
+    private static func kugouVIPFee(_ raw: [String: Any]) -> Int {
+        let explicitKeys: Set<String> = [
+            "fee", "feetype", "fee_type", "pay_type", "paytype", "paytype320",
+            "pay_type_320", "pay_type_sq", "media_pay_type", "needpay", "need_pay"
         ]
-        var best = 0
+        let boolKeys: Set<String> = [
+            "vip", "isvip", "is_vip", "onlyvipplayable", "only_vip_playable",
+            "viprequired", "vip_required", "needvip", "need_vip"
+        ]
+        var explicit = 0
+        var privilege = 0
+        var flag = false
         func walk(_ value: Any) {
             if let dict = value as? [String: Any] {
                 for (key, child) in dict {
-                    if keys.contains(key.lowercased()) {
-                        best = max(best, int(child))
+                    let normalized = key
+                        .replacingOccurrences(of: "_", with: "")
+                        .replacingOccurrences(of: "-", with: "")
+                        .lowercased()
+                    let lower = key.lowercased()
+                    if explicitKeys.contains(lower) || explicitKeys.contains(normalized) {
+                        explicit = max(explicit, int(child))
+                    }
+                    if lower == "privilege" || lower == "media_privilege" || lower == "320privilege" || lower == "sqprivilege" {
+                        privilege = max(privilege, int(child))
+                    }
+                    if boolKeys.contains(lower) || boolKeys.contains(normalized) {
+                        if let bool = child as? Bool, bool { flag = true }
+                        if int(child) > 0 { flag = true }
+                        let text = string(child).lowercased()
+                        if text == "true" || text.contains("vip") || text.contains("会员") { flag = true }
                     }
                     walk(child)
                 }
@@ -925,8 +1016,11 @@ final class KugouMusicAPI {
                 array.forEach(walk)
             }
         }
-        walk(object)
-        return best
+        walk(raw)
+        if explicit > 0 { return explicit }
+        if privilege >= 9 { return 1 }
+        if flag { return 1 }
+        return 0
     }
 
     private static func deepString(_ obj: Any, names: [String]) -> String {

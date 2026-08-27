@@ -26,6 +26,7 @@ final class KugouMusicAuth: ObservableObject {
     var dfid: String { auth["dfid"] ?? auth["DFID"] ?? "-" }
     var guid: String { auth["KUGOU_API_GUID"] ?? "" }
     var vipType: Int { Int(auth["vipType"] ?? auth["vip_type"] ?? "0") ?? 0 }
+    var hasMembership: Bool { vipType > 0 }
 
     var cookieHeader: String {
         [
@@ -60,6 +61,13 @@ final class KugouMusicAuth: ObservableObject {
         guard !dfid.isEmpty else { return }
         var next = auth
         next["dfid"] = dfid
+        save(next)
+    }
+
+    func updateVIPType(_ vipType: Int) {
+        guard vipType > self.vipType else { return }
+        var next = auth
+        next["vipType"] = "\(vipType)"
         save(next)
     }
 
