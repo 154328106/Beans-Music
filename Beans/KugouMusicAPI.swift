@@ -137,8 +137,13 @@ final class KugouMusicAPI {
     }
 
     /// 酷狗自有移动端搜索接口：搜索结果携带 hash、专辑和封面，可直接复用酷狗播放地址解析。
-    /// 该接口只用于公开歌曲搜索，不依赖登录态。
+    /// 优先使用酷狗新版综合搜索，旧网页接口作为兜底。
     func searchSongs(keyword: String, limit: Int = 30) async throws -> [Song] {
+        if let complete = try? await searchSongsComplete(keyword: keyword, limit: limit), !complete.isEmpty {
+            BeansLogger.shared.log("酷狗综合搜索完成：\(keyword) 结果=\(complete.count)", level: .info)
+            return complete
+        }
+
         var components = URLComponents(string: "https://songsearch.kugou.com/song_search_v2")!
         components.queryItems = [
             URLQueryItem(name: "keyword", value: keyword),
@@ -153,6 +158,76 @@ final class KugouMusicAPI {
         let songs = raw.compactMap(Self.mapTrack)
         BeansLogger.shared.log("酷狗搜索完成：\(keyword) 结果=\(songs.count)", level: .info)
         return songs
+    }
+
+    /// 酷狗 iOS 综合搜索接口。该接口返回的结果比旧网页接口完整，
+    /// 同时携带歌曲 hash、专辑、歌手、封面和权限字段。
+    private func searchSongsComplete(keyword: String, limit: Int) async throws -> [Song] {
+        let auth = KugouMusicAuth.shared
+        auth.prepareDevice()
+        let clientTime = "\(Int(Date().timeIntervalSince1970))"
+        let userID = auth.isLoggedIn ? auth.userId : "0"
+        let token = auth.isLoggedIn ? auth.token : ""
+        let mid = auth.mid
+        let dfid = auth.dfid
+        let uuid = auth.guid.isEmpty ? mid : auth.guid
+        var params: [String: String] = [
+            "ab_tag": "1",
+            "ability": "57343",
+            "albumhide": "1",
+            "apiver": "22",
+            "appid": "1000",
+            "area_code": "1",
+            "clienttime": clientTime,
+            "clientver": "20549",
+            "com_user_type": "0",
+            "cursor": "1",
+            "dfid": dfid,
+            "is_gpay": "0",
+            "iscorrection": "1",
+            "keyword": keyword,
+            "mid": mid,
+            "mode_ability": "0",
+            "nocollect": "0",
+            "osversion": "16.0",
+            "platform": "IOSFilter",
+            "recver": "2",
+            "req_ai": "1",
+            "search_ability": "31",
+            "search_source": "手动输入",
+            "sec_aggre": "1",
+            "sec_aggre_bitmap": "22",
+            "style_type": "3",
+            "tag": "em",
+            "token": token,
+            "userid": userID,
+            "uuid": uuid,
+        ]
+        params["signature"] = Self.searchSignature(params)
+
+        var components = URLComponents(string: "https://gateway.kugou.com/complexsearch/v3/search/mixed")!
+        components.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
+        guard let url = components.url else { throw NetEaseError.unknown("酷狗综合搜索地址无效") }
+        let headers = [
+            "KG-RF": "D4407D2505656C0FDC1621BA6FA3FEB5",
+            "KG-FAKE": "359933394",
+            "KG-FAKE-TYPE": "29,1",
+            "KG-RC": "1",
+            "UNI-UserAgent": "iOS16.0-Phone-1009-0-WiFi",
+            "Accept": "*/*",
+            "Accept-Language": "zh-Hans-CN;q=1",
+        ]
+        let json = try await getJSON(url, ua: "IPhone-20549-Search#183534257/723988397/625045823/284854956-SearchGeneralInfoWithKeyWordV8", headers: headers)
+        guard let data = json["data"] as? [String: Any],
+              let groups = data["lists"] as? [[String: Any]],
+              let songGroup = groups.first(where: {
+                  let type = Self.string($0["type"]).lowercased()
+                  return type == "song" || type == "songs"
+              }),
+              let rows = songGroup["lists"] as? [[String: Any]] else {
+            return []
+        }
+        return rows.prefix(min(max(limit, 1), 100)).compactMap(Self.mapCompleteTrack)
     }
 
     /// 基于酷狗官方歌曲搜索结果聚合歌手，保留官方歌手名与封面。
@@ -602,12 +677,43 @@ final class KugouMusicAPI {
     }
 
     private func getJSON(_ url: URL, ua: String) async throws -> [String: Any] {
+        try await getJSON(url, ua: ua, headers: [:])
+    }
+
+    private func getJSON(_ url: URL, ua: String, headers: [String: String]) async throws -> [String: Any] {
         var request = URLRequest(url: url)
         request.setValue(ua, forHTTPHeaderField: "User-Agent")
+        headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
         let (data, response) = try await session.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200,
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw NetEaseError.network }
         return obj
+    }
+
+    private static func searchSignature(_ params: [String: String]) -> String {
+        let body = params
+            .filter { $0.key != "signature" }
+            .keys
+            .sorted()
+            .map { "\($0)=\(params[$0] ?? "")" }
+            .joined()
+        return "y9tjae~n)k)vn[8\(body)y9tjae~n)k)vn[8".kgMD5Hex
+    }
+
+    private static func mapCompleteTrack(_ raw: [String: Any]) -> Song? {
+        var normalized = raw
+        normalized["songname"] = raw["SongName"] ?? raw["FileName"] ?? raw["songname"]
+        normalized["filename"] = raw["FileName"] ?? raw["SongName"] ?? raw["filename"]
+        normalized["singername"] = raw["SingerName"] ?? raw["singername"]
+        normalized["album_name"] = raw["AlbumName"] ?? raw["album_name"]
+        normalized["hash"] = raw["FileHash"] ?? raw["Hash"] ?? raw["hash"]
+        normalized["mixsongid"] = raw["MixSongID"] ?? raw["mixsongid"]
+        normalized["album_id"] = raw["AlbumID"] ?? raw["album_id"]
+        normalized["duration"] = raw["Duration"] ?? raw["duration"]
+        normalized["album_sizable_cover"] = raw["Image"] ?? raw["ImageUrl"] ?? raw["AlbumImg"] ?? raw["album_sizable_cover"]
+        normalized["pay_type"] = raw["PayType"] ?? raw["Privilege"] ?? raw["pay_type"]
+        normalized["feetype"] = raw["FeeType"] ?? raw["feetype"]
+        return mapTrack(normalized)
     }
 
     private static func mapPlaylist(_ raw: [String: Any]) -> Playlist? {
