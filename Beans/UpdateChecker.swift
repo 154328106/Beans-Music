@@ -9,6 +9,7 @@ struct UpdateChecker {
     static let releasePageURL = URL(string: "https://github.com/\(repoPath)/releases/latest")!
     private static let latestAPI = URL(string: "https://api.github.com/repos/\(repoPath)/releases/latest")!
     private static let lastCheckKey = "beans.updateCheck.lastDate"
+    private static let suppressedVersionKey = "beans.updateCheck.suppressedVersion"
 
     /// 最新 Release 信息
     struct ReleaseInfo {
@@ -37,6 +38,7 @@ struct UpdateChecker {
         if UserDefaults.standard.string(forKey: lastCheckKey) == today { return nil }
         UserDefaults.standard.set(today, forKey: lastCheckKey)
         guard let info = try? await fetchLatest(), isNewer(info.version, than: currentVersion) else { return nil }
+        if UserDefaults.standard.string(forKey: suppressedVersionKey) == info.version { return nil }
         return info
     }
 
@@ -48,6 +50,10 @@ struct UpdateChecker {
         } catch {
             return .failed
         }
+    }
+
+    static func suppress(version: String) {
+        UserDefaults.standard.set(version, forKey: suppressedVersionKey)
     }
 
     /// 拉取最新 Release（公开仓库无需 Token）

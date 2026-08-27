@@ -370,7 +370,6 @@ final class KugouMusicAPI {
         guard let url = URL(string: "https://www.kugou.com/yy/html/rank.html") else {
             throw NetEaseError.unknown("酷狗官网排行榜地址无效")
         }
-        let highResCovers = (try? await mobileRankCovers()) ?? [:]
         let html = try await getString(url, ua: Self.browserUA)
         let pattern = #"<a title="([^"]+)"[^>]*href="https://www\.kugou\.com/yy/rank/home/1-(\d+)\.html\?from=rank"[\s\S]*?background-image:url\(([^\)]+)\)"#
         var seen = Set<Int>()
@@ -378,8 +377,7 @@ final class KugouMusicAPI {
             guard groups.count >= 4 else { return nil }
             let id = Int(groups[2]) ?? 0
             guard id > 0, seen.insert(id).inserted else { return nil }
-            let cover = highResCovers[id]
-                ?? Self.normalizeURL(groups[3].trimmingCharacters(in: .whitespacesAndNewlines))
+            let cover = Self.normalizeURL(groups[3].trimmingCharacters(in: .whitespacesAndNewlines))
             return KugouTopInfo(
                 id: id,
                 name: Self.clean(Self.htmlDecode(groups[1])),
@@ -389,24 +387,6 @@ final class KugouMusicAPI {
         }
         BeansLogger.shared.log("酷狗官网热门榜单：返回 \(rows.count) 个", level: .debug)
         return Array(rows.prefix(limit))
-    }
-
-    private func mobileRankCovers() async throws -> [Int: String] {
-        guard let url = URL(string: "https://m.kugou.com/rank/list?json=true") else { return [:] }
-        let json = try await getJSON(url, ua: Self.browserUA)
-        guard let rank = json["rank"] as? [String: Any],
-              let list = rank["list"] as? [[String: Any]] else { return [:] }
-        var result: [Int: String] = [:]
-        for item in list {
-            let id = Self.int(item["rankid"] ?? item["id"])
-            guard id > 0 else { continue }
-            let cover = Self.string(item["album_img_9"] ?? item["imgurl"] ?? item["img_9"])
-                .replacingOccurrences(of: "{size}", with: "400")
-            if !cover.isEmpty {
-                result[id] = Self.normalizeURL(cover)
-            }
-        }
-        return result
     }
 
     private func officialWebRankSongs(rankID: Int, limit: Int) async throws -> [Song] {
