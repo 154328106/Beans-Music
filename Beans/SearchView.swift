@@ -760,8 +760,14 @@ struct SearchView: View {
                     guard !Task.isCancelled else { return }
                     songResults = songs
                     if !songs.isEmpty { BeansHaptics.success() }
-                case (.kugou, .artist), (.kugou, .album):
-                    throw NetEaseError.unknown("酷狗音乐当前支持歌曲搜索")
+                case (.kugou, .artist):
+                    let artists = try await KugouMusicAPI.shared.searchArtists(keyword: trimmed)
+                    guard !Task.isCancelled else { return }
+                    artistResults = artists
+                case (.kugou, .album):
+                    let albums = try await KugouMusicAPI.shared.searchAlbums(keyword: trimmed)
+                    guard !Task.isCancelled else { return }
+                    albumResults = albums
                 }
                 let count = resultType == .song ? songResults.count : (resultType == .artist ? artistResults.count : albumResults.count)
                 BeansLogger.shared.log("搜索完成：\(provider.rawValue) [\(resultType.rawValue)] \(trimmed) 结果=\(count)", level: .info)

@@ -155,6 +155,110 @@ final class KugouMusicAPI {
         return songs
     }
 
+    /// 基于酷狗官方歌曲搜索结果聚合歌手，保留官方歌手名与封面。
+    func searchArtists(keyword: String, limit: Int = 40) async throws -> [Artist] {
+        let songs = try await searchSongs(keyword: keyword, limit: limit)
+        var result: [Artist] = []
+        var seen = Set<String>()
+        for song in songs {
+            for name in song.artists.split(separator: "/").map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) }) {
+                let value = String(name)
+                guard !value.isEmpty, seen.insert(value).inserted else { continue }
+                result.append(Artist(
+                    id: value,
+                    name: value,
+                    coverURL: song.coverURL,
+                    source: .kugou
+                ))
+            }
+        }
+        return result
+    }
+
+    /// 基于酷狗官方歌曲搜索结果聚合专辑，保留官方专辑名、歌手与封面。
+    func searchAlbums(keyword: String, limit: Int = 40) async throws -> [Album] {
+        let songs = try await searchSongs(keyword: keyword, limit: limit)
+        var result: [Album] = []
+        var seen = Set<String>()
+        for song in songs where !song.album.isEmpty {
+            let key = "\(song.album)|\(song.artists)"
+            guard seen.insert(key).inserted else { continue }
+            result.append(Album(
+                id: key,
+                name: song.album,
+                artistName: song.artists,
+                coverURL: song.coverURL,
+                source: .kugou,
+                trackCount: nil
+            ))
+        }
+        return result
+    }
+
+    /// 酷狗官方排行榜列表（移动站点 JSON）。
+    func topLists(limit: Int = 10) async throws -> [KugouTopInfo] {
+        guard let url = URL(string: "https://m.kugou.com/rank/list?json=true") else {
+            throw NetEaseError.unknown("酷狗排行榜地址无效")
+        }
+        let json = try await getJSON(url, ua: Self.browserUA)
+        guard let rank = json["rank"] as? [String: Any],
+              let list = rank["list"] as? [[String: Any]] else {
+            throw NetEaseError.decoding("酷狗排行榜数据格式异常")
+        }
+        return list.prefix(limit).compactMap { item in
+            let id = int(item["rankid"] ?? item["id"])
+            guard id > 0 else { return nil }
+            let name = string(item["rankname"] ?? item["name"])
+            guard !name.isEmpty else { return nil }
+            let cover = string(item["album_img_9"] ?? item["img_9"] ?? item["imgurl"])
+                .replacingOccurrences(of: "{size}", with: "400")
+            return KugouTopInfo(
+                id: id,
+                name: name,
+                updateFrequency: string(item["update_frequency"] ?? item["updateFrequency"]),
+                coverURL: URL(string: cover)
+            )
+        }
+    }
+
+    /// 酷狗官方排行榜歌曲。
+    func rankSongs(rankID: Int, limit: Int = 100) async throws -> [Song] {
+        var components = URLComponents(string: "https://m.kugou.com/rank/info")!
+        components.queryItems = [
+            URLQueryItem(name: "rankid", value: "\(rankID)"),
+            URLQueryItem(name: "page", value: "1"),
+            URLQueryItem(name: "json", value: "true"),
+        ]
+        guard let url = components.url else { throw NetEaseError.unknown("酷狗排行榜地址无效") }
+        let json = try await getJSON(url, ua: Self.browserUA)
+        let rows = (json["songs"] as? [String: Any])?["list"] as? [[String: Any]] ?? []
+        return rows.prefix(limit).compactMap(Self.mapTrack)
+    }
+
+    /// 酷狗官方歌单广场（移动站点 JSON）。
+    func recommendPlaylists(limit: Int = 12) async throws -> [Playlist] {
+        guard let url = URL(string: "https://m.kugou.com/plist/index?json=true&page=1") else {
+            throw NetEaseError.unknown("酷狗歌单广场地址无效")
+        }
+        let json = try await getJSON(url, ua: Self.browserUA)
+        let rows = (((json["plist"] as? [String: Any])?["list"] as? [String: Any])?["info"] as? [[String: Any]]) ?? []
+        return rows.prefix(limit).compactMap { item in
+            let id = int(item["specialid"] ?? item["id"])
+            guard id > 0 else { return nil }
+            let name = string(item["specialname"] ?? item["name"] ?? item["title"])
+            guard !name.isEmpty else { return nil }
+            let cover = string(item["imgurl"] ?? item["pic"] ?? item["cover"])
+                .replacingOccurrences(of: "{size}", with: "400")
+            return Playlist(
+                id: id,
+                name: name,
+                coverURL: URL(string: cover),
+                trackCount: int(item["songcount"] ?? item["song_count"]),
+                source: .kugou
+            )
+        }
+    }
+
     /// 酷狗搜索页专用热词。酷狗没有稳定公开的热搜 JSON 合约时使用独立词表，
     /// 确保切换到酷狗后不会继续显示网易云热搜。
     func hotWords() async -> [String] {
@@ -222,10 +326,74 @@ final class KugouMusicAPI {
                     return url
                 }
             }
+            // 酷狗新版客户端使用 v5/url。旧版 i/v2 在部分新曲和会员曲目上
+            // 只返回 status，不返回播放地址，因此再尝试一次官方新版通道。
+            let v5 = try await songURLV5Once(hash: hash, albumAudioId: albumAudioId, albumId: albumId)
+            lastCode = v5.code
+            lastStatus = v5.status
+            if let url = v5.url, !url.isEmpty {
+                return url
+            }
         }
         let vipTypeText = vipTypes.map(String.init).joined(separator: "/")
         BeansLogger.shared.log("酷狗播放地址为空：hash候选=\(hashes.count) vipType=\(vipTypeText) status=\(lastStatus) code=\(lastCode)", level: .debug)
         return nil
+    }
+
+    /// 酷狗官方新版播放地址接口，参数结构与酷狗客户端的 v5/url 通道一致。
+    private func songURLV5Once(hash: String, albumAudioId: String?, albumId: String?) async throws -> (url: String?, status: Int, code: Int) {
+        let auth = KugouMusicAuth.shared
+        var components = URLComponents(string: "https://trackercdn.kugou.com/v5/url")!
+        let quality: String
+        switch BeansAudioQuality.current {
+        case .standard:
+            quality = "128"
+        case .higher, .exhigh:
+            quality = "320"
+        case .lossless:
+            quality = "flac"
+        case .hires:
+            quality = "high"
+        }
+        var params: [String: String] = [
+            "album_id": albumId ?? "0",
+            "area_code": "1",
+            "hash": hash.lowercased(),
+            "ssa_flag": "is_fromtrack",
+            "version": "11430",
+            "quality": quality,
+            "behavior": "play",
+            "pid": "2",
+            "pidversion": "3001",
+            "cmd": "26",
+            "page_id": "151369488",
+            "ppage_id": "463467626,350369493,788954147",
+            "cdnBackup": "1",
+            "module": "",
+            "clientver": clientver,
+            "dfid": auth.dfid,
+            "mid": auth.mid,
+        ]
+        if let albumAudioId, !albumAudioId.isEmpty {
+            params["album_audio_id"] = albumAudioId
+        }
+        if !auth.userId.isEmpty {
+            params["userid"] = auth.userId
+            params["token"] = auth.token
+            params["vipType"] = "\(auth.vipType)"
+        }
+        components.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
+        var request = URLRequest(url: components.url!)
+        request.setValue(androidUA, forHTTPHeaderField: "User-Agent")
+        request.setValue("trackercdn.kugou.com", forHTTPHeaderField: "x-router")
+        request.setValue(auth.cookieHeader, forHTTPHeaderField: "Cookie")
+        let (data, response) = try await session.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else { return (nil, 0, -1) }
+        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        let status = Self.deepInt(json, names: ["status", "result"])
+        let code = Self.deepInt(json, names: ["error_code", "errcode", "code"])
+        let raw = Self.deepString(json, names: ["play_url", "play_backup_url", "url", "src", "backup_url"])
+        return (raw.isEmpty ? nil : raw, status, code)
     }
 
     private func songURLOnce(hash: String, albumAudioId: String?, albumId: String?, vipType: Int) async throws -> (url: String?, status: Int, code: Int) {
@@ -471,13 +639,13 @@ final class KugouMusicAPI {
         }
         guard !title.isEmpty, !hash.isEmpty || !albumAudioId.isEmpty else { return nil }
         let album = string(raw["album_name"] ?? raw["albumname"] ?? raw["album"] ?? (raw["albuminfo"] as? [String: Any])?["name"])
-        let cover = string(raw["pic"] ?? raw["img"] ?? raw["image"] ?? raw["cover"] ?? raw["sizable_cover"] ?? trans["union_cover"]).replacingOccurrences(of: "{size}", with: "300")
+        let cover = string(raw["pic"] ?? raw["img"] ?? raw["image"] ?? raw["cover"] ?? raw["album_sizable_cover"] ?? raw["sizable_cover"] ?? trans["union_cover"]).replacingOccurrences(of: "{size}", with: "300")
         let durRaw = double(raw["timelength"] ?? raw["time_length"] ?? raw["timelen"] ?? raw["duration"] ?? raw["interval"])
         let seconds = durRaw > 1000 ? durRaw / 1000.0 : durRaw
         return Song(
             id: stable,
             name: title,
-            artists: artist,
+            artists: artist.isEmpty ? clean(string(raw["h5_author_name"] ?? raw["authors"])) : artist,
             album: album,
             coverURL: URL(string: cover),
             duration: seconds,
@@ -486,7 +654,15 @@ final class KugouMusicAPI {
             kugouAlbumAudioId: albumAudioId,
             kugouAlbumId: string(raw["album_id"] ?? raw["albumid"] ?? raw["AlbumID"] ?? raw["albumId"]),
             kugouQualityHashes: qualityHashes.isEmpty ? nil : qualityHashes,
-            fee: int(raw["privilege"] ?? raw["media_privilege"] ?? raw["media_pay_type"] ?? raw["pay_type"])
+            fee: max(
+                int(raw["feetype"]),
+                int(raw["pay_type"]),
+                int(raw["pay_type_320"]),
+                int(raw["pay_type_sq"]),
+                int(raw["privilege"]),
+                int(raw["320privilege"]),
+                int(raw["sqprivilege"])
+            )
         )
     }
 

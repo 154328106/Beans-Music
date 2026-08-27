@@ -262,6 +262,14 @@ struct QQTopInfo: Identifiable, Hashable {
     let coverURL: URL?
 }
 
+/// 酷狗官方排行榜总览项
+struct KugouTopInfo: Identifiable, Hashable {
+    let id: Int
+    let name: String
+    let updateFrequency: String
+    let coverURL: URL?
+}
+
 struct LyricLine: Identifiable, Hashable {
     let id: UUID
     let time: Double
