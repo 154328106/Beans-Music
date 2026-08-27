@@ -146,18 +146,59 @@ final class KugouMusicAPI {
     }
 
     private func userPlaylistRequests(auth: KugouMusicAuth) -> [URLRequest] {
+        let appid = "1005"
+        let clientver = "20489"
+        let clienttime = "\(Int(Date().timeIntervalSince1970))"
+        let baseParams = [
+            "dfid": auth.dfid,
+            "mid": auth.mid,
+            "uuid": "-",
+            "appid": appid,
+            "clientver": clientver,
+            "clienttime": clienttime,
+            "token": auth.token,
+            "userid": "\(auth.userid)",
+            "plat": "1"
+        ]
+        let types = ["2", "1", "0"]
+        var requests: [URLRequest] = []
+        for type in types {
+            let body = #"{"userid":\#(auth.userid),"token":"\#(auth.token)","total_ver":979,"type":\#(type),"page":1,"pagesize":200}"#
+            var params = baseParams
+            params["signature"] = Self.androidSignature(params: params, data: body)
+            var comps = URLComponents(string: "https://gateway.kugou.com/v7/get_all_list")!
+            comps.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
+            guard let url = comps.url else { continue }
+            var req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            req.timeoutInterval = 18
+            req.setValue("Android15-1070-11083-46-0-DiscoveryDRADProtocol-wifi", forHTTPHeaderField: "User-Agent")
+            req.setValue(auth.dfid, forHTTPHeaderField: "dfid")
+            req.setValue(clienttime, forHTTPHeaderField: "clienttime")
+            req.setValue(auth.mid, forHTTPHeaderField: "mid")
+            req.setValue("1", forHTTPHeaderField: "kg-rc")
+            req.setValue("5d816a0", forHTTPHeaderField: "kg-thash")
+            req.setValue("1", forHTTPHeaderField: "kg-rec")
+            req.setValue("B9EDA08A64250DEFFBCADDEE00F8F25F", forHTTPHeaderField: "kg-rf")
+            req.setValue("cloudlist.service.kugou.com", forHTTPHeaderField: "x-router")
+            req.setValue(auth.cookieHeader, forHTTPHeaderField: "Cookie")
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = body.data(using: .utf8)
+            requests.append(req)
+        }
+        requests.append(contentsOf: legacyUserPlaylistRequests(auth: auth))
+        return requests
+    }
+
+    private func legacyUserPlaylistRequests(auth: KugouMusicAuth) -> [URLRequest] {
         let baseItems = [
             "userid": "\(auth.userid)",
             "token": auth.token,
             "page": "1",
             "pagesize": "200",
-            "total_ver": "979",
-            "appid": "1005",
-            "clientver": "12029",
-            "clienttime": "\(Int(Date().timeIntervalSince1970))"
+            "total_ver": "979"
         ]
-        let types = ["2", "1", "0"]
-        return types.compactMap { type in
+        return ["2", "1", "0"].compactMap { type in
             var items = baseItems
             items["type"] = type
             var comps = URLComponents(string: "http://cloudlist.service.kugou.com/v7/get_all_list")!
@@ -451,5 +492,11 @@ final class KugouMusicAPI {
             _ = CC_MD5(buffer.baseAddress, CC_LONG(data.count), &digest)
         }
         return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func androidSignature(params: [String: String], data: String) -> String {
+        let salt = "OIlwieks28dk2k092lksi2UIkp"
+        let paramsString = params.keys.sorted().map { "\($0)=\(params[$0] ?? "")" }.joined()
+        return md5(salt + paramsString + data + salt)
     }
 }

@@ -36,6 +36,14 @@ final class KugouMusicAuth: ObservableObject {
         cookies["token"] ?? cookies["t"] ?? cookies["kg_token"] ?? cookies["kguser_token"] ?? ""
     }
 
+    var dfid: String {
+        cookies["dfid"] ?? cookies["kg_dfid"] ?? "-"
+    }
+
+    var mid: String {
+        cookies["KUGOU_API_MID"] ?? cookies["mid"] ?? cookies["kg_mid"] ?? "-"
+    }
+
     var cookieHeader: String {
         let preferred = [
             "userid", "token", "vip_type", "vip_token", "KugooID", "KuGooID", "t",
