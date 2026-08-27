@@ -18,9 +18,9 @@ struct DiscoverView: View {
     /// 主页板块顺序（每日推荐 / 排行榜 / 歌单广场，可自定义）
     @State private var homeOrder = SectionOrderStore.load(SectionOrderStore.homeKey, defaults: SectionOrderStore.homeDefaults)
 
-    /// 当前平台可排序的板块：QQ 音乐没有「歌单广场」，仅网易云保留
+    /// 当前平台可排序的板块：QQ / 酷狗音乐没有网易云分类歌单广场，保留推荐歌单区
     private var availableSections: [String] {
-        source == .qq ? Array(SectionOrderStore.homeDefaults.dropLast()) : SectionOrderStore.homeDefaults
+        source == .netease ? SectionOrderStore.homeDefaults : Array(SectionOrderStore.homeDefaults.dropLast()) + ["歌单广场"]
     }
     /// 首页数据源：记住上次选择，下次打开仍保持该平台（默认网易云）
     @AppStorage("beans.homeSource") private var homeSourceRaw = SearchProvider.netease.rawValue
@@ -295,6 +295,8 @@ struct DiscoverView: View {
                 }
                 Divider().overlay(Color.beansComment.opacity(0.12))
             }
+        } else {
+            EmptyView()
         }
     }
 
@@ -547,6 +549,12 @@ struct DiscoverView: View {
             snapshot.dailySongs = dr
             snapshot.qqTopLists = tl
             snapshot.personalized = pp
+        case .kugou:
+            async let a = KugouMusicAPI.shared.searchSongs(keyword: "华语热歌", limit: 30)
+            async let c = KugouMusicAPI.shared.searchPlaylists(keyword: "热门", limit: 12)
+            let (dr, pp) = try await (a, c)
+            snapshot.dailySongs = dr
+            snapshot.personalized = pp
         case .netease:
             async let a = NetEaseAPI.shared.topLists()
             async let b = NetEaseAPI.shared.dailyRecommend()
@@ -560,8 +568,6 @@ struct DiscoverView: View {
             snapshot.dailySongs = dr
             snapshot.personalized = pp
             if !cats.isEmpty { playlistCats = cats }
-        case .kugou:
-            break
         }
         return snapshot
     }
@@ -808,4 +814,3 @@ struct TopListDetailView: View {
         }
     }
 }
-

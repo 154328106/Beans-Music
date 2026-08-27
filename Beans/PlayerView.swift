@@ -213,10 +213,6 @@ struct PlayerView: View {
         let _ = theme.accent
         GeometryReader { geo in
             ZStack {
-                Color.clear
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Rectangle())
-
                 background
                     .ignoresSafeArea()
 
@@ -225,14 +221,10 @@ struct PlayerView: View {
                     content(geo: geo)
                 }
                 .foregroundStyle(palette.text)
-                .offset(y: swipeOffset)
-                .opacity(1 - min(abs(swipeOffset) / 560, 0.28))
 
                 controlDeck(bottomInset: geo.safeAreaInsets.bottom)
                     .frame(maxWidth: .infinity)
                     .frame(maxHeight: .infinity, alignment: .bottom)
-                    .offset(y: swipeOffset)
-                    .opacity(1 - min(abs(swipeOffset) / 560, 0.28))
 
                 // 布局编辑工具栏：组件选择 + X/Y/Z 滑杆 + 恢复默认 + 完成
                 if layoutMode {
@@ -579,6 +571,20 @@ struct PlayerView: View {
                         .animation(.easeOut(duration: 0.24), value: coverSwitchPulse)
                 }
                 .frame(width: size * 1.10, height: size * 1.10)
+                .gesture(
+                    DragGesture(minimumDistance: 15)
+                        .onChanged { value in
+                            guard swipeSwitchSong else { return }
+                            coverDrag = value.translation
+                            let h = value.translation.height
+                            if abs(h) > abs(value.translation.width) {
+                                swipeOffset = h
+                            }
+                        }
+                        .onEnded { value in
+                            handleSwipeEnd(height: value.translation.height)
+                        }
+                )
             }
             .buttonStyle(GlassPressButtonStyle(scale: 0.96))
 
@@ -621,8 +627,9 @@ struct PlayerView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // 侧边上下滑动切歌（抖音式刷视频交互）：上滑下一首、下滑上一首，仅响应纵向手势
         // 使用 .gesture 与封面点击互斥：拖动时不会误触点击封面（避免切歌瞬间跳到歌词页）
-        .contentShape(Rectangle())
-        .highPriorityGesture(
+        .offset(y: swipeOffset)
+        .opacity(1 - min(abs(swipeOffset) / 260, 0.35))
+        .gesture(
             DragGesture(minimumDistance: 15)
                 .onChanged { value in
                     guard swipeSwitchSong else { return }
@@ -2489,16 +2496,18 @@ struct ShareSheet: UIViewControllerRepresentable {
 
 // MARK: - 圆形封面旋转（播放中匀速旋转，暂停即停）
 struct CoverSpin: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let enabled: Bool
     let isPlaying: Bool
 
     func body(content: Content) -> some View {
-        if enabled {
-            TimelineView(.animation(minimumInterval: 1.0 / 20.0, paused: !isPlaying)) { context in
-                let angle = (context.date.timeIntervalSinceReferenceDate * 15)
+        if enabled && !reduceMotion {
+            TimelineView(.animation(minimumInterval: 1.0 / 12.0, paused: !isPlaying)) { context in
+                let angle = (context.date.timeIntervalSinceReferenceDate * 8)
                     .truncatingRemainder(dividingBy: 360)
                 return content
                     .rotationEffect(.degrees(angle))
+                    .drawingGroup(opaque: false, colorMode: .linear)
             }
         } else {
             content
