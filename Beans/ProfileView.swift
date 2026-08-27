@@ -559,7 +559,7 @@ struct ProfileView: View {
 
     /// 更新地址 + 检查更新（GitHub 项目，可点击交互）
     private var updateLinkCard: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 0) {
             Button {
                 BeansHaptics.tap()
                 if let url = URL(string: "https://github.com/XIaodou0416/Beans-Music") {
@@ -587,12 +587,12 @@ struct ProfileView: View {
                         .foregroundStyle(Color.beansComment)
                 }
                 .padding(16)
-                .background {
-                    BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                }
-                .beansCardShadow(radius: 9, y: 3)
             }
             .buttonStyle(.plain)
+
+            Divider()
+                .overlay(Color.beansComment.opacity(0.16))
+                .padding(.horizontal, 16)
 
             Button {
                 BeansHaptics.tap()
@@ -635,14 +635,14 @@ struct ProfileView: View {
                     Spacer()
                 }
                 .padding(16)
-                .background {
-                    BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                }
-                .beansCardShadow(radius: 9, y: 3)
             }
             .buttonStyle(.plain)
             .disabled(checkingUpdate)
         }
+        .background {
+            BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+        .beansCardShadow(radius: 9, y: 3)
     }
 }
 
