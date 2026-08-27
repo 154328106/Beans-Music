@@ -215,7 +215,7 @@ final class KugouMusicAPI {
             return KugouTopInfo(
                 id: id,
                 name: name,
-                updateFrequency: string(item["update_frequency"] ?? item["updateFrequency"]),
+                updateFrequency: Self.string(item["update_frequency"] ?? item["updateFrequency"]),
                 coverURL: URL(string: cover)
             )
         }
