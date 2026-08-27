@@ -51,6 +51,7 @@ final class PlayerManager: NSObject, ObservableObject {
     private var itemStatusObserver: NSKeyValueObservation?
     private var timeControlStatusObserver: NSKeyValueObservation?
     private var playbackConfirmed = false
+    private var pendingThirdPartyVIPNotice: ThirdPartyVIPNotice?
     private var sessionConfigured = false
     private var playOrder: [Int] = []
     private var orderPosition = 0
@@ -61,7 +62,13 @@ final class PlayerManager: NSObject, ObservableObject {
     private let historyKey = "beans.history"
     private let countsKey = "beans.playcounts"
     private let audioMixKey = "beans.audio.mixothers.v1"
+    private let thirdPartyVIPNoticeKey = "beans.showThirdPartyVIPNotice"
     private let defaults = UserDefaults.standard
+
+    private struct ThirdPartyVIPNotice {
+        let songKey: String
+        let message: String
+    }
 
     var currentSong: Song? {
         queue.indices.contains(currentIndex) ? queue[currentIndex] : nil
@@ -346,10 +353,10 @@ final class PlayerManager: NSObject, ObservableObject {
                 (urlString, resolvedThirdParty) = await neteaseResolve(song: song, quality: quality, enableUnblock: enableUnblock, strict: strictUnlock)
             }
             if let resolved = resolvedThirdParty {
-                // 第三方音源只用于播放，不打扰用户（无需提示用了哪个音源）
+                let notice = self.thirdPartyVIPNotice(for: song, sourceTitle: resolved.sourceTitle)
                 await MainActor.run {
                     guard generation == self.loadGeneration else { return }
-                    self.setupPlayer(url: resolved.url)
+                    self.setupPlayer(url: resolved.url, thirdPartyVIPNotice: notice)
                 }
                 return
             }
@@ -482,10 +489,11 @@ final class PlayerManager: NSObject, ObservableObject {
     }
 
 
-    private func setupPlayer(url: URL) {
+    private func setupPlayer(url: URL, thirdPartyVIPNotice: ThirdPartyVIPNotice? = nil) {
         configureAudioSession()
         UIApplication.shared.beginReceivingRemoteControlEvents()
         removeCurrentObservers()
+        pendingThirdPartyVIPNotice = thirdPartyVIPNotice
         // QQ 官方 CDN（isure.stream.qqmusic.qq.com 等）要求 UA/Referer 请求头，
         // 否则裸 GET 会被拒绝（403），导致播放成功却无声、进度条不动。
         let item: AVPlayerItem
@@ -532,6 +540,7 @@ final class PlayerManager: NSObject, ObservableObject {
             if let song = self.currentSong {
                 BeansLogger.shared.log("▶ 播放成功：\(song.name)｜域名=\(url.host ?? "?")", level: .info)
             }
+            self.showPendingThirdPartyVIPNoticeIfNeeded()
         }
         player.playImmediately(atRate: Float(rate))
         isPlaying = true
@@ -589,6 +598,49 @@ final class PlayerManager: NSObject, ObservableObject {
         itemStatusObserver = nil
         timeControlStatusObserver = nil
         playbackConfirmed = false
+        pendingThirdPartyVIPNotice = nil
+    }
+
+    private func thirdPartyVIPNotice(for song: Song, sourceTitle: String) -> ThirdPartyVIPNotice? {
+        guard song.isVIP else { return nil }
+        guard defaults.object(forKey: thirdPartyVIPNoticeKey) as? Bool ?? true else { return nil }
+        guard !hasMembership(for: song.source) else { return nil }
+        let sourceName = sourceTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let suffix = sourceName.isEmpty ? "第三方音源" : "第三方音源「\(sourceName)」"
+        return ThirdPartyVIPNotice(
+            songKey: song.identityKey,
+            message: "当前账号未识别到对应会员，《\(song.name)》已通过\(suffix)播放"
+        )
+    }
+
+    private func showPendingThirdPartyVIPNoticeIfNeeded() {
+        guard let notice = pendingThirdPartyVIPNotice else { return }
+        guard currentSong?.identityKey == notice.songKey else {
+            pendingThirdPartyVIPNotice = nil
+            return
+        }
+        guard defaults.object(forKey: thirdPartyVIPNoticeKey) as? Bool ?? true else {
+            pendingThirdPartyVIPNotice = nil
+            return
+        }
+        ToastCenter.shared.show(notice.message)
+        BeansLogger.shared.log("第三方音源会员歌提醒：\(notice.message)", level: .info)
+        pendingThirdPartyVIPNotice = nil
+    }
+
+    private func hasMembership(for source: SongSource) -> Bool {
+        switch source {
+        case .qq:
+            return QQMusicAuth.shared.vipBadge != nil
+        case .kugou:
+            return KugouMusicAuth.shared.vipBadge != nil
+        case .netease:
+            guard let data = defaults.data(forKey: "beans.user"),
+                  let user = try? JSONDecoder().decode(NetEaseUser.self, from: data) else {
+                return false
+            }
+            return user.vipBadge != nil
+        }
     }
 
     private func configureAudioSession() {

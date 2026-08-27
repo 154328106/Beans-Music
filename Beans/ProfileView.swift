@@ -881,6 +881,8 @@ struct SettingsView: View {
     @AppStorage("beans.tabLabelsVisible") private var tabLabelsVisible = true
     /// 官方地址不可用时，是否尝试用户导入的音源
     @AppStorage("beans.enableUnblock") private var enableImportedSources = true
+    /// 第三方音源播放会员歌成功时提醒，默认开启
+    @AppStorage("beans.showThirdPartyVIPNotice") private var showThirdPartyVIPNotice = true
     /// 可选高刷新率动效，默认关闭以降低发热
     @AppStorage("beans.enableHighRefresh") private var enableHighRefresh = false
     @ObservedObject private var sourceStore = UnblockSourceStore.shared
@@ -1411,6 +1413,25 @@ struct SettingsView: View {
                                 .font(BeansFont.appFont(15))
                                 .foregroundStyle(Color.beansLabel)
                             Text("仅在官方地址不可用或为试听片段时回退")
+                                .font(BeansFont.appFont(11))
+                                .foregroundStyle(Color.beansComment)
+                        }
+                    }
+                }
+                .toggleStyle(.switch)
+                .tint(Color.beansAmber)
+
+                Toggle(isOn: $showThirdPartyVIPNotice) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "bell.badge.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.beansAmber)
+                            .frame(width: 28)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("第三方播放会员歌提醒")
+                                .font(BeansFont.appFont(15))
+                                .foregroundStyle(Color.beansLabel)
+                            Text("未识别到对应会员且会员歌曲通过导入音源播放成功时提示")
                                 .font(BeansFont.appFont(11))
                                 .foregroundStyle(Color.beansComment)
                         }
