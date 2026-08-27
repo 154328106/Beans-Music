@@ -41,6 +41,7 @@ struct FlowLayout: Layout {
 enum SearchProvider: String, CaseIterable, Identifiable {
     case netease = "网易云"
     case qq = "QQ音乐"
+    case kugou = "酷狗音乐"
 
     var id: String { rawValue }
 
@@ -53,6 +54,9 @@ enum SearchProvider: String, CaseIterable, Identifiable {
         case .qq: return LinearGradient(
             colors: [Color(red: 0.15, green: 0.78, blue: 0.55), Color(red: 0.05, green: 0.58, blue: 0.42)],
             startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .kugou: return LinearGradient(
+            colors: [Color(red: 0.12, green: 0.58, blue: 0.95), Color(red: 0.02, green: 0.32, blue: 0.72)],
+            startPoint: .topLeading, endPoint: .bottomTrailing)
         }
     }
 
@@ -60,6 +64,14 @@ enum SearchProvider: String, CaseIterable, Identifiable {
         switch self {
         case .netease: return "cloud.fill"
         case .qq: return "play.rectangle.fill"
+        case .kugou: return "music.note"
+        }
+    }
+
+    var brandImageName: String? {
+        switch self {
+        case .kugou: return "BrandKugou"
+        default: return nil
         }
     }
 }
@@ -80,7 +92,7 @@ struct SearchView: View {
 
     @State private var keyword = ""
     @State private var provider: SearchProvider = .netease
-    private let searchProviders: [SearchProvider] = [.netease, .qq]
+    private let searchProviders: [SearchProvider] = [.netease, .qq, .kugou]
     /// 已加载热门搜索的 provider（避免切 tab 反复加载）
     @State private var hotLoadedProvider: SearchProvider?
     @State private var resultType: SearchResultType = .song
@@ -170,12 +182,23 @@ struct SearchView: View {
                     .font(BeansFont.appFont(30, .bold))
                     .foregroundStyle(Color.beansLabel)
                 Spacer(minLength: 0)
-                Label(provider.rawValue, systemImage: provider.icon)
-                    .font(BeansFont.appFont(12, .semibold))
-                    .foregroundStyle(Color.beansComment)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background { BeansGlass(shape: Capsule()) }
+                HStack(spacing: 6) {
+                    if let imageName = provider.brandImageName {
+                        Image(imageName)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 15, height: 15)
+                    } else {
+                        Image(systemName: provider.icon)
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    Text(provider.rawValue)
+                }
+                .font(BeansFont.appFont(12, .semibold))
+                .foregroundStyle(Color.beansComment)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background { BeansGlass(shape: Capsule()) }
             }
         }
     }
@@ -276,8 +299,15 @@ struct SearchView: View {
                     if provider != p { provider = p }
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: p.icon)
-                            .font(.system(size: 11, weight: .semibold))
+                        if let imageName = p.brandImageName {
+                            Image(imageName)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 14, height: 14)
+                        } else {
+                            Image(systemName: p.icon)
+                                .font(.system(size: 11, weight: .semibold))
+                        }
                         Text(p.rawValue)
                             .font(BeansFont.appFont(13, .semibold))
                     }
@@ -722,6 +752,13 @@ struct SearchView: View {
                     let albums = try await QQMusicAPI.shared.searchAlbums(keyword: trimmed)
                     guard !Task.isCancelled else { return }
                     albumResults = albums
+                case (.kugou, .song):
+                    let songs = try await KugouMusicAPI.shared.searchSongs(keyword: trimmed, limit: 40)
+                    guard !Task.isCancelled else { return }
+                    songResults = songs
+                    if !songs.isEmpty { BeansHaptics.success() }
+                case (.kugou, .artist), (.kugou, .album):
+                    throw NetEaseError.unknown("酷狗音乐当前支持歌曲搜索")
                 }
                 let count = resultType == .song ? songResults.count : (resultType == .artist ? artistResults.count : albumResults.count)
                 BeansLogger.shared.log("搜索完成：\(provider.rawValue) [\(resultType.rawValue)] \(trimmed) 结果=\(count)", level: .info)

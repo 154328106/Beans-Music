@@ -136,6 +136,27 @@ final class KugouMusicAPI {
         }
     }
 
+    /// 酷狗自有移动端搜索接口：搜索结果携带 hash、专辑和封面，可直接复用酷狗播放地址解析。
+    /// 该接口只用于公开歌曲搜索，不依赖登录态。
+    func searchSongs(keyword: String, limit: Int = 30) async throws -> [Song] {
+        var components = URLComponents(string: "https://mobilecdn.kugou.com/api/v3/search/song")!
+        components.queryItems = [
+            URLQueryItem(name: "format", value: "json"),
+            URLQueryItem(name: "keyword", value: keyword),
+            URLQueryItem(name: "page", value: "1"),
+            URLQueryItem(name: "pagesize", value: "\(min(max(limit, 1), 100))"),
+            URLQueryItem(name: "showtype", value: "1"),
+        ]
+        guard let url = components.url else {
+            throw NetEaseError.unknown("酷狗搜索地址无效")
+        }
+        let json = try await getJSON(url, ua: Self.browserUA)
+        let raw = Self.deepArrays(json, names: ["info", "songs", "song", "list", "data"])
+        let songs = raw.compactMap(Self.mapTrack)
+        BeansLogger.shared.log("酷狗搜索完成：\(keyword) 结果=\(songs.count)", level: .info)
+        return songs
+    }
+
     func playlistSongs(listID: Int) async throws -> [Song] {
         let auth = KugouMusicAuth.shared
         guard auth.isLoggedIn else { return [] }
