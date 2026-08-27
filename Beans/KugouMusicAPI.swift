@@ -279,6 +279,9 @@ final class KugouMusicAPI {
 
     /// 酷狗官方排行榜列表（移动站点 JSON）。
     func topLists(limit: Int = 10) async throws -> [KugouTopInfo] {
+        if let lists = try? await officialWebTopLists(limit: limit), !lists.isEmpty {
+            return lists
+        }
         guard let url = URL(string: "https://m.kugou.com/rank/list?json=true") else {
             throw NetEaseError.unknown("酷狗排行榜地址无效")
         }
@@ -305,6 +308,9 @@ final class KugouMusicAPI {
 
     /// 酷狗官方排行榜歌曲。
     func rankSongs(rankID: Int, limit: Int = 100) async throws -> [Song] {
+        if let songs = try? await officialWebRankSongs(rankID: rankID, limit: limit), !songs.isEmpty {
+            return songs
+        }
         var components = URLComponents(string: "https://m.kugou.com/rank/info")!
         components.queryItems = [
             URLQueryItem(name: "rankid", value: "\(rankID)"),
@@ -319,6 +325,9 @@ final class KugouMusicAPI {
 
     /// 酷狗官方歌单广场（移动站点 JSON）。
     func recommendPlaylists(limit: Int = 12) async throws -> [Playlist] {
+        if let playlists = try? await officialWebPlaylists(limit: limit), !playlists.isEmpty {
+            return playlists
+        }
         guard let url = URL(string: "https://m.kugou.com/plist/index?json=true&page=1") else {
             throw NetEaseError.unknown("酷狗歌单广场地址无效")
         }
@@ -341,6 +350,79 @@ final class KugouMusicAPI {
         }
     }
 
+    private func officialWebTopLists(limit: Int) async throws -> [KugouTopInfo] {
+        guard let url = URL(string: "https://www.kugou.com/yy/html/rank.html") else {
+            throw NetEaseError.unknown("酷狗官网排行榜地址无效")
+        }
+        let html = try await getString(url, ua: Self.browserUA)
+        let pattern = #"<a title="([^"]+)"[^>]*href="https://www\.kugou\.com/yy/rank/home/1-(\d+)\.html\?from=rank"[\s\S]*?background-image:url\(([^\)]+)\)"#
+        var seen = Set<Int>()
+        let rows = Self.regexMatches(pattern, in: html).compactMap { groups -> KugouTopInfo? in
+            guard groups.count >= 4 else { return nil }
+            let id = Int(groups[2]) ?? 0
+            guard id > 0, seen.insert(id).inserted else { return nil }
+            let cover = Self.normalizeURL(groups[3].trimmingCharacters(in: .whitespacesAndNewlines))
+            return KugouTopInfo(
+                id: id,
+                name: Self.clean(Self.htmlDecode(groups[1])),
+                updateFrequency: "酷狗官网热门榜单",
+                coverURL: URL(string: cover)
+            )
+        }
+        BeansLogger.shared.log("酷狗官网热门榜单：返回 \(rows.count) 个", level: .debug)
+        return Array(rows.prefix(limit))
+    }
+
+    private func officialWebRankSongs(rankID: Int, limit: Int) async throws -> [Song] {
+        guard let url = URL(string: "https://www.kugou.com/yy/rank/home/1-\(rankID).html?from=rank") else {
+            throw NetEaseError.unknown("酷狗官网排行榜歌曲地址无效")
+        }
+        let html = try await getString(url, ua: Self.browserUA)
+        guard let rows = Self.javascriptArray(named: "global.features", in: html) else {
+            throw NetEaseError.decoding("酷狗官网排行榜歌曲格式异常")
+        }
+        let songs = rows.prefix(limit).compactMap(Self.mapCompleteTrack)
+        BeansLogger.shared.log("酷狗官网排行榜歌曲：rankid=\(rankID) 返回 \(songs.count) 首", level: .debug)
+        return songs
+    }
+
+    private func officialWebPlaylists(limit: Int) async throws -> [Playlist] {
+        guard let url = URL(string: "https://www.kugou.com/yy/html/special.html") else {
+            throw NetEaseError.unknown("酷狗官网歌单广场地址无效")
+        }
+        let html = try await getString(url, ua: Self.browserUA)
+        let pattern = #"<li class="s_(\d+)"[\s\S]*?<a[^>]+title="([^"]+)" href="https://www\.kugou\.com/songlist/(gcid_[^/]+)/"[\s\S]*?_src="([^"]+)""#
+        var seen = Set<Int>()
+        let rows = Self.regexMatches(pattern, in: html).compactMap { groups -> Playlist? in
+            guard groups.count >= 5 else { return nil }
+            let id = Int(groups[1]) ?? 0
+            guard id > 0, seen.insert(id).inserted else { return nil }
+            let cover = Self.normalizeURL(groups[4].replacingOccurrences(of: "{size}", with: "400"))
+            return Playlist(
+                id: id,
+                name: Self.clean(Self.htmlDecode(groups[2])),
+                coverURL: URL(string: cover),
+                trackCount: 0,
+                source: .kugou
+            )
+        }
+        BeansLogger.shared.log("酷狗官网歌单广场：返回 \(rows.count) 个", level: .debug)
+        return Array(rows.prefix(limit))
+    }
+
+    private func officialWebPlaylistSongs(listID: Int) async throws -> [Song] {
+        guard let url = URL(string: "https://www.kugou.com/yy/special/single/\(listID).html") else {
+            throw NetEaseError.unknown("酷狗官网歌单歌曲地址无效")
+        }
+        let html = try await getString(url, ua: Self.browserUA)
+        guard let rows = Self.javascriptArray(named: "data", in: html) else {
+            throw NetEaseError.decoding("酷狗官网歌单歌曲格式异常")
+        }
+        let songs = rows.compactMap(Self.mapCompleteTrack)
+        BeansLogger.shared.log("酷狗官网歌单歌曲：specialid=\(listID) 返回 \(songs.count) 首", level: .debug)
+        return songs
+    }
+
     /// 酷狗搜索页专用热词。酷狗没有稳定公开的热搜 JSON 合约时使用独立词表，
     /// 确保切换到酷狗后不会继续显示网易云热搜。
     func hotWords() async -> [String] {
@@ -351,6 +433,11 @@ final class KugouMusicAPI {
     }
 
     func playlistSongs(listID: Int) async throws -> [Song] {
+        if listID >= 1000,
+           let songs = try? await officialWebPlaylistSongs(listID: listID),
+           !songs.isEmpty {
+            return songs
+        }
         let auth = KugouMusicAuth.shared
         guard auth.isLoggedIn else { return [] }
         let pid = "\(listID)"
@@ -916,6 +1003,16 @@ final class KugouMusicAPI {
         return obj
     }
 
+    private func getString(_ url: URL, ua: String) async throws -> String {
+        var request = URLRequest(url: url)
+        request.setValue(ua, forHTTPHeaderField: "User-Agent")
+        request.setValue("https://www.kugou.com/", forHTTPHeaderField: "Referer")
+        let (data, response) = try await session.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200,
+              let text = String(data: data, encoding: .utf8) else { throw NetEaseError.network }
+        return text
+    }
+
     private static func searchSignature(_ params: [String: String]) -> String {
         let body = params
             .filter { $0.key != "signature" }
@@ -926,16 +1023,91 @@ final class KugouMusicAPI {
         return "y9tjae~n)k)vn[8\(body)y9tjae~n)k)vn[8".kgMD5Hex
     }
 
+    private static func javascriptArray(named name: String, in html: String) -> [[String: Any]]? {
+        guard let startRange = html.range(of: "\(name) = [") ?? html.range(of: "\(name)=[") else { return nil }
+        guard let openIndex = html[startRange.lowerBound...].firstIndex(of: "[") else { return nil }
+        var depth = 0
+        var inString = false
+        var escaped = false
+        var endIndex: String.Index?
+        var index = openIndex
+        while index < html.endIndex {
+            let char = html[index]
+            if inString {
+                if escaped {
+                    escaped = false
+                } else if char == "\\" {
+                    escaped = true
+                } else if char == "\"" {
+                    inString = false
+                }
+            } else if char == "\"" {
+                inString = true
+            } else if char == "[" {
+                depth += 1
+            } else if char == "]" {
+                depth -= 1
+                if depth == 0 {
+                    endIndex = html.index(after: index)
+                    break
+                }
+            }
+            index = html.index(after: index)
+        }
+        guard let endIndex else { return nil }
+        let jsonText = String(html[openIndex..<endIndex])
+        guard let data = jsonText.data(using: .utf8),
+              let rows = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return nil }
+        return rows
+    }
+
+    private static func regexMatches(_ pattern: String, in text: String) -> [[String]] {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return [] }
+        let nsrange = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.matches(in: text, options: [], range: nsrange).map { match in
+            (0..<match.numberOfRanges).map { index in
+                guard let range = Range(match.range(at: index), in: text) else { return "" }
+                return String(text[range])
+            }
+        }
+    }
+
+    private static func normalizeURL(_ value: String) -> String {
+        if value.hasPrefix("//") { return "https:" + value }
+        if value.hasPrefix("http://") { return "https://" + String(value.dropFirst("http://".count)) }
+        return value
+    }
+
+    private static func htmlDecode(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&#34;", with: "\"")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+    }
+
     private static func mapCompleteTrack(_ raw: [String: Any]) -> Song? {
         var normalized = raw
+        if normalized["singername"] == nil,
+           let authors = raw["authors"] as? [[String: Any]] {
+            let names = authors.compactMap { author -> String? in
+                let name = string(author["author_name"] ?? author["name"])
+                return name.isEmpty ? nil : name
+            }
+            if !names.isEmpty { normalized["singername"] = names.joined(separator: " / ") }
+        }
         normalized["songname"] = raw["SongName"] ?? raw["FileName"] ?? raw["songname"]
         normalized["filename"] = raw["FileName"] ?? raw["SongName"] ?? raw["filename"]
-        normalized["singername"] = raw["SingerName"] ?? raw["singername"]
+        normalized["singername"] = raw["SingerName"] ?? raw["singername"] ?? normalized["singername"]
         normalized["album_name"] = raw["AlbumName"] ?? raw["album_name"]
         normalized["hash"] = raw["FileHash"] ?? raw["Hash"] ?? raw["hash"]
-        normalized["mixsongid"] = raw["MixSongID"] ?? raw["mixsongid"]
+        normalized["mixsongid"] = raw["MixSongID"] ?? raw["mixsongid"] ?? raw["audio_id"] ?? raw["audioid"] ?? raw["encrypt_id"]
+        normalized["audio_id"] = raw["audio_id"] ?? raw["audioid"] ?? raw["encrypt_id"]
         normalized["album_id"] = raw["AlbumID"] ?? raw["album_id"]
-        normalized["duration"] = raw["Duration"] ?? raw["duration"]
+        normalized["duration"] = raw["Duration"] ?? raw["duration"] ?? raw["timeLen"] ?? raw["timelength"]
         normalized["album_sizable_cover"] = raw["Image"] ?? raw["ImageUrl"] ?? raw["AlbumImg"] ?? raw["album_sizable_cover"]
         normalized["pay_type"] = raw["PayType"] ?? raw["Privilege"] ?? raw["pay_type"]
         normalized["feetype"] = raw["FeeType"] ?? raw["feetype"]
