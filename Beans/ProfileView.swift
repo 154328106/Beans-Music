@@ -22,7 +22,7 @@ struct ProfileView: View {
     /// 设置页（外观 + 歌词翻译等）
     @State private var showSettings = false
     @State private var showSectionSort = false
-    /// 我的界面板块顺序（账号 / 我的功能 / 使用说明 / 关于，可自定义）
+    /// 我的界面板块顺序（账号 / 关于，可自定义）
     @State private var profileOrder = SectionOrderStore.load(SectionOrderStore.profileKey, defaults: SectionOrderStore.profileDefaults)
     /// 软件使用说明
     @State private var showUsageGuide = false
@@ -109,10 +109,6 @@ struct ProfileView: View {
                         switch key {
                         case "账号":
                             userCard
-                        case "我的功能":
-                            featuresGrid
-                        case "使用说明":
-                            usageGuideCard
                         case "关于":
                             aboutSection
                         default:
@@ -500,7 +496,6 @@ struct ProfileView: View {
 
             copyrightDisclosure
 
-            updateLinkCard
         }
     }
 
@@ -906,6 +901,7 @@ struct SettingsView: View {
     @State private var showLogImport = false
     @State private var importedLogText: String?
     @State private var showSourceImporter = false
+    @State private var showUsageGuide = false
 
     private var themeMode: BeansThemeMode {
         BeansThemeMode(rawValue: themeModeRaw) ?? .system
@@ -922,6 +918,7 @@ struct SettingsView: View {
                         changelogSection
                         backupSection
                         logSection
+                        settingsUsageGuideSection
                         footerNote
                     }
                     .padding(.horizontal, 16)
@@ -957,6 +954,9 @@ struct SettingsView: View {
         .sheet(isPresented: $showSourceImporter) {
             ThirdPartySourceImportSheet()
                 .environmentObject(theme)
+        }
+        .sheet(isPresented: $showUsageGuide) {
+            UsageGuideSheet()
         }
         .fileExporter(
             isPresented: $showExportBackup,
@@ -1539,6 +1539,39 @@ struct SettingsView: View {
             .buttonStyle(.plain)
             .beansCardShadow(radius: 8, y: 3)
         }
+    }
+
+    /// 软件使用说明入口（放在设置页底部）
+    private var settingsUsageGuideSection: some View {
+        Button {
+            BeansHaptics.tap()
+            showUsageGuide = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "questionmark.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.beansAmber)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("软件使用说明")
+                        .font(BeansFont.appFont(15))
+                        .foregroundStyle(Color.beansLabel)
+                    Text("多平台切换、账号、播放与个性化说明")
+                        .font(BeansFont.appFont(11))
+                        .foregroundStyle(Color.beansComment)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.beansComment.opacity(0.6))
+            }
+            .padding(16)
+            .background {
+                BeansGlass(shape: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            }
+        }
+        .buttonStyle(.plain)
+        .beansCardShadow(radius: 8, y: 3)
     }
 
     /// 配置备份与恢复：导出全部 beans.* 设置为 JSON 分享；导入后写回 UserDefaults

@@ -647,29 +647,21 @@ final class KugouMusicAPI {
             )
             json = response.json
         } catch {
-            BeansLogger.shared.log("酷狗评论 gateway 失败：\(error.localizedDescription)，尝试直连", level: .debug)
-            json = try await directCommentJSON(params: params)
+            BeansLogger.shared.log("酷狗评论 POST 失败：\(error.localizedDescription)，尝试 GET 兜底", level: .debug)
+            json = try await gatewayCommentJSON(params: params)
         }
         return Self.parseComments(json: json, page: page, songName: mixSongID)
     }
 
-    private func directCommentJSON(params: [String: String]) async throws -> [String: Any] {
-        guard var comps = URLComponents(string: "https://mcomment.service.kugou.com/v1/cmtlist") else {
-            throw NetEaseError.network
-        }
-        comps.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
-        guard let url = comps.url else { throw NetEaseError.network }
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 12
-        request.setValue(androidUA, forHTTPHeaderField: "User-Agent")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw NetEaseError.network
-        }
-        return json
+    private func gatewayCommentJSON(params: [String: String]) async throws -> [String: Any] {
+        let response = try await gatewayRequest(
+            "/mcomment/v1/cmtlist",
+            baseURL: gateway,
+            method: "GET",
+            params: params,
+            headers: ["x-router": "mcomment.service.kugou.com"]
+        )
+        return response.json
     }
 
     private static func parseComments(json: [String: Any], page: Int, songName: String) -> KugouCommentPage {

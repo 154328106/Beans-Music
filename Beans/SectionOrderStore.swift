@@ -12,13 +12,19 @@ enum SectionOrderStore {
     /// 主页板块默认顺序
     static let homeDefaults = ["每日推荐", "排行榜", "歌单广场"]
     /// 我的界面板块默认顺序
-    static let profileDefaults = ["账号", "我的功能", "使用说明", "关于"]
+    static let profileDefaults = ["账号", "关于"]
 
     /// 读取已保存顺序：自动补全新板块、剔除已废弃板块
     static func load(_ key: String, defaults: [String]) -> [String] {
         var order = UserDefaults.standard.stringArray(forKey: key) ?? defaults
         if key == libraryKey, order == ["本地音乐库", "我的歌单", "最近播放"] {
             order = libraryDefaults
+            UserDefaults.standard.set(order, forKey: key)
+        }
+        if key == profileKey {
+            let removed = ["我的功能", "使用说明"]
+            order.removeAll { removed.contains($0) }
+            if order.isEmpty { order = defaults }
             UserDefaults.standard.set(order, forKey: key)
         }
         for item in defaults where !order.contains(item) { order.append(item) }

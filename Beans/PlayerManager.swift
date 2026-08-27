@@ -369,7 +369,7 @@ final class PlayerManager: NSObject, ObservableObject {
                     guard generation == self.loadGeneration else { return }
                     self.isBuffering = false
                     self.loadFailed = true
-                    if self.shouldLockOfficialOnly(song) {
+                    if song.source != .kugou, self.shouldLockOfficialOnly(song) {
                         BeansLogger.shared.log("播放失败：\(song.name) - 未找到原唱音源（官方受限），拒绝翻唱版本", level: .error)
                         ToastCenter.shared.show("《\(song.name)》未找到原唱音源（官方受限），已停止播放，拒绝翻唱版本")
                     } else {
@@ -457,13 +457,9 @@ final class PlayerManager: NSObject, ObservableObject {
         return (urlString, resolved)
     }
 
-    /// 酷狗兜底：仅在当前账号已识别会员时使用导入音源作为官方播放失败后的备选。
+    /// 酷狗兜底：官方播放失败后使用导入音源作为备选，便于验证用户导入音源是否可用。
     private func kugouFallback(song: Song, enableUnblock: Bool) async -> UnblockService.Resolved? {
         guard enableUnblock else { return nil }
-        guard KugouMusicAuth.shared.hasMembership else {
-            BeansLogger.shared.log("酷狗兜底跳过：未识别到酷狗会员", level: .debug)
-            return nil
-        }
         let kugouID = song.kugouAlbumAudioId ?? song.kugouHash ?? ""
         guard !kugouID.isEmpty else {
             BeansLogger.shared.log("酷狗兜底跳过：缺少 album_audio_id/hash", level: .debug)
