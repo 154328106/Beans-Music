@@ -851,45 +851,22 @@ struct PlayerView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - 底部控制栏（悬浮玻璃控制台：进度 / 主控制）
+    // MARK: - 底部控制栏（旧式悬浮布局：进度 / 主控制）
 
     /// 底部控制栏估算高度（单行控制后降低，给歌词视口更多空间）
     /// 底部控制栏预留高度（越小歌词视口越大；需 >= 控制栏实际高度避免遮挡；可视化开启时控制栏更高）
-    private var deckInset: CGFloat { 148 }
+    private var deckInset: CGFloat { 126 }
 
     private func controlDeck(bottomInset: CGFloat) -> some View {
-        VStack(spacing: 7) {
-            VStack(spacing: 10) {
-                progressBlock
-                    .modifier(Layoutable(part: .progress, enabled: layoutMode, data: $layoutData))
-                deckRow
-                    .modifier(Layoutable(part: .controls, enabled: layoutMode, data: $layoutData))
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 14)
-            .background {
-                BeansGlass(shape: RoundedRectangle(cornerRadius: 28, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 28, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [.white.opacity(0.16), .clear, progressAccent.opacity(0.10)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                    }
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 28, style: .continuous)
-                            .strokeBorder(.white.opacity(0.18), lineWidth: 0.8)
-                    }
-            }
-            .shadow(color: .black.opacity(0.20), radius: 18, y: 10)
+        VStack(spacing: 8) {
+            progressBlock
+                .modifier(Layoutable(part: .progress, enabled: layoutMode, data: $layoutData))
+            deckRow
+                .modifier(Layoutable(part: .controls, enabled: layoutMode, data: $layoutData))
             deckGrabber
         }
-        .padding(.horizontal, 18)
-        .padding(.bottom, bottomInset + 2)
+        .padding(.horizontal, 24)
+        .padding(.bottom, bottomInset + 6)
         .frame(maxWidth: .infinity)
     }
 

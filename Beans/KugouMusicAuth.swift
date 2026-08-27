@@ -15,10 +15,16 @@ final class KugouMusicAuth: ObservableObject {
 
     private init() {
         if let saved = defaults.dictionary(forKey: cookieKey) as? [String: String], !saved.isEmpty {
-            cookies = saved
-            isLoggedIn = hasValidLogin(saved)
-            nickname = defaults.string(forKey: nickKey) ?? Self.fallbackNickname(saved)
-            vipBadge = defaults.string(forKey: vipKey)
+            if hasValidLogin(saved) {
+                cookies = saved
+                isLoggedIn = true
+                nickname = defaults.string(forKey: nickKey) ?? Self.fallbackNickname(saved)
+                vipBadge = defaults.string(forKey: vipKey)
+            } else {
+                defaults.removeObject(forKey: cookieKey)
+                defaults.removeObject(forKey: nickKey)
+                defaults.removeObject(forKey: vipKey)
+            }
         }
     }
 
@@ -27,7 +33,7 @@ final class KugouMusicAuth: ObservableObject {
     }
 
     var token: String {
-        cookies["token"] ?? cookies["t"] ?? cookies["kg_token"] ?? ""
+        cookies["token"] ?? cookies["t"] ?? cookies["kg_token"] ?? cookies["kguser_token"] ?? ""
     }
 
     var cookieHeader: String {
@@ -50,14 +56,18 @@ final class KugouMusicAuth: ObservableObject {
         return parts.joined(separator: "; ")
     }
 
-    func importCookies(_ dict: [String: String], nickname: String?) {
-        guard !dict.isEmpty else { return }
+    @discardableResult
+    func importCookies(_ dict: [String: String], nickname: String?) -> Bool {
+        guard hasValidLogin(dict) else {
+            return false
+        }
         cookies = dict
-        isLoggedIn = hasValidLogin(dict)
+        isLoggedIn = true
         self.nickname = nickname ?? Self.fallbackNickname(dict)
         defaults.set(cookies, forKey: cookieKey)
         defaults.set(self.nickname, forKey: nickKey)
         Task { await self.fetchVIPStatus() }
+        return true
     }
 
     func logout() {
@@ -71,9 +81,9 @@ final class KugouMusicAuth: ObservableObject {
     }
 
     func hasValidLogin(_ dict: [String: String]) -> Bool {
-        let uid = Int(dict["userid"] ?? dict["KugooID"] ?? dict["KuGooID"] ?? dict["kg_uid"] ?? "") ?? 0
-        let hasToken = !(dict["token"] ?? dict["t"] ?? dict["kg_token"] ?? "").isEmpty
-        return uid > 0 || hasToken || dict.keys.contains { $0.lowercased().contains("kugou") || $0.lowercased().contains("kg") }
+        let uid = Int(dict["userid"] ?? dict["KugooID"] ?? dict["KuGooID"] ?? dict["kg_uid"] ?? dict["kguser_userid"] ?? "") ?? 0
+        let tokenValue = dict["token"] ?? dict["t"] ?? dict["kg_token"] ?? dict["kguser_token"] ?? ""
+        return uid > 0 && !tokenValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     func fetchVIPStatus() async {

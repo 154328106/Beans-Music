@@ -102,8 +102,7 @@ struct KugouWebLoginPanel: View {
         timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { _ in
             readCookies { dict in
                 let auth = KugouMusicAuth.shared
-                guard auth.hasValidLogin(dict) else { return }
-                auth.importCookies(dict, nickname: nil)
+                guard auth.importCookies(dict, nickname: nil) else { return }
                 finishSuccess()
             }
         }
@@ -115,8 +114,7 @@ struct KugouWebLoginPanel: View {
         readCookies { dict in
             syncing = false
             let auth = KugouMusicAuth.shared
-            if auth.hasValidLogin(dict) {
-                auth.importCookies(dict, nickname: nil)
+            if auth.importCookies(dict, nickname: nil) {
                 finishSuccess()
             } else {
                 message = "未检测到有效登录态，请先在网页中完成酷狗登录"
@@ -201,11 +199,10 @@ struct KugouCookieImportPanel: View {
     private func importCookie() {
         let dict = KugouMusicAuth.parseCookieHeader(cookieText)
         let auth = KugouMusicAuth.shared
-        guard auth.hasValidLogin(dict) else {
+        guard auth.importCookies(dict, nickname: nil) else {
             message = "Cookie 格式或登录态无效，请确认已完整复制"
             return
         }
-        auth.importCookies(dict, nickname: nil)
         message = "✓ 酷狗音乐登录成功"
         BeansHaptics.success()
         ToastCenter.shared.show("酷狗音乐登录成功")
