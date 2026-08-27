@@ -37,6 +37,7 @@ enum UnblockService {
         neteaseID: Int,
         songSource: SongSource = .netease,
         qqMid: String? = nil,
+        kugouID: String? = nil,
         strict: Bool = false
     ) async -> Resolved? {
         let keyword = ([name, artists].filter { !$0.isEmpty })
@@ -44,7 +45,7 @@ enum UnblockService {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !keyword.isEmpty else { return nil }
         let sources = UnblockSourceStore.shared.customSources
-            .filter { $0.enabled && canUse(source: $0, songSource: songSource, neteaseID: neteaseID, qqMid: qqMid) }
+            .filter { $0.enabled && canUse(source: $0, songSource: songSource, neteaseID: neteaseID, qqMid: qqMid, kugouID: kugouID) }
         guard !sources.isEmpty else { return nil }
 
         // 慢源/失效源不要拖住播放：全部候选一起请求，最快命中的播放地址直接返回。
@@ -52,7 +53,7 @@ enum UnblockService {
             for source in sources {
                 group.addTask {
                     if source.kind == "lx-script" {
-                        return await lxScript(source: source, songSource: songSource, neteaseID: neteaseID, qqMid: qqMid)
+                        return await lxScript(source: source, songSource: songSource, neteaseID: neteaseID, qqMid: qqMid, kugouID: kugouID)
                     } else if source.kind == "lx" {
                         return await lx(source: source, keyword: keyword)
                     } else {
@@ -62,7 +63,8 @@ enum UnblockService {
                             artists: artists,
                             neteaseID: neteaseID,
                             songSource: songSource,
-                            qqMid: qqMid
+                            qqMid: qqMid,
+                            kugouID: kugouID
                         )
                     }
                 }
@@ -77,16 +79,16 @@ enum UnblockService {
         }
     }
 
-    private static func canUse(source: ThirdPartySource, songSource: SongSource, neteaseID: Int, qqMid: String?) -> Bool {
+    private static func canUse(source: ThirdPartySource, songSource: SongSource, neteaseID: Int, qqMid: String?, kugouID: String?) -> Bool {
         let expectedProvider = providerCode(for: songSource)
         if let provider = source.headers["source"], !provider.isEmpty, provider != expectedProvider {
             return false
         }
-        if songSource == .kugou {
-            return false
-        }
         if songSource == .qq {
             return qqMid?.isEmpty == false
+        }
+        if songSource == .kugou {
+            return kugouID?.isEmpty == false
         }
         return neteaseID > 0
     }
@@ -94,7 +96,7 @@ enum UnblockService {
     // MARK: - 洛雪音源脚本转换配置
 
     /// Huibq keep-alive 等洛雪脚本的 musicUrl 协议：GET /url/{source}/{songId}/{quality}。
-    private static func lxScript(source: ThirdPartySource, songSource: SongSource, neteaseID: Int, qqMid: String?) async -> Resolved? {
+    private static func lxScript(source: ThirdPartySource, songSource: SongSource, neteaseID: Int, qqMid: String?, kugouID: String?) async -> Resolved? {
         let provider = source.headers["source"] ?? ""
         let songID: String
         switch (songSource, provider) {
@@ -103,6 +105,9 @@ enum UnblockService {
         case (.qq, "tx"):
             guard let qqMid, !qqMid.isEmpty else { return nil }
             songID = qqMid
+        case (.kugou, "kg"):
+            guard let kugouID, !kugouID.isEmpty else { return nil }
+            songID = kugouID
         default:
             return nil
         }
@@ -153,7 +158,8 @@ enum UnblockService {
         artists: String,
         neteaseID: Int,
         songSource: SongSource,
-        qqMid: String?
+        qqMid: String?,
+        kugouID: String?
     ) async -> Resolved? {
         guard !source.template.isEmpty else { return nil }
         let expectedProvider = providerCode(for: songSource)
@@ -167,6 +173,9 @@ enum UnblockService {
         case .qq:
             guard let qqMid, !qqMid.isEmpty else { return nil }
             songID = qqMid
+        case .kugou:
+            guard let kugouID, !kugouID.isEmpty else { return nil }
+            songID = kugouID
         default:
             return nil
         }

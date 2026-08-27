@@ -8,7 +8,7 @@ enum SectionOrderStore {
     static let profileKey = "beans.profile.sectionOrder"
 
     /// 音乐库板块默认顺序
-    static let libraryDefaults = ["本地音乐库", "我的歌单", "最近播放"]
+    static let libraryDefaults = ["我的歌单", "最近播放", "本地音乐库"]
     /// 主页板块默认顺序
     static let homeDefaults = ["每日推荐", "排行榜", "歌单广场"]
     /// 我的界面板块默认顺序
@@ -17,6 +17,10 @@ enum SectionOrderStore {
     /// 读取已保存顺序：自动补全新板块、剔除已废弃板块
     static func load(_ key: String, defaults: [String]) -> [String] {
         var order = UserDefaults.standard.stringArray(forKey: key) ?? defaults
+        if key == libraryKey, order == ["本地音乐库", "我的歌单", "最近播放"] {
+            order = libraryDefaults
+            UserDefaults.standard.set(order, forKey: key)
+        }
         for item in defaults where !order.contains(item) { order.append(item) }
         order = order.filter { defaults.contains($0) }
         if order.isEmpty { order = defaults }

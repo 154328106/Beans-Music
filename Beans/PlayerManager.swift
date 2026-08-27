@@ -343,6 +343,9 @@ final class PlayerManager: NSObject, ObservableObject {
             BeansLogger.shared.log("▶ 开始播放：\(song.name) - \(song.artists)｜平台=\(song.source.rawValue) id=\(song.id) 音质=\(quality.level) 免费听歌=\(enableUnblock ? "开" : "关") 官方受限=\(strictUnlock ? "是" : "否")", level: .info)
             if song.source == .kugou {
                 urlString = try? await KugouMusicAPI.shared.songURL(song: song)
+                if urlString == nil {
+                    resolvedThirdParty = await kugouFallback(song: song, enableUnblock: enableUnblock)
+                }
             } else if song.source == .qq, let mid = song.qqMid {
                 // 是否有播放权益以 vkey 实际返回为准；会员接口识别失败时也必须尝试官方地址。
                 urlString = try? await QQMusicAPI.shared.songURL(songmid: mid, mediaMid: song.qqMediaMid)
@@ -452,6 +455,30 @@ final class PlayerManager: NSObject, ObservableObject {
         }
         BeansLogger.shared.log("QQ兜底：\(song.name) 官方=\(urlString != nil ? "是" : "否") 第三方=\(resolved != nil ? "命中" : "未用/未命中")", level: .debug)
         return (urlString, resolved)
+    }
+
+    /// 酷狗兜底：仅在当前账号已识别会员时使用导入音源作为官方播放失败后的备选。
+    private func kugouFallback(song: Song, enableUnblock: Bool) async -> UnblockService.Resolved? {
+        guard enableUnblock else { return nil }
+        guard KugouMusicAuth.shared.hasMembership else {
+            BeansLogger.shared.log("酷狗兜底跳过：未识别到酷狗会员", level: .debug)
+            return nil
+        }
+        let kugouID = song.kugouAlbumAudioId ?? song.kugouHash ?? ""
+        guard !kugouID.isEmpty else {
+            BeansLogger.shared.log("酷狗兜底跳过：缺少 album_audio_id/hash", level: .debug)
+            return nil
+        }
+        let resolved = await UnblockService.resolve(
+            name: song.name,
+            artists: song.artists,
+            durationMS: Int(song.duration * 1000),
+            neteaseID: 0,
+            songSource: .kugou,
+            kugouID: kugouID
+        )
+        BeansLogger.shared.log("酷狗会员兜底：\(song.name) 第三方=\(resolved != nil ? "命中" : "未命中")", level: .debug)
+        return resolved
     }
 
     /// 版权受限歌手名单：这些歌手的歌曲必须严格校验原唱（第三方搜索会误匹配翻唱，如周杰伦）

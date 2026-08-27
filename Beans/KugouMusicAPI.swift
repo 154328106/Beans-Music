@@ -626,27 +626,55 @@ final class KugouMusicAPI {
         guard !mixSongID.isEmpty else {
             throw NetEaseError.unknown("酷狗评论缺少歌曲 ID")
         }
-        let response = try await gatewayRequest(
-            "/mcomment/v1/cmtlist",
-            baseURL: gateway,
-            method: "POST",
-            params: [
-                "mixsongid": mixSongID,
-                "need_show_image": "1",
-                "p": "\(max(page, 1))",
-                "pagesize": "\(min(max(limit, 1), 30))",
-                "show_classify": "1",
-                "show_hotword_list": "1",
-                "extdata": "0",
-                "code": "fc4be23b4e972707f36b8a828a93ba8a",
-            ],
-            headers: [
-                "x-router": "mcomment.service.kugou.com",
-                "Content-Type": "application/x-www-form-urlencoded",
-            ]
-        )
+        let params = [
+            "mixsongid": mixSongID,
+            "need_show_image": "1",
+            "p": "\(max(page, 1))",
+            "pagesize": "\(min(max(limit, 1), 30))",
+            "show_classify": "1",
+            "show_hotword_list": "1",
+            "extdata": "0",
+            "code": "fc4be23b4e972707f36b8a828a93ba8a",
+        ]
+        let json: [String: Any]
+        do {
+            let response = try await gatewayRequest(
+                "/mcomment/v1/cmtlist",
+                baseURL: gateway,
+                method: "POST",
+                params: params,
+                headers: ["x-router": "mcomment.service.kugou.com"]
+            )
+            json = response.json
+        } catch {
+            BeansLogger.shared.log("酷狗评论 gateway 失败：\(error.localizedDescription)，尝试直连", level: .debug)
+            json = try await directCommentJSON(params: params)
+        }
+        return Self.parseComments(json: json, page: page, songName: mixSongID)
+    }
+
+    private func directCommentJSON(params: [String: String]) async throws -> [String: Any] {
+        guard var comps = URLComponents(string: "https://mcomment.service.kugou.com/v1/cmtlist") else {
+            throw NetEaseError.network
+        }
+        comps.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
+        guard let url = comps.url else { throw NetEaseError.network }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 12
+        request.setValue(androidUA, forHTTPHeaderField: "User-Agent")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw NetEaseError.network
+        }
+        return json
+    }
+
+    private static func parseComments(json: [String: Any], page: Int, songName: String) -> KugouCommentPage {
         let rows = Self.deepArrays(
-            response.json,
+            json,
             names: ["commentlist", "comments", "list", "comment", "hot_comment", "hot_comments"]
         )
         var seen = Set<Int>()
@@ -678,8 +706,8 @@ final class KugouMusicAPI {
                 isHot: page == 1
             )
         }
-        let total = Self.deepInt(response.json, names: ["total", "commenttotal", "comment_total", "count"])
-        BeansLogger.shared.log("酷狗评论：mixsongid=\(mixSongID) page=\(page) 返回 \(comments.count) 条", level: .debug)
+        let total = Self.deepInt(json, names: ["total", "commenttotal", "comment_total", "count"])
+        BeansLogger.shared.log("酷狗评论：mixsongid=\(songName) page=\(page) 返回 \(comments.count) 条", level: .debug)
         return KugouCommentPage(comments: comments, total: total)
     }
 
