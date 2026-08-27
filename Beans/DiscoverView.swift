@@ -24,7 +24,6 @@ struct DiscoverView: View {
     }
     /// 首页数据源：记住上次选择，下次打开仍保持该平台（默认网易云）
     @AppStorage("beans.homeSource") private var homeSourceRaw = SearchProvider.netease.rawValue
-    /// 主页只展示网易云 / QQ 音乐；酷狗保留登录与歌单同步，不进入主页推荐流
     private let homeProviders: [SearchProvider] = [.netease, .qq]
     /// 首页数据源：网易云 / QQ音乐（与搜索页同一控件样式）
     private var source: SearchProvider {
@@ -252,7 +251,6 @@ struct DiscoverView: View {
         switch source {
         case .netease: return neteaseTopLists.count
         case .qq: return qqTopLists.count
-        case .kugou: return 0
         }
     }
 
@@ -265,7 +263,6 @@ struct DiscoverView: View {
         switch source {
         case .netease: return !topLists.isEmpty
         case .qq: return !qqTopLists.isEmpty
-        case .kugou: return false
         }
     }
 
@@ -568,9 +565,6 @@ struct DiscoverView: View {
             snapshot.dailySongs = dr
             snapshot.qqTopLists = tl
             snapshot.personalized = pp
-        case .kugou:
-            // 酷狗主页内容已下线：账号登录与歌单同步仍在音乐库中保留。
-            break
         case .netease:
             async let a = NetEaseAPI.shared.topLists()
             async let b = NetEaseAPI.shared.dailyRecommend()

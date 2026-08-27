@@ -334,7 +334,7 @@ struct CoverImage: View {
                         placeholderIcon
                     case .empty:
                         if url == nil {
-                            // 封面地址为空（如酷狗歌手暂无头像）：直接显示占位图标，避免一直转圈
+                            // 封面地址为空时：直接显示占位图标，避免一直转圈
                             placeholderIcon
                         } else {
                             ZStack {

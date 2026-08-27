@@ -41,11 +41,10 @@ struct FlowLayout: Layout {
 enum SearchProvider: String, CaseIterable, Identifiable {
     case netease = "网易云"
     case qq = "QQ音乐"
-    case kugou = "酷狗音乐"
 
     var id: String { rawValue }
 
-    /// 主题色渐变：网易云红 / QQ 绿 / 酷狗蓝
+    /// 主题色渐变：网易云红 / QQ 绿
     var tint: LinearGradient {
         switch self {
         case .netease: return LinearGradient(
@@ -54,9 +53,6 @@ enum SearchProvider: String, CaseIterable, Identifiable {
         case .qq: return LinearGradient(
             colors: [Color(red: 0.15, green: 0.78, blue: 0.55), Color(red: 0.05, green: 0.58, blue: 0.42)],
             startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .kugou: return LinearGradient(
-            colors: [Color(red: 0.16, green: 0.55, blue: 0.96), Color(red: 0.05, green: 0.34, blue: 0.84)],
-            startPoint: .topLeading, endPoint: .bottomTrailing)
         }
     }
 
@@ -64,7 +60,6 @@ enum SearchProvider: String, CaseIterable, Identifiable {
         switch self {
         case .netease: return "cloud.fill"
         case .qq: return "play.rectangle.fill"
-        case .kugou: return "waveform"
         }
     }
 }
@@ -685,10 +680,6 @@ struct SearchView: View {
             if let words = try? await QQMusicAPI.shared.hotKeys() {
                 hotWords = words
             }
-        } else if provider == .kugou {
-            if let words = try? await KugouMusicAPI.shared.hotKeys() {
-                hotWords = words
-            }
         } else if let words = try? await NetEaseAPI.shared.hotSearch() {
             hotWords = words
         }
@@ -731,8 +722,6 @@ struct SearchView: View {
                     let albums = try await QQMusicAPI.shared.searchAlbums(keyword: trimmed)
                     guard !Task.isCancelled else { return }
                     albumResults = albums
-                case (.kugou, _):
-                    guard !Task.isCancelled else { return }
                 }
                 let count = resultType == .song ? songResults.count : (resultType == .artist ? artistResults.count : albumResults.count)
                 BeansLogger.shared.log("搜索完成：\(provider.rawValue) [\(resultType.rawValue)] \(trimmed) 结果=\(count)", level: .info)

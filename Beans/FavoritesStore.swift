@@ -1,25 +1,21 @@
 import Foundation
 
-/// 收藏管理（红心）：网易云登录后同步到网易云云端；QQ / 酷狗本地持久化，
+/// 收藏管理（红心）：网易云登录后同步到网易云云端；QQ 本地持久化，
 /// 登录 QQ 时尽力同步到 QQ 云端（music.srfDissong），失败不影响本地收藏。
 final class FavoritesStore: ObservableObject {
     static let shared = FavoritesStore()
 
     /// QQ 红心收藏（本地持久化，供音乐库展示）
     @Published private(set) var qqFavoriteSongs: [Song] = []
-    /// 酷狗红心收藏（本地持久化，供音乐库和播放器展示）
-    @Published private(set) var kugouFavoriteSongs: [Song] = []
     /// 网易云红心收藏（本地缓存 + 云端同步）
     @Published private(set) var neteaseFavoriteSongs: [Song] = []
 
     private let defaults = UserDefaults.standard
     private let neteaseKey = "beans.fav.netease.v1"
     private let qqKey = "beans.fav.qq.v1"
-    private let kugouKey = "beans.fav.kugou.v1"
 
     private init() {
         qqFavoriteSongs = Self.loadSongs(qqKey)
-        kugouFavoriteSongs = Self.loadSongs(kugouKey)
         neteaseFavoriteSongs = Self.loadSongs(neteaseKey)
     }
 
@@ -32,9 +28,6 @@ final class FavoritesStore: ObservableObject {
         case .qq:
             guard let mid = song.qqMid else { return false }
             return qqFavoriteSongs.contains { $0.qqMid == mid }
-        case .kugou:
-            guard let hash = song.kugouHash else { return false }
-            return kugouFavoriteSongs.contains { $0.kugouHash == hash }
         }
     }
 
@@ -68,21 +61,12 @@ final class FavoritesStore: ObservableObject {
                 }
             }
             return true
-        case .kugou:
-            let liked = !isLiked(song)
-            updateKugou(song, liked: liked)
-            return true
         }
     }
 
     /// 移除 QQ 收藏（音乐库侧滑删除）
     func removeQQFavorite(_ song: Song) {
         updateQQ(song, liked: false)
-    }
-
-    /// 移除酷狗收藏（音乐库侧滑删除）
-    func removeKugouFavorite(_ song: Song) {
-        updateKugou(song, liked: false)
     }
 
     private func updateNetease(_ song: Song, liked: Bool) {
@@ -105,16 +89,6 @@ final class FavoritesStore: ObservableObject {
         saveSongs(qqFavoriteSongs, key: qqKey)
     }
 
-    private func updateKugou(_ song: Song, liked: Bool) {
-        if liked {
-            kugouFavoriteSongs.removeAll { $0.kugouHash != nil && $0.kugouHash == song.kugouHash }
-            kugouFavoriteSongs.insert(song, at: 0)
-        } else {
-            kugouFavoriteSongs.removeAll { $0.kugouHash != nil && $0.kugouHash == song.kugouHash }
-        }
-        saveSongs(kugouFavoriteSongs, key: kugouKey)
-    }
-
     private static func loadSongs(_ key: String) -> [Song] {
         guard let data = UserDefaults.standard.data(forKey: key),
               let saved = try? JSONDecoder().decode([Song].self, from: data) else { return [] }
@@ -127,7 +101,7 @@ final class FavoritesStore: ObservableObject {
         }
     }
 
-    /// 退出网易云登录时清空本地网易云收藏缓存（保留 QQ / 酷狗收藏）
+    /// 退出网易云登录时清空本地网易云收藏缓存（保留 QQ 收藏）
     func resetNetease() {
         neteaseFavoriteSongs = []
         defaults.removeObject(forKey: neteaseKey)

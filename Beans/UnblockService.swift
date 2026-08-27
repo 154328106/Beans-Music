@@ -37,7 +37,6 @@ enum UnblockService {
         neteaseID: Int,
         songSource: SongSource = .netease,
         qqMid: String? = nil,
-        kugouHash: String? = nil,
         strict: Bool = false
     ) async -> Resolved? {
         let keyword = ([name, artists].filter { !$0.isEmpty })
@@ -45,7 +44,7 @@ enum UnblockService {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !keyword.isEmpty else { return nil }
         let sources = UnblockSourceStore.shared.customSources
-            .filter { $0.enabled && canUse(source: $0, songSource: songSource, neteaseID: neteaseID, qqMid: qqMid, kugouHash: kugouHash) }
+            .filter { $0.enabled && canUse(source: $0, songSource: songSource, neteaseID: neteaseID, qqMid: qqMid) }
         guard !sources.isEmpty else { return nil }
 
         // 慢源/失效源不要拖住播放：全部候选一起请求，最快命中的播放地址直接返回。
@@ -53,7 +52,7 @@ enum UnblockService {
             for source in sources {
                 group.addTask {
                     if source.kind == "lx-script" {
-                        return await lxScript(source: source, songSource: songSource, neteaseID: neteaseID, qqMid: qqMid, kugouHash: kugouHash)
+                        return await lxScript(source: source, songSource: songSource, neteaseID: neteaseID, qqMid: qqMid)
                     } else if source.kind == "lx" {
                         return await lx(source: source, keyword: keyword)
                     } else {
@@ -63,8 +62,7 @@ enum UnblockService {
                             artists: artists,
                             neteaseID: neteaseID,
                             songSource: songSource,
-                            qqMid: qqMid,
-                            kugouHash: kugouHash
+                            qqMid: qqMid
                         )
                     }
                 }
@@ -79,7 +77,7 @@ enum UnblockService {
         }
     }
 
-    private static func canUse(source: ThirdPartySource, songSource: SongSource, neteaseID: Int, qqMid: String?, kugouHash: String?) -> Bool {
+    private static func canUse(source: ThirdPartySource, songSource: SongSource, neteaseID: Int, qqMid: String?) -> Bool {
         let expectedProvider = providerCode(for: songSource)
         if let provider = source.headers["source"], !provider.isEmpty, provider != expectedProvider {
             return false
@@ -87,16 +85,13 @@ enum UnblockService {
         if songSource == .qq {
             return qqMid?.isEmpty == false
         }
-        if songSource == .kugou {
-            return source.kind == "lx" || kugouHash?.isEmpty == false
-        }
         return neteaseID > 0
     }
 
     // MARK: - 洛雪音源脚本转换配置
 
     /// Huibq keep-alive 等洛雪脚本的 musicUrl 协议：GET /url/{source}/{songId}/{quality}。
-    private static func lxScript(source: ThirdPartySource, songSource: SongSource, neteaseID: Int, qqMid: String?, kugouHash: String?) async -> Resolved? {
+    private static func lxScript(source: ThirdPartySource, songSource: SongSource, neteaseID: Int, qqMid: String?) async -> Resolved? {
         let provider = source.headers["source"] ?? ""
         let songID: String
         switch (songSource, provider) {
@@ -105,9 +100,6 @@ enum UnblockService {
         case (.qq, "tx"):
             guard let qqMid, !qqMid.isEmpty else { return nil }
             songID = qqMid
-        case (.kugou, "kg"):
-            guard let kugouHash, !kugouHash.isEmpty else { return nil }
-            songID = kugouHash
         default:
             return nil
         }
@@ -158,8 +150,7 @@ enum UnblockService {
         artists: String,
         neteaseID: Int,
         songSource: SongSource,
-        qqMid: String?,
-        kugouHash: String?
+        qqMid: String?
     ) async -> Resolved? {
         guard !source.template.isEmpty else { return nil }
         let expectedProvider = providerCode(for: songSource)
@@ -173,9 +164,6 @@ enum UnblockService {
         case .qq:
             guard let qqMid, !qqMid.isEmpty else { return nil }
             songID = qqMid
-        case .kugou:
-            guard let kugouHash, !kugouHash.isEmpty else { return nil }
-            songID = kugouHash
         default:
             return nil
         }
@@ -221,18 +209,17 @@ enum UnblockService {
         switch source {
         case .netease: return "wy"
         case .qq: return "tx"
-        case .kugou: return "kg"
         }
     }
 
     // MARK: - 落雪音乐源（lx-music-api-server 风格 HTTP API）
     /// 兼容落雪 API 服务器（如 lx-music-api-server）：先按关键词搜索拿到歌曲 id，
-    /// 再请求播放地址。headers 里可配置 source（wy/kg/qq/mg/tx，默认 kg）与 br（默认 320）。
+    /// 再请求播放地址。headers 里可配置 source（wy/tx）与 br（默认 320）。
     private static func lx(source: ThirdPartySource, keyword: String) async -> Resolved? {
         guard source.kind == "lx", !source.template.isEmpty else { return nil }
         let base = source.template.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let baseURL = URL(string: base) else { return nil }
-        let lxSource = source.headers["source"] ?? "kg"
+        let lxSource = source.headers["source"] ?? "wy"
         let br = source.headers["br"] ?? "320"
         // 1) 搜索：GET /music/search?source=&query=&page=1&limit=5
         var searchComps = URLComponents(url: baseURL.appendingPathComponent("music/search"), resolvingAgainstBaseURL: false)

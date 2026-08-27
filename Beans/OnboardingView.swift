@@ -167,7 +167,7 @@ struct OnboardingView: View {
                 .font(BeansFont.appFont(30, .bold))
                 .foregroundStyle(Color.beansLabel)
 
-            Text("iOS 26 原生液态玻璃 · 聚合网易云 / QQ / 酷狗\n纯 SwiftUI · 完全开源")
+            Text("iOS 26 原生液态玻璃 · 聚合网易云 / QQ\n纯 SwiftUI · 完全开源")
                 .font(BeansFont.appFont(15))
                 .foregroundStyle(Color.beansSecondary)
                 .multilineTextAlignment(.center)
@@ -250,7 +250,7 @@ struct OnboardingView: View {
         .beansCardShadow(radius: 8, y: 3)
     }
 
-    // MARK: 第 3 页 · 三平台
+    // MARK: 第 3 页 · 双平台
 
     private var platformPage: some View {
         VStack(spacing: 20) {
@@ -259,11 +259,11 @@ struct OnboardingView: View {
                 .font(.system(size: 40))
                 .foregroundStyle(LinearGradient.beansAccent)
 
-            Text("三平台聚合，一个 App 全听遍")
+            Text("双平台聚合，一个 App 全听遍")
                 .font(BeansFont.appFont(26, .bold))
                 .foregroundStyle(Color.beansLabel)
 
-            Text("网易云 + QQ 音乐 + 酷狗音乐，一键切换数据源")
+            Text("网易云 + QQ 音乐，一键切换数据源")
                 .font(BeansFont.appFont(14))
                 .foregroundStyle(Color.beansSecondary)
 
@@ -274,9 +274,6 @@ struct OnboardingView: View {
                 platformRow(imageName: "BrandQQ", tint: Color(red: 0.13, green: 0.51, blue: 0.95),
                             title: "QQ 音乐",
                             detail: "扫码 / 网页 / Cookie 登录，同步歌单与 VIP")
-                platformRow(imageName: "BrandKugou", tint: Color(red: 0.11, green: 0.48, blue: 0.95),
-                            title: "酷狗音乐",
-                            detail: "网页 / Cookie 登录，同步歌单并支持酷狗播放")
             }
             .padding(.horizontal, 28)
 

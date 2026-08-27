@@ -45,7 +45,7 @@ struct ThirdPartySourceImportSheet: View {
                         .font(BeansFont.appFont(11))
                         .foregroundStyle(.red)
                 }
-                Text("字段：name 名称；kind 查询方式（netease-id 按网易云 ID / keyword 按关键词 / lx 落雪 API 服务器）；template 请求模板；urlPath 响应里播放地址的字段路径（如 url、data.url）；headers 可选请求头。\n占位符：{id} 网易云ID、{name} 歌名、{artist} 歌手、{keyword} 歌名+歌手。\n落雪（kind 填 lx）：template 填 lx-music-api-server 的服务器地址，headers 里 source 可选 wy/kg/qq/mg/tx，br 可选 320/128。播放时自动搜索并取流。\n支持直接选择 .js / .json / .txt 文件导入，JS 文件会尝试自动提取其中的 JSON 配置，一个文件可包含多个音源（JSON 数组）。")
+                Text("字段：name 名称；kind 查询方式（netease-id 按网易云 ID / keyword 按关键词 / lx 落雪 API 服务器）；template 请求模板；urlPath 响应里播放地址的字段路径（如 url、data.url）；headers 可选请求头。\n占位符：{id} 网易云ID、{name} 歌名、{artist} 歌手、{keyword} 歌名+歌手。\n落雪（kind 填 lx）：template 填 lx-music-api-server 的服务器地址，headers 里 source 可选 wy/tx，br 可选 320/128。播放时自动搜索并取流。\n支持直接选择 .js / .json / .txt 文件导入，JS 文件会尝试自动提取其中的 JSON 配置，一个文件可包含多个音源（JSON 数组）。")
                     .font(BeansFont.appFont(11))
                     .foregroundStyle(Color.beansComment)
                 Button {

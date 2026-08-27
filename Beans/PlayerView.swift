@@ -1212,7 +1212,7 @@ struct PlayerView: View {
         return [text]
     }
 
-    /// 各平台歌曲链接（网易云 / QQ音乐 / 酷狗音乐）
+    /// 各平台歌曲链接（网易云 / QQ音乐）
     private func shareURL(for song: Song) -> URL? {
         switch song.source {
         case .netease:
@@ -1223,12 +1223,6 @@ struct PlayerView: View {
             }
             let encoded = song.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? song.name
             return URL(string: "https://y.qq.com/n/ryqq/search?w=\(encoded)")
-        case .kugou:
-            if let hash = song.kugouHash, !hash.isEmpty {
-                return URL(string: "https://www.kugou.com/song/#hash=\(hash)")
-            }
-            let encoded = song.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? song.name
-            return URL(string: "https://www.kugou.com/yy/html/search.html#searchType=song&searchKeyWord=\(encoded)")
         }
     }
 
@@ -1349,10 +1343,6 @@ struct PlayerView: View {
         guard let song else { return }
         if song.source == .qq, let mid = song.qqMid {
             if let raw = try? await QQMusicAPI.shared.lyric(songmid: mid) {
-                lyrics = LyricParser.parse(raw)
-            }
-        } else if song.source == .kugou {
-            if let raw = try? await KugouMusicAPI.shared.lyric(song: song) {
                 lyrics = LyricParser.parse(raw)
             }
         } else {

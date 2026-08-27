@@ -37,7 +37,6 @@ struct ProfileView: View {
     @State private var showDownloadOutcome = false
     @State private var pendingUpdateInfo: UpdateChecker.ReleaseInfo?
     @ObservedObject private var qqAuth = QQMusicAuth.shared
-    @ObservedObject private var kugouAuth = KugouMusicAuth.shared
 
     private var themeMode: BeansThemeMode {
         BeansThemeMode(rawValue: themeModeRaw) ?? .system
@@ -48,7 +47,7 @@ struct ProfileView: View {
         return "Beans Music · \(ver)"
     }
 
-    /// 三个平台登录状态的合并提示（展示各平台真实昵称）
+    /// 登录状态的合并提示（展示各平台真实昵称）
     private var accountStatusLine: String {
         var parts: [String] = []
         if auth.isLoggedIn {
@@ -61,10 +60,7 @@ struct ProfileView: View {
         if qqAuth.isLoggedIn {
             parts.append(qqAuth.nickname.isEmpty ? "QQ 已登录" : qqAuth.nickname)
         }
-        if kugouAuth.isLoggedIn {
-            parts.append(kugouAuth.nickname.isEmpty ? "酷狗已登录" : kugouAuth.nickname)
-        }
-        if parts.isEmpty { return "登录后可同步网易云 / QQ / 酷狗歌单" }
+        if parts.isEmpty { return "登录后可同步网易云 / QQ 歌单" }
         return parts.joined(separator: " · ")
     }
 
@@ -75,7 +71,7 @@ struct ProfileView: View {
                 Text("我的")
                     .font(BeansFont.appFont(30, .bold))
                     .foregroundStyle(Color.beansLabel)
-                Text("网易云 / QQ / 酷狗音乐账号与外观设置")
+                Text("网易云 / QQ 音乐账号与外观设置")
                     .font(BeansFont.appFont(13))
                     .foregroundStyle(Color.beansComment)
             }
@@ -129,7 +125,6 @@ struct ProfileView: View {
         .task(id: auth.isLoggedIn) {
             await auth.refreshAccount()
             await qqAuth.fetchVIPStatus()
-            await kugouAuth.fetchVIPStatus()
         }
         .sheet(isPresented: $showHistory) {
             HistoryView()
@@ -287,7 +282,7 @@ struct ProfileView: View {
             }
             .buttonStyle(.plain)
 
-            if auth.isLoggedIn || qqAuth.isLoggedIn || kugouAuth.isLoggedIn {
+            if auth.isLoggedIn || qqAuth.isLoggedIn {
                 platformStatusRow
             }
         }
@@ -298,7 +293,7 @@ struct ProfileView: View {
         .beansCardShadow(radius: 10, y: 4)
     }
 
-    /// 每个登录平台单独展示登录成功状态（网易云 / QQ / 酷狗音乐）
+    /// 每个登录平台单独展示登录成功状态（网易云 / QQ 音乐）
     private var platformStatusRow: some View {
         VStack(alignment: .leading, spacing: 8) {
             if auth.isLoggedIn {
@@ -306,9 +301,6 @@ struct ProfileView: View {
             }
             if qqAuth.isLoggedIn {
                 platformChip(imageName: "BrandQQ", name: "QQ 音乐", status: qqAuth.nickname.isEmpty ? "已登录" : qqAuth.nickname, badge: qqAuth.vipBadge)
-            }
-            if kugouAuth.isLoggedIn {
-                platformChip(imageName: "BrandKugou", name: "酷狗音乐", status: kugouAuth.nickname.isEmpty ? "已登录" : kugouAuth.nickname, badge: kugouAuth.vipBadge)
             }
         }
         .padding(.top, 2)
@@ -396,7 +388,7 @@ struct ProfileView: View {
                 featureCell(icon: "clock.arrow.circlepath", title: "播放历史", subtitle: "最近播放 \(player.history.count) 首") {
                     showHistory = true
                 }
-                featureCell(icon: qqAuth.isLoggedIn || auth.isLoggedIn || kugouAuth.isLoggedIn ? "checkmark.seal.fill" : "globe", title: "账号与登录", subtitle: qqAuth.isLoggedIn || auth.isLoggedIn || kugouAuth.isLoggedIn ? accountStatusLine : "统一登录网易云 / QQ / 酷狗音乐") {
+                featureCell(icon: qqAuth.isLoggedIn || auth.isLoggedIn ? "checkmark.seal.fill" : "globe", title: "账号与登录", subtitle: qqAuth.isLoggedIn || auth.isLoggedIn ? accountStatusLine : "统一登录网易云 / QQ 音乐") {
                     BeansHaptics.tap()
                     showAccountHub = true
                 }
@@ -649,21 +641,18 @@ struct ProfileView: View {
     }
 }
 
-// MARK: - 统一账号登录面板（网易云 + QQ + 酷狗音乐整合）
+// MARK: - 统一账号登录面板（网易云 + QQ 音乐整合）
 
 struct AccountHubSheet: View {
     @EnvironmentObject private var theme: ThemeStore
     @EnvironmentObject private var auth: AuthStore
     @ObservedObject private var qqAuth = QQMusicAuth.shared
-    @ObservedObject private var kugouAuth = KugouMusicAuth.shared
     @Environment(\.dismiss) private var dismiss
 
     @State private var showNeteaseLogin = false
     @State private var showQQLogin = false
-    @State private var showKugouLogin = false
     @State private var confirmNeteaseLogout = false
     @State private var confirmQQLogout = false
-    @State private var confirmKugouLogout = false
 
     var body: some View {
         BeansNavigationStack {
@@ -674,8 +663,7 @@ struct AccountHubSheet: View {
                         SectionHeader(title: "账号")
                         neteaseCard
                         qqCard
-                        kugouCard
-                        Text("网易云、QQ 音乐、酷狗音乐登录后可同步各平台歌单并提升可播成功率")
+                        Text("网易云、QQ 音乐登录后可同步歌单并提升可播成功率")
                             .font(BeansFont.appFont(11))
                             .foregroundStyle(Color.beansComment)
                             .padding(.horizontal, 4)
@@ -701,10 +689,6 @@ struct AccountHubSheet: View {
             QQLoginSheet()
                 .environmentObject(theme)
         }
-        .sheet(isPresented: $showKugouLogin) {
-            KugouLoginSheet()
-                .environmentObject(theme)
-        }
         .confirmationDialog("退出网易云登录？", isPresented: $confirmNeteaseLogout, titleVisibility: .visible) {
             Button("退出登录", role: .destructive) {
                 auth.logout()
@@ -716,13 +700,6 @@ struct AccountHubSheet: View {
             Button("退出登录", role: .destructive) {
                 qqAuth.logout()
                 ToastCenter.shared.show("已退出 QQ 音乐")
-            }
-            Button("取消", role: .cancel) {}
-        }
-        .confirmationDialog("退出酷狗音乐？", isPresented: $confirmKugouLogout, titleVisibility: .visible) {
-            Button("退出登录", role: .destructive) {
-                kugouAuth.logout()
-                ToastCenter.shared.show("已退出酷狗音乐")
             }
             Button("取消", role: .cancel) {}
         }
@@ -818,54 +795,6 @@ struct AccountHubSheet: View {
             .padding(14)
             .background {
                                 BeansGlass(shape: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(GlassPressButtonStyle(scale: 0.97))
-    }
-
-    /// 酷狗音乐账号卡片
-    private var kugouCard: some View {
-        Button {
-            BeansHaptics.tap()
-            if kugouAuth.isLoggedIn { confirmKugouLogout = true } else { showKugouLogin = true }
-        } label: {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(.white.opacity(0.06))
-                        .frame(width: 48, height: 48)
-                    Image("BrandKugou")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 48, height: 48)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("酷狗音乐")
-                        .font(BeansFont.appFont(15, .semibold))
-                        .foregroundStyle(Color.beansLabel)
-                    HStack(spacing: 6) {
-                        Text(kugouAuth.isLoggedIn ? (kugouAuth.nickname.isEmpty ? "已登录" : kugouAuth.nickname) : "未登录 · 网页 / Cookie 登录")
-                            .font(BeansFont.appFont(12))
-                            .foregroundStyle(Color.beansComment)
-                            .lineLimit(1)
-                        if kugouAuth.isLoggedIn, let badge = kugouAuth.vipBadge {
-                            VIPBadgeView(text: badge)
-                        }
-                    }
-                }
-                Spacer()
-                Text(kugouAuth.isLoggedIn ? "退出" : "登录")
-                    .font(BeansFont.appFont(13, .medium))
-                    .foregroundStyle(kugouAuth.isLoggedIn ? Color.red : Color.beansAmber)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(.ultraThinMaterial, in: Capsule())
-            }
-            .padding(14)
-            .background {
-                BeansGlass(shape: RoundedRectangle(cornerRadius: 20, style: .continuous))
             }
             .contentShape(Rectangle())
         }

@@ -340,20 +340,6 @@ final class PlayerManager: NSObject, ObservableObject {
                 if urlString == nil {
                     (urlString, resolvedThirdParty) = await qqFallback(song: song, quality: quality, enableUnblock: enableUnblock, strict: strictUnlock)
                 }
-            } else if song.source == .kugou {
-                urlString = try? await KugouMusicAPI.shared.songURL(song: song, quality: quality)
-                if urlString == nil, enableUnblock {
-                    resolvedThirdParty = await UnblockService.resolve(
-                        name: song.name,
-                        artists: song.artists,
-                        durationMS: Int(song.duration * 1000),
-                        neteaseID: 0,
-                        songSource: .kugou,
-                        kugouHash: song.kugouHash,
-                        strict: strictUnlock
-                    )
-                }
-                BeansLogger.shared.log("酷狗结果：\(song.name) 官方=\(urlString != nil ? "是" : "否") 第三方=\(resolvedThirdParty != nil ? "命中" : "未用/未命中")", level: .debug)
             } else {
                 (urlString, resolvedThirdParty) = await neteaseResolve(song: song, quality: quality, enableUnblock: enableUnblock, strict: strictUnlock)
             }
@@ -501,12 +487,12 @@ final class PlayerManager: NSObject, ObservableObject {
         // QQ 官方 CDN（isure.stream.qqmusic.qq.com 等）要求 UA/Referer 请求头，
         // 否则裸 GET 会被拒绝（403），导致播放成功却无声、进度条不动。
         let item: AVPlayerItem
-        if url.host?.contains("qq.com") == true || url.host?.contains("kugou.com") == true {
+        if url.host?.contains("qq.com") == true {
             var headers = [
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:80.0) Gecko/20100101 Firefox/80.0",
-                "Referer": url.host?.contains("kugou.com") == true ? "http://m.kugou.com/" : "https://y.qq.com/",
+                "Referer": "https://y.qq.com/",
             ]
-            let cookie = url.host?.contains("kugou.com") == true ? KugouMusicAuth.shared.cookieHeader : QQMusicAuth.shared.cookieHeader
+            let cookie = QQMusicAuth.shared.cookieHeader
             if !cookie.isEmpty { headers["Cookie"] = cookie }
             let asset = AVURLAsset(url: url, options: [
                 "AVURLAssetHTTPHeaderFieldsKey": headers

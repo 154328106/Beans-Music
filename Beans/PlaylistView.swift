@@ -154,8 +154,6 @@ struct PlaylistView: View {
         do {
             if playlist.source == .qq {
                 tracks = try await QQMusicAPI.shared.playlistSongs(listID: playlist.id)
-            } else if playlist.source == .kugou {
-                tracks = try await KugouMusicAPI.shared.playlistSongs(listID: playlist.id)
             } else {
                 tracks = try await NetEaseAPI.shared.playlistTracks(id: playlist.id)
             }

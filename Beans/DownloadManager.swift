@@ -116,14 +116,6 @@ final class DownloadManager {
     private func resolveURL(song: Song, quality: DownloadQuality) async -> String? {
         if song.source == .qq, let mid = song.qqMid {
             return try? await QQMusicAPI.shared.songURL(songmid: mid, mediaMid: song.qqMediaMid, br: quality.qqBR)
-        } else if song.source == .kugou {
-            let beansQuality: BeansAudioQuality
-            switch quality {
-            case .low: beansQuality = .standard
-            case .high: beansQuality = .exhigh
-            case .lossless: beansQuality = .lossless
-            }
-            return try? await KugouMusicAPI.shared.songURL(song: song, quality: beansQuality)
         } else {
             let urls = try? await NetEaseAPI.shared.songURLs(ids: [song.id], level: quality.neteaseLevel)
             return urls?[song.id]
