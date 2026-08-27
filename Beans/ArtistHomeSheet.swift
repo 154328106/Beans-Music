@@ -235,6 +235,8 @@ struct ArtistHomeSheet: View {
         errorMessage = nil
         if artistSource == .qq {
             await loadQQArtist()
+        } else if artistSource == .kugou {
+            await loadKugouArtist()
         } else {
             await loadNetEaseArtist()
         }
@@ -285,6 +287,27 @@ struct ArtistHomeSheet: View {
             songs = (try? await QQMusicAPI.shared.searchSongs(keyword: artistName, limit: 50)) ?? []
         }
         hotSongs = songs
+        loading = false
+    }
+
+    /// 酷狗暂未提供稳定的公开歌手主页数据时，使用官方综合搜索结果兜底。
+    /// 这里严格按歌手名过滤，避免把关键词搜索的其他歌手歌曲混进来。
+    private func loadKugouArtist() async {
+        let artists = (try? await KugouMusicAPI.shared.searchArtists(keyword: artistName, limit: 10)) ?? []
+        if let first = artists.first {
+            artist = first
+        }
+        let songs = (try? await KugouMusicAPI.shared.searchSongs(keyword: artistName, limit: 50)) ?? []
+        let normalizedName = artistName.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        hotSongs = songs.filter { song in
+            song.artists
+                .split(separator: "/")
+                .map { $0.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) }
+                .contains { $0 == normalizedName || $0.contains(normalizedName) || normalizedName.contains($0) }
+        }
+        if hotSongs.isEmpty {
+            hotSongs = songs
+        }
         loading = false
     }
 }

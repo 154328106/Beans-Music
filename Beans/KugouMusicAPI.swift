@@ -533,6 +533,75 @@ final class KugouMusicAPI {
         return String(data: data, encoding: .utf8) ?? ""
     }
 
+    // MARK: - 酷狗评论
+
+    struct KugouCommentPage {
+        let comments: [SongComment]
+        let total: Int
+    }
+
+    /// 酷狗官方移动评论接口。评论读取不依赖会员权限。
+    func comments(mixSongID: String, hash: String?, page: Int = 1, limit: Int = 30) async throws -> KugouCommentPage {
+        guard !mixSongID.isEmpty else {
+            throw NetEaseError.unknown("酷狗评论缺少歌曲 ID")
+        }
+        let response = try await gatewayRequest(
+            "/mcomment/v1/cmtlist",
+            baseURL: gateway,
+            method: "POST",
+            params: [
+                "mixsongid": mixSongID,
+                "need_show_image": "1",
+                "p": "\(max(page, 1))",
+                "pagesize": "\(min(max(limit, 1), 30))",
+                "show_classify": "1",
+                "show_hotword_list": "1",
+                "extdata": "0",
+                "code": "fc4be23b4e972707f36b8a828a93ba8a",
+            ],
+            headers: [
+                "x-router": "mcomment.service.kugou.com",
+                "Content-Type": "application/x-www-form-urlencoded",
+            ]
+        )
+        let rows = Self.deepArrays(
+            response.json,
+            names: ["commentlist", "comments", "list", "comment", "hot_comment", "hot_comments"]
+        )
+        var seen = Set<Int>()
+        let comments = rows.compactMap { raw -> SongComment? in
+            let rawID = Self.string(raw["commentid"] ?? raw["comment_id"] ?? raw["id"] ?? raw["cid"])
+            let content = Self.clean(Self.string(
+                raw["content"] ?? raw["comment_content"] ?? raw["commentContent"] ?? raw["text"]
+            ))
+            guard !content.isEmpty else { return nil }
+            let nickname = Self.clean(Self.string(
+                raw["nick"] ?? raw["nickname"] ?? raw["username"] ?? raw["user_name"] ?? raw["author"]
+            ))
+            let avatar = Self.string(
+                raw["avatarurl"] ?? raw["avatar_url"] ?? raw["avatar"] ?? raw["user_pic"] ?? raw["headurl"]
+            )
+            let timestamp = Self.double(
+                raw["addtime"] ?? raw["add_time"] ?? raw["time"] ?? raw["timestamp"] ?? raw["created_at"]
+            )
+            let seconds = timestamp > 10_000_000_000 ? timestamp / 1000 : timestamp
+            let id = rawID.isEmpty ? abs(content.hashValue) : abs(rawID.hashValue)
+            guard seen.insert(id).inserted else { return nil }
+            return SongComment(
+                id: id,
+                content: content,
+                nickname: nickname.isEmpty ? "酷狗用户" : nickname,
+                avatarURL: avatar.isEmpty ? nil : URL(string: avatar),
+                time: seconds > 0 ? Date(timeIntervalSince1970: seconds) : Date(),
+                likedCount: Self.int(raw["praisenum"] ?? raw["like_count"] ?? raw["liked_count"] ?? raw["likes"]),
+                isHot: page == 1
+            )
+        }
+        let total = Self.deepInt(response.json, names: ["total", "commenttotal", "comment_total", "count"])
+        BeansLogger.shared.log("酷狗评论：mixsongid=\(mixSongID) page=\(page) 返回 \(comments.count) 条", level: .debug)
+        return KugouCommentPage(comments: comments, total: total)
+    }
+
     private func registerDevice() async {
         let auth = KugouMusicAuth.shared
         let guid = auth.guid.isEmpty ? UUID().uuidString : auth.guid
@@ -713,6 +782,9 @@ final class KugouMusicAPI {
         normalized["album_sizable_cover"] = raw["Image"] ?? raw["ImageUrl"] ?? raw["AlbumImg"] ?? raw["album_sizable_cover"]
         normalized["pay_type"] = raw["PayType"] ?? raw["Privilege"] ?? raw["pay_type"]
         normalized["feetype"] = raw["FeeType"] ?? raw["feetype"]
+        normalized["privilege"] = raw["Privilege"] ?? raw["privilege"]
+        normalized["pay_type_320"] = raw["PayType320"] ?? raw["pay_type_320"]
+        normalized["pay_type_sq"] = raw["PayTypeSQ"] ?? raw["pay_type_sq"]
         return mapTrack(normalized)
     }
 
@@ -767,7 +839,8 @@ final class KugouMusicAPI {
                 int(raw["pay_type_sq"]),
                 int(raw["privilege"]),
                 int(raw["320privilege"]),
-                int(raw["sqprivilege"])
+                int(raw["sqprivilege"]),
+                deepFee(raw)
             )
         )
     }
@@ -820,9 +893,40 @@ final class KugouMusicAPI {
     }
 
     private static func clean(_ value: String) -> String {
-        value.replacingOccurrences(of: #"\.(mp3|flac|m4a|aac|ogg|wav)$"#, with: "", options: .regularExpression)
+        value
+            .replacingOccurrences(of: #"<[^>]+>"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+            .replacingOccurrences(of: #"\.(mp3|flac|m4a|aac|ogg|wav)$"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func deepFee(_ object: Any) -> Int {
+        let keys: Set<String> = [
+            "fee", "feetype", "pay_type", "paytype", "pay_type_320",
+            "pay_type_sq", "privilege", "media_privilege", "media_pay_type",
+            "320privilege", "sqprivilege"
+        ]
+        var best = 0
+        func walk(_ value: Any) {
+            if let dict = value as? [String: Any] {
+                for (key, child) in dict {
+                    if keys.contains(key.lowercased()) {
+                        best = max(best, int(child))
+                    }
+                    walk(child)
+                }
+            } else if let array = value as? [Any] {
+                array.forEach(walk)
+            }
+        }
+        walk(object)
+        return best
     }
 
     private static func deepString(_ obj: Any, names: [String]) -> String {

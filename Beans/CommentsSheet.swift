@@ -23,6 +23,9 @@ struct CommentsSheet: View {
     @State private var qqComments: [SongComment] = []
     @State private var qqTotal = 0
     @State private var qqPageNum = 0
+    @State private var kugouComments: [SongComment] = []
+    @State private var kugouTotal = 0
+    @State private var kugouPageNum = 1
     @State private var loading = true
     @State private var errorMessage: String?
     @State private var offset = 0
@@ -42,7 +45,7 @@ struct CommentsSheet: View {
                         Task { await load(reset: true) }
                     }
                 } else if song.source == .kugou {
-                    EmptyStateView(icon: "bubble.left", text: "暂未接入酷狗评论")
+                    kugouCommentList
                 } else if song.source == .qq {
                     qqCommentList
                 } else if let page {
@@ -98,12 +101,27 @@ struct CommentsSheet: View {
             qqComments = []
             qqTotal = 0
             qqPageNum = 0
+            kugouComments = []
+            kugouTotal = 0
+            kugouPageNum = 1
             loading = true
         }
         errorMessage = nil
         do {
             if song.source == .kugou {
-                qqComments = []
+                let mixSongID = song.kugouAlbumAudioId ?? ""
+                let result = try await KugouMusicAPI.shared.comments(
+                    mixSongID: mixSongID,
+                    hash: song.kugouHash,
+                    page: kugouPageNum,
+                    limit: limit
+                )
+                if reset {
+                    kugouComments = result.comments
+                } else {
+                    kugouComments.append(contentsOf: result.comments)
+                }
+                kugouTotal = result.total
                 loading = false
                 return
             } else if song.source == .qq {
@@ -170,6 +188,42 @@ struct CommentsSheet: View {
     private func loadQQMore() async {
         qqPageNum += 1
         await load(reset: false)
+    }
+
+    private var kugouCommentList: some View {
+        Group {
+            if kugouComments.isEmpty {
+                EmptyStateView(icon: "bubble.left", text: "暂无评论")
+            } else {
+                List {
+                    Section {
+                        Text(kugouTotal > 0
+                            ? "《\(song.name)》 · 酷狗音乐 \(kugouTotal) 条评论"
+                            : "《\(song.name)》 · 酷狗音乐 \(kugouComments.count) 条评论")
+                            .font(BeansFont.appFont(12))
+                            .foregroundStyle(Color.beansComment)
+                    }
+                    Section("评论") {
+                        ForEach(kugouComments) { comment in
+                            CommentRow(comment: comment)
+                        }
+                    }
+                    if kugouTotal <= 0 || kugouComments.count < kugouTotal {
+                        Section {
+                            Button {
+                                kugouPageNum += 1
+                                Task { await load(reset: false) }
+                            } label: {
+                                Text("加载更多")
+                                    .font(BeansFont.appFont(14, .semibold))
+                                    .foregroundStyle(Color.beansAmber)
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private func loadMore() async {
