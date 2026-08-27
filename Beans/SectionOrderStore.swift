@@ -19,13 +19,11 @@ enum SectionOrderStore {
         var order = UserDefaults.standard.stringArray(forKey: key) ?? defaults
         if key == libraryKey, order == ["本地音乐库", "我的歌单", "最近播放"] {
             order = libraryDefaults
-            UserDefaults.standard.set(order, forKey: key)
         }
         if key == profileKey {
             let removed = ["我的功能", "使用说明"]
             order.removeAll { removed.contains($0) }
             if order.isEmpty { order = defaults }
-            UserDefaults.standard.set(order, forKey: key)
         }
         for item in defaults where !order.contains(item) { order.append(item) }
         order = order.filter { defaults.contains($0) }
