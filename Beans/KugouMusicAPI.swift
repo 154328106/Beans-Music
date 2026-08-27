@@ -543,7 +543,8 @@ final class KugouMusicAPI {
             }
         }
         guard status == kCCSuccess else { return nil }
-        out.removeSubrange(outLen..<out.count)
+        let outputCapacity = out.count
+        out.removeSubrange(outLen..<outputCapacity)
         return out
     }
 
