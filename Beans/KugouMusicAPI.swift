@@ -8,6 +8,8 @@ final class KugouMusicAPI {
         case html(String)
     }
 
+    private static let likedListID = 3
+
     private let session: URLSession
     private let ua = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
@@ -113,6 +115,11 @@ final class KugouMusicAPI {
     }
 
     func playlistSongs(listID: Int) async throws -> [Song] {
+        if KugouMusicAuth.shared.isLoggedIn,
+           let songs = try? await userListSongs(listID: listID),
+           !songs.isEmpty {
+            return songs
+        }
         var comps = URLComponents(string: "http://mobilecdn.kugou.com/api/v3/special/song")!
         comps.queryItems = [
             URLQueryItem(name: "specialid", value: "\(listID)"),
@@ -135,26 +142,39 @@ final class KugouMusicAPI {
         BeansLogger.shared.log("酷狗歌单同步开始：userid=\(auth.userid) token=有", level: .debug)
         let requests = userPlaylistRequests(auth: auth)
         var lastError: Error?
+        var likedPlaylist = Playlist(id: Self.likedListID, name: "我喜欢", coverURL: nil, trackCount: 0, source: .kugou)
+        var likedHasSongs = false
+        if let likedSongs = try? await userListSongs(listID: Self.likedListID, pageSize: 200), !likedSongs.isEmpty {
+            likedHasSongs = true
+            likedPlaylist = Playlist(id: Self.likedListID, name: "我喜欢", coverURL: likedSongs.first?.coverURL, trackCount: likedSongs.count, source: .kugou)
+            BeansLogger.shared.log("酷狗我喜欢同步：listid=\(Self.likedListID) 返回 \(likedSongs.count) 首", level: .info)
+        } else {
+            BeansLogger.shared.log("酷狗我喜欢同步：listid=\(Self.likedListID) 暂未取到歌曲，仍保留入口", level: .debug)
+        }
         for (index, req) in requests.enumerated() {
             do {
                 let payload = try await playlistPayload(for: req)
-                let playlists = parseUserPlaylists(from: payload)
-                BeansLogger.shared.log("酷狗歌单同步[\(index + 1)/\(requests.count)]：\(requestLabel(req)) 返回 \(playlists.count) 个", level: playlists.isEmpty ? .debug : .info)
-                if playlists.isEmpty {
+                let parsed = parseUserPlaylists(from: payload)
+                BeansLogger.shared.log("酷狗歌单同步[\(index + 1)/\(requests.count)]：\(requestLabel(req)) 返回 \(parsed.count) 个", level: parsed.isEmpty ? .debug : .info)
+                if parsed.isEmpty {
                     BeansLogger.shared.log("酷狗歌单响应摘要[\(index + 1)]：\(Self.responseSummary(payload))", level: .debug)
                 }
-                if !playlists.isEmpty { return playlists }
+                var playlists = parsed
+                if !playlists.contains(where: { $0.id == Self.likedListID || $0.name == "我喜欢" }) {
+                    playlists.insert(likedPlaylist, at: 0)
+                }
+                if !parsed.isEmpty { return playlists }
             } catch {
                 lastError = error
                 BeansLogger.shared.log("酷狗歌单同步[\(index + 1)/\(requests.count)]：\(requestLabel(req)) 失败 \(error.localizedDescription)", level: .debug)
             }
         }
-        if let lastError { throw lastError }
-        return []
+        if let lastError, !likedHasSongs { throw lastError }
+        return [likedPlaylist]
     }
 
     private func userPlaylistRequests(auth: KugouMusicAuth) -> [URLRequest] {
-        var requests = publicUserPlaylistRequests(auth: auth)
+        var requests: [URLRequest] = []
         let appid = "1005"
         let clientver = "20489"
         let clienttime = "\(Int(Date().timeIntervalSince1970))"
@@ -199,26 +219,6 @@ final class KugouMusicAPI {
         return requests
     }
 
-    private func publicUserPlaylistRequests(auth: KugouMusicAuth) -> [URLRequest] {
-        let candidates = [
-            "https://www.kugou.com/yy/user/special/\(auth.userid).html",
-            "https://www.kugou.com/yy/special/index/1-\(auth.userid)-1.html",
-            "https://www.kugou.com/yy/special/index/1-\(auth.userid)-2.html",
-            "https://www.kugou.com/yy/special/index/1-\(auth.userid)-3.html"
-        ]
-        return candidates.compactMap { text in
-            guard let url = URL(string: text) else { return nil }
-            var req = URLRequest(url: url)
-            req.httpMethod = "GET"
-            req.timeoutInterval = 18
-            req.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
-            req.setValue("https://www.kugou.com/", forHTTPHeaderField: "Referer")
-            req.setValue(auth.cookieHeader, forHTTPHeaderField: "Cookie")
-            req.setValue("public", forHTTPHeaderField: "X-Beans-Kugou-Type")
-            return req
-        }
-    }
-
     private func legacyUserPlaylistRequests(auth: KugouMusicAuth) -> [URLRequest] {
         let baseItems = [
             "userid": "\(auth.userid)",
@@ -243,6 +243,50 @@ final class KugouMusicAPI {
             req.httpBody = try? JSONSerialization.data(withJSONObject: items)
             return req
         }
+    }
+
+    private func userListSongs(listID: Int, pageSize: Int = 500) async throws -> [Song] {
+        let auth = KugouMusicAuth.shared
+        guard auth.isLoggedIn, auth.userid > 0, !auth.token.isEmpty else { return [] }
+        let body = #"{"listid":\#(listID),"userid":\#(auth.userid),"area_code":1,"show_relate_goods":0,"pagesize":\#(pageSize),"allplatform":1,"show_cover":1,"type":0,"token":"\#(auth.token)","page":1}"#
+        let appid = "1005"
+        let clientver = "20489"
+        let clienttime = "\(Int(Date().timeIntervalSince1970))"
+        var params = [
+            "dfid": auth.dfid,
+            "mid": auth.mid,
+            "uuid": "-",
+            "appid": appid,
+            "clientver": clientver,
+            "clienttime": clienttime,
+            "token": auth.token,
+            "userid": "\(auth.userid)"
+        ]
+        params["signature"] = Self.androidSignature(params: params, data: body)
+        var comps = URLComponents(string: "https://gateway.kugou.com/v4/get_list_all_file")!
+        comps.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
+        guard let url = comps.url else { return [] }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.timeoutInterval = 18
+        req.setValue("Android15-1070-11083-46-0-DiscoveryDRADProtocol-wifi", forHTTPHeaderField: "User-Agent")
+        req.setValue(auth.dfid, forHTTPHeaderField: "dfid")
+        req.setValue(clienttime, forHTTPHeaderField: "clienttime")
+        req.setValue(auth.mid, forHTTPHeaderField: "mid")
+        req.setValue("1", forHTTPHeaderField: "kg-rc")
+        req.setValue("5d816a0", forHTTPHeaderField: "kg-thash")
+        req.setValue("1", forHTTPHeaderField: "kg-rec")
+        req.setValue("B9EDA08A64250DEFFBCADDEE00F8F25F", forHTTPHeaderField: "kg-rf")
+        req.setValue("cloudlist.service.kugou.com", forHTTPHeaderField: "x-router")
+        req.setValue(auth.cookieHeader, forHTTPHeaderField: "Cookie")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = body.data(using: .utf8)
+        let json = try await json(for: req)
+        let songs = parseSongs(fromUserList: json)
+        if songs.isEmpty {
+            BeansLogger.shared.log("酷狗歌单歌曲响应摘要：listid=\(listID) \(Self.responseSummary(.json(json)))", level: .debug)
+        }
+        return songs
     }
 
     private func parseUserPlaylists(from json: [String: Any]) -> [Playlist] {
@@ -306,6 +350,26 @@ final class KugouMusicAPI {
             }
         }
         return items
+    }
+
+    private func parseSongs(fromUserList json: [String: Any]) -> [Song] {
+        let root = json["data"] as? [String: Any] ?? json
+        var seen = Set<String>()
+        let directKeys = ["info", "list", "lists", "songs", "files", "file", "listinfo", "list_info"]
+        var candidates: [[String: Any]] = []
+        for key in directKeys {
+            if let array = root[key] as? [[String: Any]] {
+                candidates.append(contentsOf: array)
+            }
+        }
+        candidates.append(contentsOf: Self.findArrays(in: root).flatMap { $0 })
+        return candidates.compactMap { item in
+            guard let song = song(fromMobileItem: item) ?? song(from: item) else { return nil }
+            let key = song.kugouHash ?? "\(song.id)"
+            guard !seen.contains(key) else { return nil }
+            seen.insert(key)
+            return song
+        }
     }
 
     private func requestLabel(_ request: URLRequest) -> String {
@@ -459,27 +523,33 @@ final class KugouMusicAPI {
     }
 
     private func song(fromMobileItem item: [String: Any]) -> Song? {
-        let hash = item["hash"] as? String ?? item["FileHash"] as? String
+        let hash = item["hash"] as? String ?? item["Hash"] as? String ?? item["FileHash"] as? String ?? item["filehash"] as? String
         guard let hash, !hash.isEmpty else { return nil }
-        let filename = item["filename"] as? String ?? ""
+        let filename = item["filename"] as? String ?? item["FileName"] as? String ?? item["name"] as? String ?? item["songname"] as? String ?? item["SongName"] as? String ?? ""
         let parts = filename.components(separatedBy: " - ")
-        let artist = parts.count > 1 ? parts.dropLast().joined(separator: " - ") : ""
-        let name = parts.count > 1 ? parts.last ?? filename : filename
+        let artist = item["singername"] as? String
+            ?? item["SingerName"] as? String
+            ?? item["author_name"] as? String
+            ?? (parts.count > 1 ? parts.dropLast().joined(separator: " - ") : "")
+        let name = item["songname"] as? String
+            ?? item["SongName"] as? String
+            ?? item["name"] as? String
+            ?? (parts.count > 1 ? parts.last ?? filename : filename)
         let trans = item["trans_param"] as? [String: Any]
-        let id = Self.int(item["album_audio_id"]) ?? Self.int(item["audio_id"]) ?? abs(hash.hashValue)
+        let id = Self.int(item["album_audio_id"]) ?? Self.int(item["audio_id"]) ?? Self.int(item["Audioid"]) ?? Self.int(item["mixsongid"]) ?? Self.int(item["MixSongID"]) ?? abs(hash.hashValue)
         return Song(
             id: id,
             name: name,
             artists: artist,
-            album: item["remark"] as? String ?? "",
-            coverURL: Self.imageURL(trans?["union_cover"]),
-            duration: TimeInterval(Self.int(item["duration"]) ?? 0),
+            album: item["remark"] as? String ?? item["albumname"] as? String ?? item["AlbumName"] as? String ?? "",
+            coverURL: Self.imageURL(trans?["union_cover"]) ?? Self.imageURL(item["cover"]) ?? Self.imageURL(item["Cover"]) ?? Self.imageURL(item["image"]) ?? Self.imageURL(item["Image"]),
+            duration: TimeInterval(Self.int(item["duration"]) ?? Self.int(item["Duration"]) ?? 0),
             source: .kugou,
             kugouHash: hash,
-            kugouHQHash: item["320hash"] as? String,
-            kugouSQHash: item["sqhash"] as? String,
-            kugouAlbumID: Self.string(item["album_id"]),
-            kugouAudioID: Self.int(item["album_audio_id"]) ?? Self.int(item["audio_id"]),
+            kugouHQHash: item["320hash"] as? String ?? item["HQFileHash"] as? String,
+            kugouSQHash: item["sqhash"] as? String ?? item["SQFileHash"] as? String,
+            kugouAlbumID: Self.string(item["album_id"]).isEmpty ? Self.string(item["AlbumID"]) : Self.string(item["album_id"]),
+            kugouAudioID: Self.int(item["album_audio_id"]) ?? Self.int(item["audio_id"]) ?? Self.int(item["Audioid"]),
             fee: Self.int(item["pay_type"]) ?? Self.int(item["privilege"]) ?? 0
         )
     }
@@ -513,6 +583,11 @@ final class KugouMusicAPI {
         let count = Self.int(item["count"])
             ?? Self.int(item["songcount"])
             ?? Self.int(item["song_count"])
+            ?? Self.int(item["song_num"])
+            ?? Self.int(item["songs_count"])
+            ?? Self.int(item["total_song_num"])
+            ?? Self.int(item["file_count"])
+            ?? Self.int(item["filecount"])
             ?? Self.int(item["total"])
             ?? Self.int(item["songs"])
             ?? 0
