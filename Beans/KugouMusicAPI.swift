@@ -532,18 +532,18 @@ final class KugouMusicAPI {
 
     private static func crypt(_ data: Data, op: CCOperation, key: Data, iv: Data) -> Data? {
         var out = Data(count: data.count + kCCBlockSizeAES128)
+        let outputCapacity = out.count
         var outLen = 0
         let status = out.withUnsafeMutableBytes { outPtr in
             data.withUnsafeBytes { dataPtr in
                 key.withUnsafeBytes { keyPtr in
                     iv.withUnsafeBytes { ivPtr in
-                        CCCrypt(op, CCAlgorithm(kCCAlgorithmAES), CCOptions(kCCOptionPKCS7Padding), keyPtr.baseAddress, kCCKeySizeAES128, ivPtr.baseAddress, dataPtr.baseAddress, data.count, outPtr.baseAddress, out.count, &outLen)
+                        CCCrypt(op, CCAlgorithm(kCCAlgorithmAES), CCOptions(kCCOptionPKCS7Padding), keyPtr.baseAddress, kCCKeySizeAES128, ivPtr.baseAddress, dataPtr.baseAddress, data.count, outPtr.baseAddress, outputCapacity, &outLen)
                     }
                 }
             }
         }
         guard status == kCCSuccess else { return nil }
-        let outputCapacity = out.count
         out.removeSubrange(outLen..<outputCapacity)
         return out
     }
