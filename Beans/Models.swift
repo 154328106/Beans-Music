@@ -60,6 +60,7 @@ struct Song: Identifiable, Hashable, Codable {
     let kugouHash: String?
     let kugouAlbumAudioId: String?
     let kugouAlbumId: String?
+    let kugouQualityHashes: [String: String]?
     /// 付费/VIP 标记（网易云：0 免费、1 VIP、4 付费单曲；QQ：0 免费、非 0 付费）
     let fee: Int
 
@@ -91,7 +92,7 @@ struct Song: Identifiable, Hashable, Codable {
         }
     }
 
-    init(id: Int, name: String, artists: String, album: String, coverURL: URL?, duration: TimeInterval, source: SongSource = .netease, qqMid: String? = nil, qqMediaMid: String? = nil, kugouHash: String? = nil, kugouAlbumAudioId: String? = nil, kugouAlbumId: String? = nil, fee: Int = 0) {
+    init(id: Int, name: String, artists: String, album: String, coverURL: URL?, duration: TimeInterval, source: SongSource = .netease, qqMid: String? = nil, qqMediaMid: String? = nil, kugouHash: String? = nil, kugouAlbumAudioId: String? = nil, kugouAlbumId: String? = nil, kugouQualityHashes: [String: String]? = nil, fee: Int = 0) {
         self.id = id
         self.name = name
         self.artists = artists
@@ -104,6 +105,7 @@ struct Song: Identifiable, Hashable, Codable {
         self.kugouHash = kugouHash
         self.kugouAlbumAudioId = kugouAlbumAudioId
         self.kugouAlbumId = kugouAlbumId
+        self.kugouQualityHashes = kugouQualityHashes
         self.fee = fee
     }
 
@@ -133,10 +135,11 @@ struct Song: Identifiable, Hashable, Codable {
         kugouHash = nil
         kugouAlbumAudioId = nil
         kugouAlbumId = nil
+        kugouQualityHashes = nil
         fee = json["fee"] as? Int ?? 0
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, artists, album, coverURL, duration, source, qqMid, qqMediaMid, kugouHash, kugouAlbumAudioId, kugouAlbumId, fee }
+    private enum CodingKeys: String, CodingKey { case id, name, artists, album, coverURL, duration, source, qqMid, qqMediaMid, kugouHash, kugouAlbumAudioId, kugouAlbumId, kugouQualityHashes, fee }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -152,6 +155,7 @@ struct Song: Identifiable, Hashable, Codable {
         kugouHash = try c.decodeIfPresent(String.self, forKey: .kugouHash)
         kugouAlbumAudioId = try c.decodeIfPresent(String.self, forKey: .kugouAlbumAudioId)
         kugouAlbumId = try c.decodeIfPresent(String.self, forKey: .kugouAlbumId)
+        kugouQualityHashes = try c.decodeIfPresent([String: String].self, forKey: .kugouQualityHashes)
         fee = try c.decodeIfPresent(Int.self, forKey: .fee) ?? 0
     }
 
@@ -169,6 +173,7 @@ struct Song: Identifiable, Hashable, Codable {
         try c.encodeIfPresent(kugouHash, forKey: .kugouHash)
         try c.encodeIfPresent(kugouAlbumAudioId, forKey: .kugouAlbumAudioId)
         try c.encodeIfPresent(kugouAlbumId, forKey: .kugouAlbumId)
+        try c.encodeIfPresent(kugouQualityHashes, forKey: .kugouQualityHashes)
         try c.encode(fee, forKey: .fee)
     }
 }

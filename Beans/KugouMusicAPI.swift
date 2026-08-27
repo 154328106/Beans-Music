@@ -168,11 +168,38 @@ final class KugouMusicAPI {
     }
 
     func songURL(song: Song) async throws -> String? {
-        guard let hash = song.kugouHash, !hash.isEmpty else { return nil }
-        return try await songURL(hash: hash, albumAudioId: song.kugouAlbumAudioId, albumId: song.kugouAlbumId)
+        let hashes = Self.qualityHashCandidates(primary: song.kugouHash, qualityHashes: song.kugouQualityHashes)
+        guard !hashes.isEmpty else { return nil }
+        return try await songURL(hashes: hashes, albumAudioId: song.kugouAlbumAudioId, albumId: song.kugouAlbumId)
     }
 
     func songURL(hash: String, albumAudioId: String?, albumId: String?) async throws -> String? {
+        try await songURL(hashes: [hash], albumAudioId: albumAudioId, albumId: albumId)
+    }
+
+    private func songURL(hashes: [String], albumAudioId: String?, albumId: String?) async throws -> String? {
+        let auth = KugouMusicAuth.shared
+        let vipTypes = Self.vipTypeCandidates(auth.vipType)
+        var lastCode = 0
+        var lastStatus = 0
+        for hash in hashes {
+            for vipType in vipTypes {
+                let result = try await songURLOnce(hash: hash, albumAudioId: albumAudioId, albumId: albumId, vipType: vipType)
+                lastCode = result.code
+                lastStatus = result.status
+                if let url = result.url, !url.isEmpty {
+                    if vipType != auth.vipType {
+                        BeansLogger.shared.log("酷狗播放地址命中：hash=\(hash.prefix(8)) vipType=\(vipType)", level: .debug)
+                    }
+                    return url
+                }
+            }
+        }
+        BeansLogger.shared.log("酷狗播放地址为空：hash候选=\(hashes.count) vipType=\(vipTypes.map(String.init).joined(separator: \"/\")) status=\(lastStatus) code=\(lastCode)", level: .debug)
+        return nil
+    }
+
+    private func songURLOnce(hash: String, albumAudioId: String?, albumId: String?, vipType: Int) async throws -> (url: String?, status: Int, code: Int) {
         let auth = KugouMusicAuth.shared
         let h = hash.uppercased()
         var comps = URLComponents(string: "https://trackercdn.kugou.com/i/v2/")!
@@ -185,7 +212,7 @@ final class KugouMusicAPI {
             "mid": auth.mid,
             "userid": auth.userId.isEmpty ? "0" : auth.userId,
             "version": clientver,
-            "vipType": "\(auth.vipType)",
+            "vipType": "\(vipType)",
             "token": auth.token.isEmpty ? "0" : auth.token,
             "key": "\(h)\(playSalt)\(appid)\(auth.mid)\(auth.userId.isEmpty ? "0" : auth.userId)".kgMD5Hex,
         ]
@@ -196,12 +223,14 @@ final class KugouMusicAPI {
         request.setValue(androidUA, forHTTPHeaderField: "User-Agent")
         request.setValue(auth.cookieHeader, forHTTPHeaderField: "Cookie")
         let (data, response) = try await session.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else { return (nil, 0, -1) }
         var text = String(data: data, encoding: .utf8) ?? ""
         text = text.replacingOccurrences(of: "<!--KG_TAG_RES_START-->", with: "").replacingOccurrences(of: "<!--KG_TAG_RES_END-->", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let json = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] else { return nil }
+        guard let json = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] else { return (nil, 0, -2) }
+        let status = Self.deepInt(json, names: ["status"])
+        let code = Self.deepInt(json, names: ["error_code", "errcode", "code"])
         let raw = Self.deepString(json, names: ["play_url", "play_backup_url", "url", "src", "backup_url"])
-        return raw.isEmpty ? nil : raw
+        return (raw.isEmpty ? nil : raw, status, code)
     }
 
     func lyric(hash: String, duration: TimeInterval) async -> String {
@@ -395,7 +424,8 @@ final class KugouMusicAPI {
 
     private static func mapTrack(_ raw: [String: Any]) -> Song? {
         let trans = raw["trans_param"] as? [String: Any] ?? raw["transParam"] as? [String: Any] ?? [:]
-        let hash = string(raw["hash"] ?? raw["Hash"] ?? raw["file_hash"] ?? raw["FileHash"] ?? raw["audio_hash"] ?? raw["320hash"] ?? raw["128hash"] ?? raw["sqhash"] ?? trans["ogg_320_hash"] ?? trans["ogg_128_hash"])
+        let qualityHashes = qualityHashes(raw: raw, trans: trans)
+        let hash = string(raw["hash"] ?? raw["Hash"] ?? raw["file_hash"] ?? raw["FileHash"] ?? raw["audio_hash"] ?? qualityHashes["exhigh"] ?? qualityHashes["standard"] ?? qualityHashes["lossless"])
         let albumAudioId = string(raw["album_audio_id"] ?? raw["albumAudioId"] ?? raw["audio_id"] ?? raw["audioid"] ?? raw["mixsongid"] ?? raw["songid"] ?? raw["id"])
         let stable = abs((hash.isEmpty ? albumAudioId : hash).hashValue)
         var title = clean(string(raw["songname"] ?? raw["song_name"] ?? raw["name"] ?? raw["title"]))
@@ -426,8 +456,56 @@ final class KugouMusicAPI {
             kugouHash: hash,
             kugouAlbumAudioId: albumAudioId,
             kugouAlbumId: string(raw["album_id"] ?? raw["albumid"] ?? raw["AlbumID"] ?? raw["albumId"]),
+            kugouQualityHashes: qualityHashes.isEmpty ? nil : qualityHashes,
             fee: int(raw["privilege"] ?? raw["media_privilege"] ?? raw["media_pay_type"] ?? raw["pay_type"])
         )
+    }
+
+    private static func qualityHashes(raw: [String: Any], trans: [String: Any]) -> [String: String] {
+        let values: [(String, String)] = [
+            ("standard", string(raw["128hash"] ?? raw["hash"] ?? raw["Hash"] ?? raw["file_hash"] ?? raw["FileHash"] ?? trans["ogg_128_hash"])),
+            ("exhigh", string(raw["320hash"] ?? raw["HQFileHash"] ?? trans["ogg_320_hash"] ?? raw["hash"] ?? raw["Hash"] ?? raw["file_hash"] ?? raw["FileHash"])),
+            ("lossless", string(raw["sqhash"] ?? raw["SQFileHash"] ?? raw["flac_hash"] ?? raw["hash"] ?? raw["Hash"] ?? raw["file_hash"] ?? raw["FileHash"])),
+            ("hires", string(raw["hrhash"] ?? raw["high_hash"] ?? raw["sqhash"] ?? raw["SQFileHash"] ?? raw["hash"] ?? raw["Hash"] ?? raw["file_hash"] ?? raw["FileHash"])),
+        ]
+        var result: [String: String] = [:]
+        for (key, value) in values where !value.isEmpty {
+            result[key] = value
+        }
+        return result
+    }
+
+    private static func qualityHashCandidates(primary: String?, qualityHashes: [String: String]?) -> [String] {
+        let requested = BeansAudioQuality.current
+        let order: [String]
+        switch requested {
+        case .hires:
+            order = ["hires", "lossless", "exhigh", "standard"]
+        case .lossless:
+            order = ["lossless", "exhigh", "standard"]
+        case .exhigh, .higher:
+            order = ["exhigh", "standard"]
+        case .standard:
+            order = ["standard"]
+        }
+        var seen = Set<String>()
+        var result: [String] = []
+        func append(_ value: String?) {
+            let hash = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            guard !hash.isEmpty, !seen.contains(hash) else { return }
+            seen.insert(hash)
+            result.append(hash)
+        }
+        for key in order { append(qualityHashes?[key]) }
+        append(primary)
+        ["hires", "lossless", "exhigh", "standard"].forEach { append(qualityHashes?[$0]) }
+        return result
+    }
+
+    private static func vipTypeCandidates(_ vipType: Int) -> [Int] {
+        var values = [vipType, 1, 6, 0]
+        var seen = Set<Int>()
+        return values.filter { seen.insert($0).inserted }
     }
 
     private static func clean(_ value: String) -> String {
