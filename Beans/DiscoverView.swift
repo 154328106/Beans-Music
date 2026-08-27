@@ -18,15 +18,20 @@ struct DiscoverView: View {
     /// 主页板块顺序（每日推荐 / 排行榜 / 歌单广场，可自定义）
     @State private var homeOrder = SectionOrderStore.load(SectionOrderStore.homeKey, defaults: SectionOrderStore.homeDefaults)
 
-    /// 当前平台可排序的板块：QQ / 酷狗音乐没有网易云分类歌单广场，保留推荐歌单区
+    /// 当前平台可排序的板块：QQ 没有网易云分类歌单广场，保留推荐歌单区
     private var availableSections: [String] {
         source == .netease ? SectionOrderStore.homeDefaults : Array(SectionOrderStore.homeDefaults.dropLast()) + ["歌单广场"]
     }
     /// 首页数据源：记住上次选择，下次打开仍保持该平台（默认网易云）
     @AppStorage("beans.homeSource") private var homeSourceRaw = SearchProvider.netease.rawValue
+    /// 主页只展示网易云 / QQ 音乐；酷狗保留登录与歌单同步，不进入主页推荐流
+    private let homeProviders: [SearchProvider] = [.netease, .qq]
     /// 首页数据源：网易云 / QQ音乐（与搜索页同一控件样式）
     private var source: SearchProvider {
-        SearchProvider(rawValue: homeSourceRaw) ?? .netease
+        guard let saved = SearchProvider(rawValue: homeSourceRaw), homeProviders.contains(saved) else {
+            return .netease
+        }
+        return saved
     }
     @State private var qqTopLists: [QQTopInfo] = []
     @State private var selectedQQTopList: QQTopInfo?
@@ -82,6 +87,12 @@ struct DiscoverView: View {
             .beansScrollIndicatorsHidden()
             .refreshable { await load(force: true) }
             .task(id: source) { await load(force: false) }
+            .onAppear {
+                guard let saved = SearchProvider(rawValue: homeSourceRaw), homeProviders.contains(saved) else {
+                    homeSourceRaw = SearchProvider.netease.rawValue
+                    return
+                }
+            }
             .onChange(of: source) { _ in
                 homeOrder = SectionOrderStore.load(SectionOrderStore.homeKey, defaults: availableSections)
             }
@@ -154,7 +165,7 @@ struct DiscoverView: View {
     /// 平台选择（网易云 / QQ音乐，样式与搜索页一致）
     private var providerPicker: some View {
         HStack(spacing: 4) {
-            ForEach(SearchProvider.allCases) { p in
+            ForEach(homeProviders) { p in
                 Button {
                     BeansHaptics.tap()
                     if source != p { homeSourceRaw = p.rawValue }
@@ -550,11 +561,8 @@ struct DiscoverView: View {
             snapshot.qqTopLists = tl
             snapshot.personalized = pp
         case .kugou:
-            async let a = KugouMusicAPI.shared.searchSongs(keyword: "华语热歌", limit: 30)
-            async let c = KugouMusicAPI.shared.searchPlaylists(keyword: "热门", limit: 12)
-            let (dr, pp) = try await (a, c)
-            snapshot.dailySongs = dr
-            snapshot.personalized = pp
+            // 酷狗主页内容已下线：账号登录与歌单同步仍在音乐库中保留。
+            break
         case .netease:
             async let a = NetEaseAPI.shared.topLists()
             async let b = NetEaseAPI.shared.dailyRecommend()
