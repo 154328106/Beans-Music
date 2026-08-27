@@ -15,10 +15,12 @@ final class KugouMusicAuth: ObservableObject {
 
     private init() {
         if let saved = defaults.dictionary(forKey: cookieKey) as? [String: String], !saved.isEmpty {
-            if hasValidLogin(saved) {
-                cookies = saved
+            let normalized = normalizeCookies(saved)
+            if hasValidLogin(normalized) {
+                cookies = normalized
+                defaults.set(cookies, forKey: cookieKey)
                 isLoggedIn = true
-                nickname = defaults.string(forKey: nickKey) ?? Self.fallbackNickname(saved)
+                nickname = defaults.string(forKey: nickKey) ?? Self.fallbackNickname(normalized)
                 vipBadge = defaults.string(forKey: vipKey)
             } else {
                 defaults.removeObject(forKey: cookieKey)
@@ -32,8 +34,15 @@ final class KugouMusicAuth: ObservableObject {
         Int(cookies["userid"] ?? cookies["KugooID"] ?? cookies["KuGooID"] ?? cookies["kg_uid"] ?? cookies["kguser_userid"] ?? "") ?? 0
     }
 
+    var tokenSource: String {
+        for key in ["token", "kg_token", "kguser_token", "t"] where cookies[key]?.isEmpty == false {
+            return key
+        }
+        return "缺失"
+    }
+
     var token: String {
-        cookies["token"] ?? cookies["t"] ?? cookies["kg_token"] ?? cookies["kguser_token"] ?? ""
+        cookies["token"] ?? cookies["kg_token"] ?? cookies["kguser_token"] ?? cookies["t"] ?? ""
     }
 
     var dfid: String {
@@ -74,12 +83,13 @@ final class KugouMusicAuth: ObservableObject {
 
     @discardableResult
     func importCookies(_ dict: [String: String], nickname: String?) -> Bool {
-        guard hasValidLogin(dict) else {
+        let normalized = normalizeCookies(dict)
+        guard hasValidLogin(normalized) else {
             return false
         }
-        cookies = dict
+        cookies = normalized
         isLoggedIn = true
-        self.nickname = nickname ?? Self.fallbackNickname(dict)
+        self.nickname = nickname ?? Self.fallbackNickname(normalized)
         defaults.set(cookies, forKey: cookieKey)
         defaults.set(self.nickname, forKey: nickKey)
         NotificationCenter.default.post(name: .beansKugouLoginDidUpdate, object: nil)
@@ -98,8 +108,9 @@ final class KugouMusicAuth: ObservableObject {
     }
 
     func hasValidLogin(_ dict: [String: String]) -> Bool {
-        let uid = Int(dict["userid"] ?? dict["KugooID"] ?? dict["KuGooID"] ?? dict["kg_uid"] ?? dict["kguser_userid"] ?? "") ?? 0
-        let tokenValue = dict["token"] ?? dict["t"] ?? dict["kg_token"] ?? dict["kguser_token"] ?? ""
+        let normalized = normalizeCookies(dict)
+        let uid = Int(normalized["userid"] ?? normalized["KugooID"] ?? normalized["KuGooID"] ?? normalized["kg_uid"] ?? normalized["kguser_userid"] ?? "") ?? 0
+        let tokenValue = normalized["token"] ?? normalized["t"] ?? normalized["kg_token"] ?? normalized["kguser_token"] ?? ""
         return uid > 0 && !tokenValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -153,6 +164,39 @@ final class KugouMusicAuth: ObservableObject {
         }
         let uid = dict["userid"] ?? dict["KugooID"] ?? dict["KuGooID"] ?? ""
         return uid.isEmpty ? "酷狗音乐用户" : "酷狗音乐用户 \(uid)"
+    }
+
+    private func normalizeCookies(_ input: [String: String]) -> [String: String] {
+        var dict = input
+        if dict["userid"]?.isEmpty ?? true {
+            if let uid = dict["KugooID"] ?? dict["KuGooID"] ?? dict["kg_uid"] ?? dict["kguser_userid"], !uid.isEmpty {
+                dict["userid"] = uid
+            }
+        }
+        if dict["token"]?.isEmpty ?? true {
+            if let token = dict["kg_token"] ?? dict["kguser_token"], !token.isEmpty {
+                dict["token"] = token
+            }
+        }
+        if dict["KUGOU_API_GUID"]?.isEmpty ?? true {
+            dict["KUGOU_API_GUID"] = UUID().uuidString.lowercased()
+        }
+        if dict["KUGOU_API_MID"]?.isEmpty ?? true {
+            dict["KUGOU_API_MID"] = Self.randomDecimalID(length: 39)
+        }
+        if dict["KUGOU_API_DEV"]?.isEmpty ?? true {
+            dict["KUGOU_API_DEV"] = UUID().uuidString.replacingOccurrences(of: "-", with: "").uppercased()
+        }
+        if dict["KUGOU_API_MAC"]?.isEmpty ?? true {
+            dict["KUGOU_API_MAC"] = "02:00:00:00:00:00"
+        }
+        return dict
+    }
+
+    private static func randomDecimalID(length: Int) -> String {
+        let first = String(Int.random(in: 1...9))
+        let rest = (0..<max(0, length - 1)).map { _ in String(Int.random(in: 0...9)) }.joined()
+        return first + rest
     }
 
     private static let ua = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"

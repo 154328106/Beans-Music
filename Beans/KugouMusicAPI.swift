@@ -8,6 +8,17 @@ final class KugouMusicAPI {
         case html(String)
     }
 
+    private struct APIPlatform {
+        let name: String
+        let appid: String
+        let clientver: String
+        let androidSalt: String
+
+        static let standard = APIPlatform(name: "标准版", appid: "1005", clientver: "20489", androidSalt: "OIlwieks28dk2k092lksi2UIkp")
+        static let lite = APIPlatform(name: "概念版", appid: "3116", clientver: "11440", androidSalt: "LnT6xpN3khm36zse0QzvmgTZ3waWdRSA")
+        static let all = [standard, lite]
+    }
+
     private static let likedListID = 3
 
     private let session: URLSession
@@ -139,17 +150,17 @@ final class KugouMusicAPI {
             BeansLogger.shared.log("酷狗歌单同步跳过：登录态缺少 userid 或 token", level: .error)
             return []
         }
-        BeansLogger.shared.log("酷狗歌单同步开始：userid=\(auth.userid) token=有", level: .debug)
+        BeansLogger.shared.log("酷狗歌单同步开始：userid=\(auth.userid) token=有 来源=\(auth.tokenSource) mid=\(auth.mid == "-" ? "缺失" : "有") dfid=\(auth.dfid == "-" ? "缺失" : "有")", level: .debug)
         let requests = userPlaylistRequests(auth: auth)
         var lastError: Error?
-        var likedPlaylist = Playlist(id: Self.likedListID, name: "我喜欢", coverURL: nil, trackCount: 0, source: .kugou)
+        var likedPlaylist: Playlist?
         var likedHasSongs = false
         if let likedSongs = try? await userListSongs(listID: Self.likedListID, pageSize: 200), !likedSongs.isEmpty {
             likedHasSongs = true
             likedPlaylist = Playlist(id: Self.likedListID, name: "我喜欢", coverURL: likedSongs.first?.coverURL, trackCount: likedSongs.count, source: .kugou)
             BeansLogger.shared.log("酷狗我喜欢同步：listid=\(Self.likedListID) 返回 \(likedSongs.count) 首", level: .info)
         } else {
-            BeansLogger.shared.log("酷狗我喜欢同步：listid=\(Self.likedListID) 暂未取到歌曲，仍保留入口", level: .debug)
+            BeansLogger.shared.log("酷狗我喜欢同步：listid=\(Self.likedListID) 暂未取到歌曲，不显示空入口", level: .debug)
         }
         for (index, req) in requests.enumerated() {
             do {
@@ -160,7 +171,7 @@ final class KugouMusicAPI {
                     BeansLogger.shared.log("酷狗歌单响应摘要[\(index + 1)]：\(Self.responseSummary(payload))", level: .debug)
                 }
                 var playlists = parsed
-                if !playlists.contains(where: { $0.id == Self.likedListID || $0.name == "我喜欢" }) {
+                if let likedPlaylist, !playlists.contains(where: { $0.id == Self.likedListID || $0.name == "我喜欢" }) {
                     playlists.insert(likedPlaylist, at: 0)
                 }
                 if !parsed.isEmpty { return playlists }
@@ -170,50 +181,50 @@ final class KugouMusicAPI {
             }
         }
         if let lastError, !likedHasSongs { throw lastError }
-        return [likedPlaylist]
+        return likedPlaylist.map { [$0] } ?? []
     }
 
     private func userPlaylistRequests(auth: KugouMusicAuth) -> [URLRequest] {
         var requests: [URLRequest] = []
-        let appid = "1005"
-        let clientver = "20489"
-        let clienttime = "\(Int(Date().timeIntervalSince1970))"
-        let baseParams = [
-            "dfid": auth.dfid,
-            "mid": auth.mid,
-            "uuid": "-",
-            "appid": appid,
-            "clientver": clientver,
-            "clienttime": clienttime,
-            "token": auth.token,
-            "userid": "\(auth.userid)",
-            "plat": "1"
-        ]
         let types = ["2", "1", "0"]
-        for type in types {
-            let body = #"{"userid":\#(auth.userid),"token":"\#(auth.token)","total_ver":979,"type":\#(type),"page":1,"pagesize":200}"#
-            var params = baseParams
-            params["signature"] = Self.androidSignature(params: params, data: body)
-            var comps = URLComponents(string: "https://gateway.kugou.com/v7/get_all_list")!
-            comps.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
-            guard let url = comps.url else { continue }
-            var req = URLRequest(url: url)
-            req.httpMethod = "POST"
-            req.timeoutInterval = 18
-            req.setValue("Android15-1070-11083-46-0-DiscoveryDRADProtocol-wifi", forHTTPHeaderField: "User-Agent")
-            req.setValue(auth.dfid, forHTTPHeaderField: "dfid")
-            req.setValue(clienttime, forHTTPHeaderField: "clienttime")
-            req.setValue(auth.mid, forHTTPHeaderField: "mid")
-            req.setValue("1", forHTTPHeaderField: "kg-rc")
-            req.setValue("5d816a0", forHTTPHeaderField: "kg-thash")
-            req.setValue("1", forHTTPHeaderField: "kg-rec")
-            req.setValue("B9EDA08A64250DEFFBCADDEE00F8F25F", forHTTPHeaderField: "kg-rf")
-            req.setValue("cloudlist.service.kugou.com", forHTTPHeaderField: "x-router")
-            req.setValue(auth.cookieHeader, forHTTPHeaderField: "Cookie")
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            req.setValue(type, forHTTPHeaderField: "X-Beans-Kugou-Type")
-            req.httpBody = body.data(using: .utf8)
-            requests.append(req)
+        for platform in APIPlatform.all {
+            let clienttime = "\(Int(Date().timeIntervalSince1970))"
+            let baseParams = [
+                "dfid": auth.dfid,
+                "mid": auth.mid,
+                "uuid": "-",
+                "appid": platform.appid,
+                "clientver": platform.clientver,
+                "clienttime": clienttime,
+                "token": auth.token,
+                "userid": "\(auth.userid)",
+                "plat": "1"
+            ]
+            for type in types {
+                let body = #"{"userid":\#(auth.userid),"token":"\#(auth.token)","total_ver":979,"type":\#(type),"page":1,"pagesize":200}"#
+                var params = baseParams
+                params["signature"] = Self.androidSignature(params: params, data: body, platform: platform)
+                var comps = URLComponents(string: "https://gateway.kugou.com/v7/get_all_list")!
+                comps.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
+                guard let url = comps.url else { continue }
+                var req = URLRequest(url: url)
+                req.httpMethod = "POST"
+                req.timeoutInterval = 18
+                req.setValue("Android15-1070-11083-46-0-DiscoveryDRADProtocol-wifi", forHTTPHeaderField: "User-Agent")
+                req.setValue(auth.dfid, forHTTPHeaderField: "dfid")
+                req.setValue(clienttime, forHTTPHeaderField: "clienttime")
+                req.setValue(auth.mid, forHTTPHeaderField: "mid")
+                req.setValue("1", forHTTPHeaderField: "kg-rc")
+                req.setValue("5d816a0", forHTTPHeaderField: "kg-thash")
+                req.setValue("1", forHTTPHeaderField: "kg-rec")
+                req.setValue("B9EDA08A64250DEFFBCADDEE00F8F25F", forHTTPHeaderField: "kg-rf")
+                req.setValue("cloudlist.service.kugou.com", forHTTPHeaderField: "x-router")
+                req.setValue(auth.cookieHeader, forHTTPHeaderField: "Cookie")
+                req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                req.setValue("\(platform.name)-\(type)", forHTTPHeaderField: "X-Beans-Kugou-Type")
+                req.httpBody = body.data(using: .utf8)
+                requests.append(req)
+            }
         }
         requests.append(contentsOf: legacyUserPlaylistRequests(auth: auth))
         return requests
@@ -249,44 +260,53 @@ final class KugouMusicAPI {
         let auth = KugouMusicAuth.shared
         guard auth.isLoggedIn, auth.userid > 0, !auth.token.isEmpty else { return [] }
         let body = #"{"listid":\#(listID),"userid":\#(auth.userid),"area_code":1,"show_relate_goods":0,"pagesize":\#(pageSize),"allplatform":1,"show_cover":1,"type":0,"token":"\#(auth.token)","page":1}"#
-        let appid = "1005"
-        let clientver = "20489"
-        let clienttime = "\(Int(Date().timeIntervalSince1970))"
-        var params = [
-            "dfid": auth.dfid,
-            "mid": auth.mid,
-            "uuid": "-",
-            "appid": appid,
-            "clientver": clientver,
-            "clienttime": clienttime,
-            "token": auth.token,
-            "userid": "\(auth.userid)"
-        ]
-        params["signature"] = Self.androidSignature(params: params, data: body)
-        var comps = URLComponents(string: "https://gateway.kugou.com/v4/get_list_all_file")!
-        comps.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
-        guard let url = comps.url else { return [] }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.timeoutInterval = 18
-        req.setValue("Android15-1070-11083-46-0-DiscoveryDRADProtocol-wifi", forHTTPHeaderField: "User-Agent")
-        req.setValue(auth.dfid, forHTTPHeaderField: "dfid")
-        req.setValue(clienttime, forHTTPHeaderField: "clienttime")
-        req.setValue(auth.mid, forHTTPHeaderField: "mid")
-        req.setValue("1", forHTTPHeaderField: "kg-rc")
-        req.setValue("5d816a0", forHTTPHeaderField: "kg-thash")
-        req.setValue("1", forHTTPHeaderField: "kg-rec")
-        req.setValue("B9EDA08A64250DEFFBCADDEE00F8F25F", forHTTPHeaderField: "kg-rf")
-        req.setValue("cloudlist.service.kugou.com", forHTTPHeaderField: "x-router")
-        req.setValue(auth.cookieHeader, forHTTPHeaderField: "Cookie")
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = body.data(using: .utf8)
-        let json = try await json(for: req)
-        let songs = parseSongs(fromUserList: json)
-        if songs.isEmpty {
-            BeansLogger.shared.log("酷狗歌单歌曲响应摘要：listid=\(listID) \(Self.responseSummary(.json(json)))", level: .debug)
+        var lastError: Error?
+        for platform in APIPlatform.all {
+            let clienttime = "\(Int(Date().timeIntervalSince1970))"
+            var params = [
+                "dfid": auth.dfid,
+                "mid": auth.mid,
+                "uuid": "-",
+                "appid": platform.appid,
+                "clientver": platform.clientver,
+                "clienttime": clienttime,
+                "token": auth.token,
+                "userid": "\(auth.userid)"
+            ]
+            params["signature"] = Self.androidSignature(params: params, data: body, platform: platform)
+            var comps = URLComponents(string: "https://gateway.kugou.com/v4/get_list_all_file")!
+            comps.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
+            guard let url = comps.url else { continue }
+            var req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            req.timeoutInterval = 18
+            req.setValue("Android15-1070-11083-46-0-DiscoveryDRADProtocol-wifi", forHTTPHeaderField: "User-Agent")
+            req.setValue(auth.dfid, forHTTPHeaderField: "dfid")
+            req.setValue(clienttime, forHTTPHeaderField: "clienttime")
+            req.setValue(auth.mid, forHTTPHeaderField: "mid")
+            req.setValue("1", forHTTPHeaderField: "kg-rc")
+            req.setValue("5d816a0", forHTTPHeaderField: "kg-thash")
+            req.setValue("1", forHTTPHeaderField: "kg-rec")
+            req.setValue("B9EDA08A64250DEFFBCADDEE00F8F25F", forHTTPHeaderField: "kg-rf")
+            req.setValue("cloudlist.service.kugou.com", forHTTPHeaderField: "x-router")
+            req.setValue(auth.cookieHeader, forHTTPHeaderField: "Cookie")
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = body.data(using: .utf8)
+            do {
+                let json = try await json(for: req)
+                let songs = parseSongs(fromUserList: json)
+                if songs.isEmpty {
+                    BeansLogger.shared.log("酷狗歌单歌曲响应摘要：listid=\(listID) 平台=\(platform.name) \(Self.responseSummary(.json(json)))", level: .debug)
+                } else {
+                    BeansLogger.shared.log("酷狗歌单歌曲同步：listid=\(listID) 平台=\(platform.name) 返回 \(songs.count) 首", level: .info)
+                    return songs
+                }
+            } catch {
+                lastError = error
+            }
         }
-        return songs
+        if let lastError { throw lastError }
+        return []
     }
 
     private func parseUserPlaylists(from json: [String: Any]) -> [Playlist] {
@@ -780,8 +800,8 @@ final class KugouMusicAPI {
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 
-    private static func androidSignature(params: [String: String], data: String) -> String {
-        let salt = "OIlwieks28dk2k092lksi2UIkp"
+    private static func androidSignature(params: [String: String], data: String, platform: APIPlatform = .standard) -> String {
+        let salt = platform.androidSalt
         let paramsString = params.keys.sorted().map { "\($0)=\(params[$0] ?? "")" }.joined()
         return md5(salt + paramsString + data + salt)
     }
