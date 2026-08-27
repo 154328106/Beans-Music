@@ -5,7 +5,11 @@ import SwiftUI
 /// 可自由调整的底部组件
 enum PlayerLayoutPart: String, CaseIterable, Identifiable {
     case progress = "进度条"
-    case controls = "控制按钮"
+    case controls = "控制行"
+    case loop = "循环按钮"
+    case previous = "上一首"
+    case next = "下一首"
+    case queue = "播放列表"
     case lyric = "歌词"
     case grabber = "指示线"
 
@@ -63,11 +67,13 @@ enum PlayerLayoutStore {
     static func defaultEntry(for part: PlayerLayoutPart) -> PlayerLayoutEntry {
         switch part {
         case .progress:
-            return PlayerLayoutEntry(x: 0, y: 22, scale: 1)
+            return PlayerLayoutEntry(x: 0, y: 0, scale: 1)
         case .controls:
-            return PlayerLayoutEntry(x: 0, y: 22, scale: 1.15)
+            return PlayerLayoutEntry(x: 0, y: 0, scale: 1)
+        case .loop, .previous, .next, .queue:
+            return PlayerLayoutEntry(x: 0, y: 0, scale: 1)
         case .grabber:
-            return PlayerLayoutEntry(x: 0, y: 34, scale: 1)
+            return PlayerLayoutEntry(x: 0, y: 0, scale: 1)
         case .lyric:
             return PlayerLayoutEntry(x: 0, y: 0, scale: 1)
         }

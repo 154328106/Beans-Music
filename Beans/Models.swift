@@ -285,9 +285,9 @@ struct LyricLine: Identifiable, Hashable {
 enum LyricParser {
     /// 解析歌词；可选传入翻译歌词（网易云 tlyric），按时间戳合并到对应行
     static func parse(_ raw: String, translationRaw: String? = nil) -> [LyricLine] {
-        var lines = parseCore(raw)
+        var lines = parseCore(raw, offset: declaredOffsetSeconds(in: raw))
         if let translationRaw, !translationRaw.isEmpty {
-            let trans = parseCore(translationRaw)
+            let trans = parseCore(translationRaw, offset: declaredOffsetSeconds(in: translationRaw))
             var byTime: [Double: String] = [:]
             for t in trans where !t.text.isEmpty {
                 byTime[t.time] = t.text
@@ -301,16 +301,27 @@ enum LyricParser {
         return lines
     }
 
-    private static func parseCore(_ raw: String) -> [LyricLine] {
+    private static func parseCore(_ raw: String, offset: Double) -> [LyricLine] {
         var lines: [LyricLine] = []
         for line in raw.components(separatedBy: .newlines) {
             parseTimes(in: line).forEach { time in
                 let text = line.replacingOccurrences(of: #"\[\d{2}:\d{2}(\.\d{1,3})?\]"#, with: "", options: .regularExpression)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                lines.append(LyricLine(time: time, text: text))
+                lines.append(LyricLine(time: max(0, time + offset), text: text))
             }
         }
         return lines.sorted { $0.time < $1.time }
+    }
+
+    private static func declaredOffsetSeconds(in raw: String) -> Double {
+        let pattern = #"\[offset:([+-]?\d+)\]"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)),
+              let range = Range(match.range(at: 1), in: raw),
+              let milliseconds = Double(raw[range]) else {
+            return 0
+        }
+        return milliseconds / 1000.0
     }
 
     private static func parseTimes(in line: String) -> [Double] {
@@ -332,6 +343,20 @@ enum LyricParser {
             times.append(minutes * 60 + seconds + fraction)
         }
         return times
+    }
+}
+
+enum LyricTiming {
+    static let userOffsetKey = "beans.lyricOffset"
+
+    static func effectiveProgress(_ progress: Double, userOffset: Double? = nil) -> Double {
+        let offset = userOffset ?? UserDefaults.standard.double(forKey: userOffsetKey)
+        return max(0, progress + offset)
+    }
+
+    static func seekTime(for line: LyricLine, userOffset: Double? = nil) -> Double {
+        let offset = userOffset ?? UserDefaults.standard.double(forKey: userOffsetKey)
+        return max(0, line.time - offset)
     }
 }
 

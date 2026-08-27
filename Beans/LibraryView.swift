@@ -477,8 +477,13 @@ struct LibraryView: View {
         }
         if !force, Date().timeIntervalSince(kugouSavedAt) < 300 { return }
         kugouLoading = true
-        let list = (try? await KugouMusicAPI.shared.userPlaylists()) ?? []
-        kugouPlaylists = list
+        do {
+            let list = try await KugouMusicAPI.shared.userPlaylists()
+            kugouPlaylists = list
+        } catch {
+            BeansLogger.shared.log("酷狗歌单同步失败：\(error.localizedDescription)", level: .error)
+            kugouPlaylists = []
+        }
         kugouSavedAt = Date()
         kugouLoading = false
     }

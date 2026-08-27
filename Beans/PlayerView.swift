@@ -72,8 +72,9 @@ struct PlayerView: View {
     @AppStorage("beans.deckGrabberEnabled") private var deckGrabberEnabled = true
     /// 圆形封面模式（播放器大封面 / 歌词页左上角小封面）
     @AppStorage("beans.circularCover") private var circularCover = true
-    /// 圆形封面自动旋转（默认开启）
-    @AppStorage("beans.circularCoverSpin") private var circularCoverSpin = true
+    /// 圆形封面自动旋转（默认关闭，避免持续掉帧与发热）
+    @AppStorage("beans.circularCoverSpin") private var circularCoverSpin = false
+    @AppStorage("beans.coverSpinDefaultOff.v140") private var coverSpinDefaultOff = false
     /// 歌词自定义发光颜色（留空跟随当前行颜色 / 封面取色）
     @AppStorage("beans.lyricGlowColorRaw") private var lyricGlowColorRaw = ""
     /// 侧边滑动切歌（抖音式刷视频交互，默认开启）
@@ -256,6 +257,12 @@ struct PlayerView: View {
             }
             await loadLyrics()
             await extractCoverPalette()
+        }
+        .onAppear {
+            if !coverSpinDefaultOff {
+                circularCoverSpin = false
+                coverSpinDefaultOff = true
+            }
         }
         .onChange(of: layoutData) { newValue in
             PlayerLayoutStore.save(newValue)
@@ -691,7 +698,7 @@ struct PlayerView: View {
         var answer: Int?
         while low <= high {
             let mid = (low + high) / 2
-            if lyrics[mid].time <= player.progress + lyricOffset {
+            if lyrics[mid].time <= LyricTiming.effectiveProgress(player.progress, userOffset: lyricOffset) {
                 answer = mid
                 low = mid + 1
             } else {
@@ -789,7 +796,7 @@ struct PlayerView: View {
                 } else {
                     LyricsSection(lyrics: lyrics, accent: lyricCurrentColor, secondary: lyricDimColor, gradientStart: lyricGradStart, gradientEnd: lyricGradEnd, baseFontSize: CGFloat(lyricFontSize) * CGFloat(lyricScale), lineSpacing: CGFloat(lyricLineSpacing), glowRadius: lyricGlowRadius, showTranslation: lyricTranslation, alignment: lyricAlign, offsetX: CGFloat(lyricOffsetX), anchor: lyricAnchor, glowColorOverride: lyricGlowColor, blurStart: CGFloat(lyricBlurStart), blurAmount: lyricBlurAmount, tilt: CGFloat(lyricTilt), tiltY: CGFloat(lyricTiltY), lyricOffset: CGFloat(lyricOffset)) { line in
                         BeansHaptics.tap()
-                        player.seek(to: line.time)
+                        player.seek(to: LyricTiming.seekTime(for: line, userOffset: lyricOffset))
                     }
                 }
             }
@@ -855,10 +862,10 @@ struct PlayerView: View {
 
     /// 底部控制栏估算高度（单行控制后降低，给歌词视口更多空间）
     /// 底部控制栏预留高度（越小歌词视口越大；需 >= 控制栏实际高度避免遮挡；可视化开启时控制栏更高）
-    private var deckInset: CGFloat { 126 }
+    private var deckInset: CGFloat { 116 }
 
     private func controlDeck(bottomInset: CGFloat) -> some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 0) {
             progressBlock
                 .modifier(Layoutable(part: .progress, enabled: layoutMode, data: $layoutData))
             deckRow
@@ -866,7 +873,8 @@ struct PlayerView: View {
             deckGrabber
         }
         .padding(.horizontal, 24)
-        .padding(.bottom, bottomInset + 6)
+        .padding(.top, 0)
+        .padding(.bottom, bottomInset)
         .frame(maxWidth: .infinity)
     }
 
@@ -960,12 +968,12 @@ struct PlayerView: View {
             }
             // 中间主控制组：上一曲 / 播放暂停 / 下一曲 真正居中
             HStack(spacing: 16) {
-                deckButton(icon: "backward.fill", expand: false) {
+                deckButton(icon: "backward.fill", expand: false, part: .previous) {
                     BeansHaptics.tap()
                     player.previous()
                 }
                 playButton
-                deckButton(icon: "forward.fill", expand: false) {
+                deckButton(icon: "forward.fill", expand: false, part: .next) {
                     BeansHaptics.tap()
                     player.next()
                 }
@@ -984,13 +992,14 @@ struct PlayerView: View {
             Image(systemName: player.playMode.icon)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(player.playMode == .shuffle ? controlAccent : palette.secondary)
-                .frame(width: 36, height: 36)
+                .frame(width: 24, height: 24)
                 .background {
                                         BeansGlass(shape: Circle())
                 }
                 .clipShape(Circle())
         }
         .buttonStyle(GlassPressButtonStyle())
+        .modifier(Layoutable(part: .loop, enabled: layoutMode, data: $layoutData))
     }
 
     /// 播放列表按钮
@@ -1002,16 +1011,17 @@ struct PlayerView: View {
             Image(systemName: "list.bullet")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(palette.secondary)
-                .frame(width: 36, height: 36)
+                .frame(width: 24, height: 24)
                 .background {
                                         BeansGlass(shape: Circle())
                 }
                 .clipShape(Circle())
         }
         .buttonStyle(GlassPressButtonStyle())
+        .modifier(Layoutable(part: .queue, enabled: layoutMode, data: $layoutData))
     }
 
-    private func deckButton(icon: String, accent: Bool = false, expand: Bool = true, action: @escaping () -> Void) -> some View {
+    private func deckButton(icon: String, accent: Bool = false, expand: Bool = true, part: PlayerLayoutPart? = nil, action: @escaping () -> Void) -> some View {
         Button {
             BeansHaptics.tap()
             action()
@@ -1019,7 +1029,7 @@ struct PlayerView: View {
             Image(systemName: icon)
                 .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(accent ? controlAccent : palette.text)
-                .frame(width: 42, height: 42)
+                .frame(width: 34, height: 34)
                 .background {
                                         BeansGlass(shape: Circle())
                 }
@@ -1027,6 +1037,7 @@ struct PlayerView: View {
         }
         .buttonStyle(GlassPressButtonStyle())
         .frame(maxWidth: expand ? .infinity : nil)
+        .modifier(Layoutable(part: part ?? .controls, enabled: layoutMode && part != nil, data: $layoutData))
     }
 
     private var playButton: some View {
@@ -1667,7 +1678,7 @@ struct LyricsSection: View {
         var answer: Int?
         while low <= high {
             let mid = (low + high) / 2
-            if lyrics[mid].time <= player.progress + lyricOffset {
+            if lyrics[mid].time <= LyricTiming.effectiveProgress(player.progress, userOffset: Double(lyricOffset)) {
                 answer = mid
                 low = mid + 1
             } else {
@@ -1949,7 +1960,7 @@ struct PlayerSettingsSheet: View {
     @AppStorage("beans.lyricAnchorY") private var lyricAnchorY = 0.0
     @AppStorage("beans.deckGrabberEnabled") private var deckGrabberEnabled = true
     @AppStorage("beans.circularCover") private var circularCover = true
-    @AppStorage("beans.circularCoverSpin") private var circularCoverSpin = true
+    @AppStorage("beans.circularCoverSpin") private var circularCoverSpin = false
     @AppStorage("beans.djVisual") private var djVisualEnabled = false
     @AppStorage("beans.djVisualIntensity") private var djVisualIntensity = 0.8
     @AppStorage("beans.lyricGlowColorRaw") private var glowColorRaw = ""
@@ -2479,12 +2490,11 @@ struct CoverSpin: ViewModifier {
 
     func body(content: Content) -> some View {
         if enabled && !reduceMotion {
-            TimelineView(.animation(minimumInterval: 1.0 / 12.0, paused: !isPlaying)) { context in
-                let angle = (context.date.timeIntervalSinceReferenceDate * 8)
+            TimelineView(.animation(minimumInterval: 1.0 / 6.0, paused: !isPlaying)) { context in
+                let angle = (context.date.timeIntervalSinceReferenceDate * 4)
                     .truncatingRemainder(dividingBy: 360)
                 return content
                     .rotationEffect(.degrees(angle))
-                    .drawingGroup(opaque: false, colorMode: .linear)
             }
         } else {
             content

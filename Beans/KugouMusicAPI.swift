@@ -123,26 +123,65 @@ final class KugouMusicAPI {
     func userPlaylists() async throws -> [Playlist] {
         let auth = KugouMusicAuth.shared
         guard auth.isLoggedIn else { return [] }
-        var req = URLRequest(url: URL(string: "http://cloudlist.service.kugou.com/v7/get_all_list?userid=\(auth.userid)&token=\(auth.token)&type=2&page=1&pagesize=200&total_ver=979")!)
-        req.httpMethod = "POST"
-        req.timeoutInterval = 18
-        req.setValue(ua, forHTTPHeaderField: "User-Agent")
-        req.setValue("cloudlist.service.kugou.com", forHTTPHeaderField: "x-router")
-        req.setValue(auth.cookieHeader, forHTTPHeaderField: "Cookie")
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try? JSONSerialization.data(withJSONObject: [
-            "userid": auth.userid,
+        let requests = userPlaylistRequests(auth: auth)
+        var lastError: Error?
+        for req in requests {
+            do {
+                let json = try await json(for: req)
+                let playlists = parseUserPlaylists(from: json)
+                BeansLogger.shared.log("酷狗歌单同步：返回 \(playlists.count) 个", level: playlists.isEmpty ? .debug : .info)
+                if !playlists.isEmpty { return playlists }
+            } catch {
+                lastError = error
+                BeansLogger.shared.log("酷狗歌单同步接口失败：\(error.localizedDescription)", level: .debug)
+            }
+        }
+        if let lastError { throw lastError }
+        return []
+    }
+
+    private func userPlaylistRequests(auth: KugouMusicAuth) -> [URLRequest] {
+        let baseItems = [
+            "userid": "\(auth.userid)",
             "token": auth.token,
-            "type": 2,
-            "page": 1,
-            "pagesize": 200,
-            "total_ver": 979
-        ])
-        let json = try await json(for: req)
+            "page": "1",
+            "pagesize": "200",
+            "total_ver": "979",
+            "appid": "1005",
+            "clientver": "12029",
+            "clienttime": "\(Int(Date().timeIntervalSince1970))"
+        ]
+        let types = ["2", "1", "0"]
+        return types.compactMap { type in
+            var items = baseItems
+            items["type"] = type
+            var comps = URLComponents(string: "http://cloudlist.service.kugou.com/v7/get_all_list")!
+            comps.queryItems = items.map { URLQueryItem(name: $0.key, value: $0.value) }
+            guard let url = comps.url else { return nil }
+            var req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            req.timeoutInterval = 18
+            req.setValue(ua, forHTTPHeaderField: "User-Agent")
+            req.setValue("cloudlist.service.kugou.com", forHTTPHeaderField: "x-router")
+            req.setValue(auth.cookieHeader, forHTTPHeaderField: "Cookie")
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = try? JSONSerialization.data(withJSONObject: items)
+            return req
+        }
+    }
+
+    private func parseUserPlaylists(from json: [String: Any]) -> [Playlist] {
         let root = json["data"] as? [String: Any] ?? json
-        let lists = Self.findArrays(in: root).flatMap { $0 }
         var seen = Set<Int>()
-        return lists.compactMap { item in
+        let directKeys = ["info", "list", "lists", "list_info", "cloudlist", "plist"]
+        var candidates: [[String: Any]] = []
+        for key in directKeys {
+            if let array = root[key] as? [[String: Any]] {
+                candidates.append(contentsOf: array)
+            }
+        }
+        candidates.append(contentsOf: Self.findArrays(in: root).flatMap { $0 })
+        return candidates.compactMap { item in
             guard let playlist = playlist(fromUserItem: item), !seen.contains(playlist.id) else { return nil }
             seen.insert(playlist.id)
             return playlist
@@ -310,10 +349,10 @@ final class KugouMusicAPI {
     private func playlist(fromUserItem item: [String: Any]) -> Playlist? {
         let id = Self.int(item["listid"]) ?? Self.int(item["id"]) ?? Self.int(item["specialid"])
         guard let id, id > 0 else { return nil }
-        let name = item["name"] as? String ?? item["listname"] as? String ?? item["specialname"] as? String ?? ""
+        let name = item["name"] as? String ?? item["listname"] as? String ?? item["list_name"] as? String ?? item["specialname"] as? String ?? item["special_name"] as? String ?? ""
         guard !name.isEmpty else { return nil }
-        let count = Self.int(item["count"]) ?? Self.int(item["songcount"]) ?? Self.int(item["song_count"]) ?? 0
-        let cover = Self.imageURL(item["pic"]) ?? Self.imageURL(item["picurl"]) ?? Self.imageURL(item["imgurl"])
+        let count = Self.int(item["count"]) ?? Self.int(item["songcount"]) ?? Self.int(item["song_count"]) ?? Self.int(item["total"]) ?? 0
+        let cover = Self.imageURL(item["pic"]) ?? Self.imageURL(item["picurl"]) ?? Self.imageURL(item["imgurl"]) ?? Self.imageURL(item["image"])
         return Playlist(id: id, name: name, coverURL: cover, trackCount: count, source: .kugou)
     }
 

@@ -5,6 +5,7 @@ struct MiniPlayerView: View {
     @EnvironmentObject private var player: PlayerManager
     @Binding var showPlayer: Bool
     @State private var miniLyrics: [LyricLine] = []
+    @AppStorage("beans.lyricOffset") private var lyricOffset = 0.0
 
     /// 二分查找当前播放到的歌词行（歌词按时间升序）
     private var currentLyricLine: LyricLine? {
@@ -14,7 +15,7 @@ struct MiniPlayerView: View {
         var answer: LyricLine?
         while low <= high {
             let mid = (low + high) / 2
-            if miniLyrics[mid].time <= player.progress {
+            if miniLyrics[mid].time <= LyricTiming.effectiveProgress(player.progress, userOffset: lyricOffset) {
                 answer = miniLyrics[mid]
                 low = mid + 1
             } else {

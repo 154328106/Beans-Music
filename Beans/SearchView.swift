@@ -85,6 +85,7 @@ struct SearchView: View {
 
     @State private var keyword = ""
     @State private var provider: SearchProvider = .netease
+    private let searchProviders: [SearchProvider] = [.netease, .qq]
     /// 已加载热门搜索的 provider（避免切 tab 反复加载）
     @State private var hotLoadedProvider: SearchProvider?
     @State private var resultType: SearchResultType = .song
@@ -274,7 +275,7 @@ struct SearchView: View {
 
     private var providerPicker: some View {
         HStack(spacing: 4) {
-            ForEach(SearchProvider.allCases) { p in
+            ForEach(searchProviders) { p in
                 Button {
                     BeansHaptics.tap()
                     if provider != p { provider = p }
@@ -730,19 +731,8 @@ struct SearchView: View {
                     let albums = try await QQMusicAPI.shared.searchAlbums(keyword: trimmed)
                     guard !Task.isCancelled else { return }
                     albumResults = albums
-                case (.kugou, .song):
-                    let songs = try await KugouMusicAPI.shared.searchSongs(keyword: trimmed, limit: 40)
+                case (.kugou, _):
                     guard !Task.isCancelled else { return }
-                    songResults = songs
-                    if !songs.isEmpty { BeansHaptics.success() }
-                case (.kugou, .artist):
-                    let artists = try await KugouMusicAPI.shared.searchArtists(keyword: trimmed)
-                    guard !Task.isCancelled else { return }
-                    artistResults = artists
-                case (.kugou, .album):
-                    let albums = try await KugouMusicAPI.shared.searchAlbums(keyword: trimmed)
-                    guard !Task.isCancelled else { return }
-                    albumResults = albums
                 }
                 let count = resultType == .song ? songResults.count : (resultType == .artist ? artistResults.count : albumResults.count)
                 BeansLogger.shared.log("搜索完成：\(provider.rawValue) [\(resultType.rawValue)] \(trimmed) 结果=\(count)", level: .info)

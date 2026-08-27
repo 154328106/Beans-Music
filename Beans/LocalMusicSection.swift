@@ -221,6 +221,7 @@ struct LocalSearchAddSheet: View {
     @State private var results: [Song] = []
     @State private var searching = false
     @State private var provider: SearchProvider = .netease
+    private let searchProviders: [SearchProvider] = [.netease, .qq]
     @State private var task: Task<Void, Never>?
 
     var body: some View {
@@ -246,7 +247,7 @@ struct LocalSearchAddSheet: View {
                 }
                 .padding(12)
                 Picker("平台", selection: $provider) {
-                    ForEach(SearchProvider.allCases) { p in
+                    ForEach(searchProviders) { p in
                         Text(p.rawValue).tag(p)
                     }
                 }
@@ -303,7 +304,7 @@ struct LocalSearchAddSheet: View {
                 case .qq:
                     songs = try await QQMusicAPI.shared.searchSongs(keyword: trimmed)
                 case .kugou:
-                    songs = try await KugouMusicAPI.shared.searchSongs(keyword: trimmed, limit: 30)
+                    songs = []
                 }
                 guard !Task.isCancelled else { return }
                 results = songs
