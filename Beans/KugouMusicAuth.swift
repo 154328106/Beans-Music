@@ -106,7 +106,7 @@ final class KugouMusicAuth: ObservableObject {
     }
 
     private static func calculateMid(seed: String) -> String {
-        let hex = Data(seed.utf8).md5Hex
+        let hex = Data(seed.utf8).md5Hex()
         let prefix = String(hex.prefix(15))
         if let value = UInt64(prefix, radix: 16) { return "\(value)" }
         return hex
@@ -115,13 +115,5 @@ final class KugouMusicAuth: ObservableObject {
     private static func randomString(_ length: Int) -> String {
         let chars = Array("1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ")
         return String((0..<length).map { _ in chars[Int.random(in: 0..<chars.count)] })
-    }
-}
-
-private extension Data {
-    var md5Hex: String {
-        var digest = [UInt8](repeating: 0, count: Int(CC_MD5_DIGEST_LENGTH))
-        withUnsafeBytes { _ = CC_MD5($0.baseAddress, CC_LONG(count), &digest) }
-        return digest.map { String(format: "%02x", $0) }.joined()
     }
 }

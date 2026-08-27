@@ -187,7 +187,7 @@ final class KugouMusicAPI {
             "version": clientver,
             "vipType": "\(auth.vipType)",
             "token": auth.token.isEmpty ? "0" : auth.token,
-            "key": "\(h)\(playSalt)\(appid)\(auth.mid)\(auth.userId.isEmpty ? "0" : auth.userId)".md5Hex,
+            "key": "\(h)\(playSalt)\(appid)\(auth.mid)\(auth.userId.isEmpty ? "0" : auth.userId)".kgMD5Hex,
         ]
         if let albumAudioId, !albumAudioId.isEmpty { params["album_audio_id"] = albumAudioId }
         if let albumId, !albumId.isEmpty { params["album_id"] = albumId }
@@ -262,7 +262,7 @@ final class KugouMusicAPI {
                 "/risk/v2/r_register_dev",
                 baseURL: userService,
                 method: "POST",
-                params: ["part": "1", "platid": "1", "p": rsa.hexString],
+                params: ["part": "1", "platid": "1", "p": rsa.kgHexString],
                 dataRaw: encrypted,
                 headers: [
                     "x-router": "userservice.kugou.com",
@@ -367,12 +367,12 @@ final class KugouMusicAPI {
 
     private func androidSignature(params: [String: String], data: String) -> String {
         let body = params.keys.sorted().map { "\($0)=\(params[$0] ?? "")" }.joined()
-        return "\(androidSignKey)\(body)\(data)\(androidSignKey)".md5Hex
+        return "\(androidSignKey)\(body)\(data)\(androidSignKey)".kgMD5Hex
     }
 
     private func webSignature(params: [String: String]) -> String {
         let body = params.keys.sorted().map { "\($0)=\(params[$0] ?? "")" }.joined()
-        return "\(webSignKey)\(body)\(webSignKey)".md5Hex
+        return "\(webSignKey)\(body)\(webSignKey)".kgMD5Hex
     }
 
     private func getJSON(_ url: URL, ua: String) async throws -> [String: Any] {
@@ -521,12 +521,12 @@ final class KugouMusicAPI {
     }
 
     private static func aesCBCEncrypt(_ data: Data, password: String) -> Data? {
-        let digest = password.md5Hex
+        let digest = password.kgMD5Hex
         return crypt(data, op: CCOperation(kCCEncrypt), key: Data(digest.prefix(16).utf8), iv: Data(digest.suffix(16).utf8))
     }
 
     private static func aesCBCDecrypt(_ data: Data, password: String) -> Data? {
-        let digest = password.md5Hex
+        let digest = password.kgMD5Hex
         return crypt(data, op: CCOperation(kCCDecrypt), key: Data(digest.prefix(16).utf8), iv: Data(digest.suffix(16).utf8))
     }
 
@@ -562,17 +562,11 @@ final class KugouMusicAPI {
 }
 
 private extension Data {
-    var md5Hex: String {
-        var digest = [UInt8](repeating: 0, count: Int(CC_MD5_DIGEST_LENGTH))
-        withUnsafeBytes { _ = CC_MD5($0.baseAddress, CC_LONG(count), &digest) }
-        return digest.map { String(format: "%02x", $0) }.joined()
-    }
-
-    var hexString: String {
+    var kgHexString: String {
         map { String(format: "%02x", $0) }.joined()
     }
 }
 
 private extension String {
-    var md5Hex: String { Data(utf8).md5Hex }
+    var kgMD5Hex: String { Data(utf8).md5Hex() }
 }
