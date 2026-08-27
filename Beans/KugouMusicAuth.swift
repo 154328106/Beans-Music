@@ -29,7 +29,7 @@ final class KugouMusicAuth: ObservableObject {
     }
 
     var userid: Int {
-        Int(cookies["userid"] ?? cookies["KugooID"] ?? cookies["KuGooID"] ?? cookies["kg_uid"] ?? "") ?? 0
+        Int(cookies["userid"] ?? cookies["KugooID"] ?? cookies["KuGooID"] ?? cookies["kg_uid"] ?? cookies["kguser_userid"] ?? "") ?? 0
     }
 
     var token: String {

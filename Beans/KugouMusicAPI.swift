@@ -123,6 +123,11 @@ final class KugouMusicAPI {
     func userPlaylists() async throws -> [Playlist] {
         let auth = KugouMusicAuth.shared
         guard auth.isLoggedIn else { return [] }
+        guard auth.userid > 0, !auth.token.isEmpty else {
+            BeansLogger.shared.log("酷狗歌单同步跳过：登录态缺少 userid 或 token", level: .error)
+            return []
+        }
+        BeansLogger.shared.log("酷狗歌单同步开始：userid=\(auth.userid) token=有", level: .debug)
         let requests = userPlaylistRequests(auth: auth)
         var lastError: Error?
         for req in requests {
@@ -173,7 +178,11 @@ final class KugouMusicAPI {
     private func parseUserPlaylists(from json: [String: Any]) -> [Playlist] {
         let root = json["data"] as? [String: Any] ?? json
         var seen = Set<Int>()
-        let directKeys = ["info", "list", "lists", "list_info", "cloudlist", "plist"]
+        let directKeys = [
+            "info", "list", "lists", "list_info", "cloudlist", "plist",
+            "list_create_list", "list_collect_list", "create_list", "collect_list",
+            "special", "specials", "playlist", "playlists"
+        ]
         var candidates: [[String: Any]] = []
         for key in directKeys {
             if let array = root[key] as? [[String: Any]] {
@@ -347,12 +356,36 @@ final class KugouMusicAPI {
     }
 
     private func playlist(fromUserItem item: [String: Any]) -> Playlist? {
-        let id = Self.int(item["listid"]) ?? Self.int(item["id"]) ?? Self.int(item["specialid"])
+        let id = Self.int(item["listid"])
+            ?? Self.int(item["list_id"])
+            ?? Self.int(item["id"])
+            ?? Self.int(item["specialid"])
+            ?? Self.int(item["special_id"])
+            ?? Self.int(item["global_collection_id"])
+            ?? Self.int(item["collect_id"])
+            ?? Self.int(item["gid"])
         guard let id, id > 0 else { return nil }
-        let name = item["name"] as? String ?? item["listname"] as? String ?? item["list_name"] as? String ?? item["specialname"] as? String ?? item["special_name"] as? String ?? ""
+        let name = item["name"] as? String
+            ?? item["listname"] as? String
+            ?? item["list_name"] as? String
+            ?? item["specialname"] as? String
+            ?? item["special_name"] as? String
+            ?? item["title"] as? String
+            ?? item["filename"] as? String
+            ?? ""
         guard !name.isEmpty else { return nil }
-        let count = Self.int(item["count"]) ?? Self.int(item["songcount"]) ?? Self.int(item["song_count"]) ?? Self.int(item["total"]) ?? 0
-        let cover = Self.imageURL(item["pic"]) ?? Self.imageURL(item["picurl"]) ?? Self.imageURL(item["imgurl"]) ?? Self.imageURL(item["image"])
+        let count = Self.int(item["count"])
+            ?? Self.int(item["songcount"])
+            ?? Self.int(item["song_count"])
+            ?? Self.int(item["total"])
+            ?? Self.int(item["songs"])
+            ?? 0
+        let cover = Self.imageURL(item["pic"])
+            ?? Self.imageURL(item["picurl"])
+            ?? Self.imageURL(item["imgurl"])
+            ?? Self.imageURL(item["image"])
+            ?? Self.imageURL(item["cover"])
+            ?? Self.imageURL(item["cover_url"])
         return Playlist(id: id, name: name, coverURL: cover, trackCount: count, source: .kugou)
     }
 

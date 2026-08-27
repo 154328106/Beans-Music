@@ -72,9 +72,8 @@ struct PlayerView: View {
     @AppStorage("beans.deckGrabberEnabled") private var deckGrabberEnabled = true
     /// 圆形封面模式（播放器大封面 / 歌词页左上角小封面）
     @AppStorage("beans.circularCover") private var circularCover = true
-    /// 圆形封面自动旋转（默认关闭，避免持续掉帧与发热）
-    @AppStorage("beans.circularCoverSpin") private var circularCoverSpin = false
-    @AppStorage("beans.coverSpinDefaultOff.v140") private var coverSpinDefaultOff = false
+    /// 圆形封面自动旋转
+    @AppStorage("beans.circularCoverSpin") private var circularCoverSpin = true
     /// 歌词自定义发光颜色（留空跟随当前行颜色 / 封面取色）
     @AppStorage("beans.lyricGlowColorRaw") private var lyricGlowColorRaw = ""
     /// 侧边滑动切歌（抖音式刷视频交互，默认开启）
@@ -257,12 +256,6 @@ struct PlayerView: View {
             }
             await loadLyrics()
             await extractCoverPalette()
-        }
-        .onAppear {
-            if !coverSpinDefaultOff {
-                circularCoverSpin = false
-                coverSpinDefaultOff = true
-            }
         }
         .onChange(of: layoutData) { newValue in
             PlayerLayoutStore.save(newValue)
@@ -1960,7 +1953,7 @@ struct PlayerSettingsSheet: View {
     @AppStorage("beans.lyricAnchorY") private var lyricAnchorY = 0.0
     @AppStorage("beans.deckGrabberEnabled") private var deckGrabberEnabled = true
     @AppStorage("beans.circularCover") private var circularCover = true
-    @AppStorage("beans.circularCoverSpin") private var circularCoverSpin = false
+    @AppStorage("beans.circularCoverSpin") private var circularCoverSpin = true
     @AppStorage("beans.djVisual") private var djVisualEnabled = false
     @AppStorage("beans.djVisualIntensity") private var djVisualIntensity = 0.8
     @AppStorage("beans.lyricGlowColorRaw") private var glowColorRaw = ""
@@ -2441,7 +2434,7 @@ struct PlayerSettingsSheet: View {
                           caption: "播放器封面与歌词页左上角封面显示为圆形")
             Divider().opacity(0.5)
             settingToggle("圆形封面旋转", isOn: $circularCoverSpin,
-                          caption: "开启后播放时封面自动匀速旋转（默认关闭）")
+                          caption: "开启后播放时封面自动匀速旋转")
         }
     }
 
@@ -2484,14 +2477,13 @@ struct ShareSheet: UIViewControllerRepresentable {
 
 // MARK: - 圆形封面旋转（播放中匀速旋转，暂停即停）
 struct CoverSpin: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let enabled: Bool
     let isPlaying: Bool
 
     func body(content: Content) -> some View {
-        if enabled && !reduceMotion {
-            TimelineView(.animation(minimumInterval: 1.0 / 6.0, paused: !isPlaying)) { context in
-                let angle = (context.date.timeIntervalSinceReferenceDate * 4)
+        if enabled {
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !isPlaying)) { context in
+                let angle = (context.date.timeIntervalSinceReferenceDate * 15)
                     .truncatingRemainder(dividingBy: 360)
                 return content
                     .rotationEffect(.degrees(angle))
