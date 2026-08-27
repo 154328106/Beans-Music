@@ -177,6 +177,9 @@ struct ThirdPartySourceImportSheet: View {
         if let eventSources = parseLXEventScript(trimmed), !eventSources.isEmpty {
             return eventSources
         }
+        if let xinghaiSources = parseXinghaiEventScript(trimmed), !xinghaiSources.isEmpty {
+            return xinghaiSources
+        }
         if let list = try? JSONDecoder().decode([ThirdPartySource].self, from: data), !list.isEmpty {
             return list
         }
@@ -257,6 +260,39 @@ struct ThirdPartySourceImportSheet: View {
                 template: "\(chkszAPI)/163_music?id={id}&level=lossless",
                 urlPath: "data.url|url",
                 headers: ["source": "wy", "Referer": "https://cp.chksz.top/"]
+            ))
+        }
+        return sources.isEmpty ? nil : sources
+    }
+
+    /// 星海 2.x 事件式 LX 脚本：读取 MAIN_API_BASE，不执行脚本，转换成按平台直连模板。
+    private func parseXinghaiEventScript(_ text: String) -> [ThirdPartySource]? {
+        guard text.contains("globalThis.lx"),
+              text.contains("EVENT_NAMES.request"),
+              text.contains("MAIN_API_BASE"),
+              let mainAPI = firstCapture(#"const\s+MAIN_API_BASE\s*=\s*['\"]([^'\"]+)['\"]"#, in: text) else { return nil }
+
+        let platformMap: [(code: String, api: String, name: String)] = [
+            ("wy", "netease", "网易云"),
+            ("tx", "tencent", "QQ音乐"),
+            ("kg", "kugou", "酷狗音乐"),
+            ("kw", "kuwo", "酷我音乐"),
+            ("mg", "migu", "咪咕音乐"),
+        ]
+        let declaredPlatforms = firstCapture(#"const\s+ALL_PLATFORMS\s*=\s*\[([^\]]+)\]"#, in: text) ?? ""
+        let urlPath = "url|data.url|music_url|data.music_url|data.music_url.url|play_url|data.play_url"
+        let base = mainAPI.contains("?") ? mainAPI : "\(mainAPI)?"
+        let separator = base.hasSuffix("?") || base.hasSuffix("&") ? "" : "&"
+        let quality = "999"
+
+        var sources: [ThirdPartySource] = []
+        for item in platformMap where declaredPlatforms.isEmpty || declaredPlatforms.contains("'\(item.code)'") || declaredPlatforms.contains("\"\(item.code)\"") {
+            sources.append(ThirdPartySource(
+                name: "星海音源 · \(item.name)",
+                kind: "template-api",
+                template: "\(base)\(separator)types=url&source=\(item.api)&id={id}&br=\(quality)",
+                urlPath: urlPath,
+                headers: ["source": item.code, "quality": "flac"]
             ))
         }
         return sources.isEmpty ? nil : sources

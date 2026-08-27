@@ -460,7 +460,7 @@ final class PlayerManager: NSObject, ObservableObject {
     /// 酷狗兜底：官方播放失败后使用导入音源作为备选，便于验证用户导入音源是否可用。
     private func kugouFallback(song: Song, enableUnblock: Bool) async -> UnblockService.Resolved? {
         guard enableUnblock else { return nil }
-        let kugouID = song.kugouAlbumAudioId ?? song.kugouHash ?? ""
+        let kugouID = song.kugouHash ?? song.kugouAlbumAudioId ?? ""
         if kugouID.isEmpty {
             BeansLogger.shared.log("酷狗兜底跳过：缺少 album_audio_id/hash", level: .debug)
         } else {

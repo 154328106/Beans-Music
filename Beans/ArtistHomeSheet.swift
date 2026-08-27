@@ -297,7 +297,18 @@ struct ArtistHomeSheet: View {
         if let first = artists.first {
             artist = first
         }
-        let songs = (try? await KugouMusicAPI.shared.searchSongs(keyword: artistName, limit: 50)) ?? []
+        async let exact = KugouMusicAPI.shared.searchSongs(keyword: artistName, limit: 100)
+        async let hot = KugouMusicAPI.shared.searchSongs(keyword: "\(artistName) 热门", limit: 80)
+        async let works = KugouMusicAPI.shared.searchSongs(keyword: "\(artistName) 歌曲", limit: 80)
+        let batches = [
+            (try? await exact) ?? [],
+            (try? await hot) ?? [],
+            (try? await works) ?? [],
+        ]
+        var seen = Set<String>()
+        let songs = batches.flatMap { $0 }.filter { song in
+            seen.insert(song.identityKey).inserted
+        }
         let normalizedName = artistName.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         hotSongs = songs.filter { song in
             song.artists

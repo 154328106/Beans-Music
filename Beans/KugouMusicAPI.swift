@@ -170,6 +170,22 @@ final class KugouMusicAPI {
     /// 酷狗 iOS 综合搜索接口。该接口返回的结果比旧网页接口完整，
     /// 同时携带歌曲 hash、专辑、歌手、封面和权限字段。
     private func searchSongsComplete(keyword: String, limit: Int) async throws -> [Song] {
+        var result: [Song] = []
+        var seen = Set<String>()
+        let pageSize = min(max(limit, 1), 50)
+        let pages = max(1, Int(ceil(Double(min(max(limit, 1), 150)) / Double(pageSize))))
+        for page in 1...pages {
+            let songs = try await searchSongsCompletePage(keyword: keyword, page: page, pageSize: pageSize)
+            for song in songs where seen.insert(song.identityKey).inserted {
+                result.append(song)
+                if result.count >= limit { return result }
+            }
+            if songs.count < pageSize { break }
+        }
+        return result
+    }
+
+    private func searchSongsCompletePage(keyword: String, page: Int, pageSize: Int) async throws -> [Song] {
         let auth = KugouMusicAuth.shared
         auth.prepareDevice()
         let clientTime = "\(Int(Date().timeIntervalSince1970))"
@@ -188,7 +204,7 @@ final class KugouMusicAPI {
             "clienttime": clientTime,
             "clientver": "20549",
             "com_user_type": "0",
-            "cursor": "1",
+            "cursor": "\(max(page, 1))",
             "dfid": dfid,
             "is_gpay": "0",
             "iscorrection": "1",
@@ -234,7 +250,7 @@ final class KugouMusicAPI {
               let rows = songGroup["lists"] as? [[String: Any]] else {
             return []
         }
-        return rows.prefix(min(max(limit, 1), 100)).compactMap(Self.mapCompleteTrack)
+        return rows.prefix(min(max(pageSize, 1), 100)).compactMap(Self.mapCompleteTrack)
     }
 
     /// 基于酷狗官方歌曲搜索结果聚合歌手，保留官方歌手名与封面。
@@ -354,6 +370,7 @@ final class KugouMusicAPI {
         guard let url = URL(string: "https://www.kugou.com/yy/html/rank.html") else {
             throw NetEaseError.unknown("酷狗官网排行榜地址无效")
         }
+        let highResCovers = (try? await mobileRankCovers()) ?? [:]
         let html = try await getString(url, ua: Self.browserUA)
         let pattern = #"<a title="([^"]+)"[^>]*href="https://www\.kugou\.com/yy/rank/home/1-(\d+)\.html\?from=rank"[\s\S]*?background-image:url\(([^\)]+)\)"#
         var seen = Set<Int>()
@@ -361,7 +378,8 @@ final class KugouMusicAPI {
             guard groups.count >= 4 else { return nil }
             let id = Int(groups[2]) ?? 0
             guard id > 0, seen.insert(id).inserted else { return nil }
-            let cover = Self.normalizeURL(groups[3].trimmingCharacters(in: .whitespacesAndNewlines))
+            let cover = highResCovers[id]
+                ?? Self.normalizeURL(groups[3].trimmingCharacters(in: .whitespacesAndNewlines))
             return KugouTopInfo(
                 id: id,
                 name: Self.clean(Self.htmlDecode(groups[1])),
@@ -371,6 +389,24 @@ final class KugouMusicAPI {
         }
         BeansLogger.shared.log("酷狗官网热门榜单：返回 \(rows.count) 个", level: .debug)
         return Array(rows.prefix(limit))
+    }
+
+    private func mobileRankCovers() async throws -> [Int: String] {
+        guard let url = URL(string: "https://m.kugou.com/rank/list?json=true") else { return [:] }
+        let json = try await getJSON(url, ua: Self.browserUA)
+        guard let rank = json["rank"] as? [String: Any],
+              let list = rank["list"] as? [[String: Any]] else { return [:] }
+        var result: [Int: String] = [:]
+        for item in list {
+            let id = Self.int(item["rankid"] ?? item["id"])
+            guard id > 0 else { continue }
+            let cover = Self.string(item["album_img_9"] ?? item["imgurl"] ?? item["img_9"])
+                .replacingOccurrences(of: "{size}", with: "400")
+            if !cover.isEmpty {
+                result[id] = Self.normalizeURL(cover)
+            }
+        }
+        return result
     }
 
     private func officialWebRankSongs(rankID: Int, limit: Int) async throws -> [Song] {
@@ -749,11 +785,15 @@ final class KugouMusicAPI {
 
     /// 酷狗官方移动评论接口。评论读取不依赖会员权限。
     func comments(mixSongID: String, hash: String?, page: Int = 1, limit: Int = 30) async throws -> KugouCommentPage {
-        guard !mixSongID.isEmpty else {
+        var commentID = mixSongID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if commentID.isEmpty || Int(commentID) == nil {
+            commentID = try await commentAudioID(hash: hash) ?? commentID
+        }
+        guard !commentID.isEmpty else {
             throw NetEaseError.unknown("酷狗评论缺少歌曲 ID")
         }
         let params = [
-            "mixsongid": mixSongID,
+            "mixsongid": commentID,
             "need_show_image": "1",
             "p": "\(max(page, 1))",
             "pagesize": "\(min(max(limit, 1), 30))",
@@ -777,11 +817,15 @@ final class KugouMusicAPI {
             do {
                 json = try await gatewayCommentJSON(params: params)
             } catch {
-                BeansLogger.shared.log("酷狗评论全部失败：\(error.localizedDescription)", level: .debug)
-                return KugouCommentPage(comments: [], total: 0)
+                BeansLogger.shared.log("酷狗评论 gateway 全部失败：\(error.localizedDescription)，尝试旧版评论接口", level: .debug)
+                json = try await legacyCommentJSON(childrenID: commentID, page: page, limit: limit)
             }
         }
-        return Self.parseComments(json: json, page: page, songName: mixSongID)
+        let parsed = Self.parseComments(json: json, page: page, songName: commentID)
+        if parsed.comments.isEmpty, let legacy = try? await legacyCommentJSON(childrenID: commentID, page: page, limit: limit) {
+            return Self.parseComments(json: legacy, page: page, songName: commentID)
+        }
+        return parsed
     }
 
     private func gatewayCommentJSON(params: [String: String]) async throws -> [String: Any] {
@@ -805,6 +849,35 @@ final class KugouMusicAPI {
             )
             return response.json
         }
+    }
+
+    private func legacyCommentJSON(childrenID: String, page: Int, limit: Int) async throws -> [String: Any] {
+        var components = URLComponents(string: "http://m.comment.service.kugou.com/index.php")!
+        components.queryItems = [
+            URLQueryItem(name: "r", value: "commentsv2/getCommentWithLike"),
+            URLQueryItem(name: "childrenid", value: childrenID),
+            URLQueryItem(name: "code", value: "fc4be23b4e972707f36b8a828a93ba8a"),
+            URLQueryItem(name: "extdata", value: "0"),
+            URLQueryItem(name: "p", value: "\(max(page, 1))"),
+            URLQueryItem(name: "pagesize", value: "\(min(max(limit, 1), 30))"),
+        ]
+        guard let url = components.url else { throw NetEaseError.network }
+        return try await getJSON(url, ua: Self.browserUA)
+    }
+
+    private func commentAudioID(hash: String?) async throws -> String? {
+        guard let hash, !hash.isEmpty else { return nil }
+        var components = URLComponents(string: "https://wwwapi.kugou.com/yy/index.php")!
+        components.queryItems = [
+            URLQueryItem(name: "r", value: "play/getdata"),
+            URLQueryItem(name: "hash", value: hash.uppercased()),
+            URLQueryItem(name: "appid", value: "1014"),
+            URLQueryItem(name: "platid", value: "4"),
+        ]
+        guard let url = components.url else { return nil }
+        let json = try await getJSON(url, ua: Self.browserUA)
+        let value = Self.deepString(json, names: ["album_audio_id", "audio_id", "mixsongid", "songid", "id"])
+        return value.isEmpty ? nil : value
     }
 
     private static func parseComments(json: [String: Any], page: Int, songName: String) -> KugouCommentPage {
