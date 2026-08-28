@@ -22,13 +22,16 @@ final class PlatformPreferenceStore: ObservableObject {
     }
 
     var enabledSearchProviders: [SearchProvider] {
-        let list = SearchProvider.allCases.filter { selectedRaw.contains($0.rawValue) }
-        return list.isEmpty ? [.netease] : list
+        var list = SearchProvider.allCases.filter { selectedRaw.contains($0.rawValue) }
+        if list.isEmpty { list = [.netease] }
+        // 本地音乐不是平台, 不受开关控制, 始终排在最后
+        if !list.contains(.subsonic) { list.append(.subsonic) }
+        return list
     }
 
     var enabledLibraryProviders: [LibraryProvider] {
         LibraryProvider.allCases.filter {
-            // 本机/自建服务器不是平台, 不受"启用哪些平台"开关控制
+            // 本地音乐(自建服务器)不是平台, 不受"启用哪些平台"开关控制
             guard let sp = $0.searchProvider else { return true }
             return selectedRaw.contains(sp.rawValue)
         }
@@ -85,7 +88,7 @@ extension LibraryProvider {
         case .netease: return .netease
         case .qq: return .qq
         case .kugou: return .kugou
-        case .local, .server: return nil
+        case .server: return .subsonic
         }
     }
 }

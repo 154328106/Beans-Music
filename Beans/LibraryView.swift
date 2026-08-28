@@ -4,9 +4,9 @@ enum LibraryProvider: String, CaseIterable, Identifiable {
     case netease = "网易云"
     case qq = "QQ音乐"
     case kugou = "酷狗"
-    /// 下面两个不是"平台", 是本机与自建服务器, 不受平台开关控制, 始终显示
-    case local = "本地音乐"
-    case server = "音乐服务器"
+    /// 自建音乐服务器（Navidrome / 道理鱼音乐…）。对用户来说这就是"我自己的音乐"，
+    /// 所以标签叫「本地音乐」。不是平台，不受平台开关控制，始终显示。
+    case server = "本地音乐"
 
     var id: String { rawValue }
 
@@ -18,8 +18,6 @@ enum LibraryProvider: String, CaseIterable, Identifiable {
             return LinearGradient(colors: [Color(red: 0.15, green: 0.78, blue: 0.55), Color(red: 0.05, green: 0.58, blue: 0.42)], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .kugou:
             return LinearGradient(colors: [Color(red: 0.12, green: 0.58, blue: 0.95), Color(red: 0.02, green: 0.32, blue: 0.72)], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .local:
-            return LinearGradient(colors: [Color(red: 0.45, green: 0.45, blue: 0.50), Color(red: 0.28, green: 0.28, blue: 0.33)], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .server:
             return LinearGradient(colors: [Color(red: 0.55, green: 0.35, blue: 0.90), Color(red: 0.36, green: 0.20, blue: 0.70)], startPoint: .topLeading, endPoint: .bottomTrailing)
         }
@@ -30,7 +28,6 @@ enum LibraryProvider: String, CaseIterable, Identifiable {
         case .netease: return "cloud.fill"
         case .qq: return "play.rectangle.fill"
         case .kugou: return "music.note"
-        case .local: return "iphone"
         case .server: return "externaldrive.connected.to.line.below"
         }
     }
@@ -40,8 +37,8 @@ enum LibraryProvider: String, CaseIterable, Identifiable {
         case .netease: return "BrandNetease"
         case .qq: return "BrandQQ"
         case .kugou: return "BrandKugou"
-        // 这两个用 SF Symbol, 没有品牌图
-        case .local, .server: return nil
+        // 用 SF Symbol, 没有品牌图
+        case .server: return nil
         }
     }
 }
@@ -88,9 +85,7 @@ struct LibraryView: View {
                     header
                     providerPicker
                     // 本机 / 自建服务器这两个 tab 有各自的整页内容, 不走板块排序
-                    if source == .local {
-                        LocalMusicSection()
-                    } else if source == .server {
+                    if source == .server {
                         subsonicSection
                     } else {
                     // 板块按用户自定义顺序渲染（可拖拽排序）
@@ -101,8 +96,8 @@ struct LibraryView: View {
                             case .netease: playlistsSection
                             case .qq: qqSection
                             case .kugou: kugouSection
-                            // 本机/自建服务器有各自的整页内容, 走不到板块这一层
-                            case .local, .server: EmptyView()
+                            // 本地音乐有自己的整页内容, 走不到板块这一层
+                            case .server: EmptyView()
                             }
                         case "最近播放":
                             historySection
@@ -214,8 +209,7 @@ struct LibraryView: View {
         case .netease: return "网易云歌单"
         case .qq: return "QQ 音乐收藏与歌单"
         case .kugou: return "酷狗云端歌单"
-        case .local: return "本机音乐"
-        case .server: return "自建音乐服务器"
+        case .server: return "我的音乐服务器"
         }
     }
 
@@ -465,8 +459,8 @@ struct LibraryView: View {
             await loadQQPlaylists(force: force)
         case .kugou:
             await loadKugouPlaylists(force: force)
-        // 本机音乐由 LocalMusicSection 自己管；服务器内容进二级页时再拉
-        case .local, .server:
+        // 本地音乐的内容进二级页时再拉
+        case .server:
             break
         }
     }
@@ -663,8 +657,8 @@ struct LibraryView: View {
             return
         }
         switch source {
-        // 本机/自建服务器不支持在这里建歌单
-        case .local, .server:
+        // 本地音乐不支持在这里建歌单
+        case .server:
             return
         case .netease:
             guard auth.isLoggedIn else {
@@ -713,8 +707,8 @@ struct LibraryView: View {
     private func confirmDeletePlaylist() {
         guard let playlist = pendingDelete else { return }
         switch source {
-        // 本机/自建服务器不支持在这里删歌单
-        case .local, .server:
+        // 本地音乐不支持在这里删歌单
+        case .server:
             return
         case .netease:
             Task {

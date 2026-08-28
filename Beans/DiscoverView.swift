@@ -25,6 +25,7 @@ struct DiscoverView: View {
     }
     /// 首页数据源：记住上次选择，下次打开仍保持该平台（默认网易云）
     @AppStorage("beans.homeSource") private var homeSourceRaw = SearchProvider.netease.rawValue
+    @State private var subsonicSongs: [Song] = []
     private var homeProviders: [SearchProvider] { platformPrefs.enabledSearchProviders }
     /// 首页数据源：网易云 / QQ音乐（与搜索页同一控件样式）
     private var source: SearchProvider {
@@ -72,6 +73,8 @@ struct DiscoverView: View {
                         }
                     } else if loading {
                         LoadingStateView()
+                    } else if source == .subsonic {
+                        subsonicHomeSection
                     } else {
                         // 板块按用户自定义顺序渲染（可拖拽排序）
                         ForEach(homeOrder.filter { availableSections.contains($0) }, id: \.self) { key in
@@ -584,7 +587,47 @@ struct DiscoverView: View {
 
     // MARK: - 动作
 
+    /// 首页的「本地音乐」板块：直接列服务器上的曲目，点一首就播
+    private var subsonicHomeSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SectionHeader(title: "随便听听", trailing: "换一批") {
+                BeansHaptics.tap()
+                Task { await loadSubsonic() }
+            }
+            if !SubsonicAuth.shared.isLoggedIn {
+                EmptyStateView(icon: "externaldrive.badge.plus", text: "还没连接音乐服务器，去「音乐库」标签页添加")
+            } else if subsonicSongs.isEmpty {
+                EmptyStateView(icon: "music.note", text: "没有取到曲目")
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(subsonicSongs.enumerated()), id: \.element.identityKey) { index, song in
+                        SongCell(song: song) {
+                            player.play(songs: subsonicSongs, startAt: index)
+                        }
+                        Divider().overlay(Color.beansComment.opacity(0.15))
+                    }
+                }
+            }
+        }
+    }
+
+    private func loadSubsonic() async {
+        guard SubsonicAuth.shared.isLoggedIn else {
+            subsonicSongs = []
+            return
+        }
+        subsonicSongs = (try? await SubsonicAPI.shared.randomSongs(count: 50)) ?? []
+    }
+
     private func load(force: Bool = false) async {
+        // 本地音乐不走平台那套缓存/榜单逻辑，单独拉曲目
+        if source == .subsonic {
+            loading = subsonicSongs.isEmpty
+            errorMessage = nil
+            await loadSubsonic()
+            loading = false
+            return
+        }
         let cache = DiscoverCache.shared
         let requestedSource = source
         // 网易云非「全部」分类的歌单不缓存（切换分类即重新拉取）

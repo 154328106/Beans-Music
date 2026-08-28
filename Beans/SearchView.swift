@@ -42,6 +42,8 @@ enum SearchProvider: String, CaseIterable, Identifiable {
     case netease = "网易云"
     case qq = "QQ音乐"
     case kugou = "酷狗音乐"
+    /// 自建 Subsonic 服务器（Navidrome / 道理鱼音乐…），对用户就是"我自己的音乐"
+    case subsonic = "本地音乐"
 
     var id: String { rawValue }
 
@@ -718,6 +720,10 @@ struct SearchView: View {
     }
 
     private func loadHotWords() async {
+        if provider == .subsonic {
+            hotWords = []   // 自建服务器没有热搜榜
+            return
+        }
         if provider == .qq {
             if let words = try? await QQMusicAPI.shared.hotKeys() {
                 hotWords = words
@@ -740,6 +746,18 @@ struct SearchView: View {
             defer { if !Task.isCancelled { searching = false } }
             do {
                 switch (provider, resultType) {
+                // 本地音乐：Subsonic 的 search3 只搜曲目，歌手/专辑维度不接，给空
+                case (.subsonic, .song):
+                    let songs = try await SubsonicAPI.shared.search(trimmed, count: 50)
+                    guard !Task.isCancelled else { return }
+                    songResults = songs
+                    if !songs.isEmpty { BeansHaptics.success() }
+                case (.subsonic, .artist):
+                    guard !Task.isCancelled else { return }
+                    artistResults = []
+                case (.subsonic, .album):
+                    guard !Task.isCancelled else { return }
+                    albumResults = []
                 case (.netease, .song):
                     let songs = try await NetEaseAPI.shared.search(keyword: trimmed, limit: 40)
                     guard !Task.isCancelled else { return }
