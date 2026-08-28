@@ -462,7 +462,7 @@ struct PlayerView: View {
 
     private func coverPlayerBackground(size: CGSize) -> some View {
         let imageHeight = min(size.height * 0.62, max(size.width, 320))
-        ZStack {
+        return ZStack {
             LinearGradient(
                 colors: [
                     palette.backgroundTop,
@@ -498,8 +498,8 @@ struct PlayerView: View {
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: 0.00),
-                    .init(color: .clear, location: 0.30),
-                    .init(color: palette.backgroundTop.opacity(0.35), location: 0.46),
+                    .init(color: .clear, location: 0.34),
+                    .init(color: palette.backgroundTop.opacity(0.30), location: 0.48),
                     .init(color: palette.backgroundBottom.opacity(0.78), location: 0.62),
                     .init(color: .black.opacity(0.92), location: 1.00)
                 ],
