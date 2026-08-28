@@ -432,54 +432,60 @@ struct PlayerView: View {
 
     private func coverPlayerScreen(geo: GeometryProxy) -> some View {
         let size = geo.size
+        let safeTop = geo.safeAreaInsets.top
+        let safeBottom = geo.safeAreaInsets.bottom
+        let backgroundSize = CGSize(width: size.width, height: size.height + safeTop + safeBottom)
         return ZStack {
-            coverPlayerBackground(size: size)
-                .frame(width: size.width, height: size.height)
-                .clipped()
+            coverPlayerBackground(size: backgroundSize)
+                .frame(width: backgroundSize.width, height: backgroundSize.height)
+                .offset(y: -safeTop)
                 .allowsHitTesting(false)
             VStack(spacing: 0) {
                 coverPlayerHeader
                     .padding(.horizontal, 20)
-                    .padding(.top, 2)
+                    .padding(.top, max(8, safeTop + 8))
                 Spacer(minLength: 40)
                 coverPlayerCenter
                     .padding(.horizontal, 30)
                 Spacer(minLength: 30)
-                coverPlayerDeck(bottomInset: geo.safeAreaInsets.bottom)
+                coverPlayerDeck(bottomInset: safeBottom)
                     .padding(.horizontal, 26)
-                    .padding(.bottom, max(8, geo.safeAreaInsets.bottom))
+                    .padding(.bottom, max(8, safeBottom))
             }
             .frame(width: size.width, height: size.height)
         }
         .frame(width: size.width, height: size.height)
-        .clipped()
         .foregroundStyle(Color.white)
-        .ignoresSafeArea(edges: .bottom)
+        .ignoresSafeArea()
+        .simultaneousGesture(coverDismissGesture)
     }
 
     private func coverPlayerBackground(size: CGSize) -> some View {
+        let imageHeight = min(size.height * 0.62, max(size.width, 320))
         ZStack {
+            LinearGradient(
+                colors: [
+                    palette.backgroundTop,
+                    palette.backgroundBottom,
+                    .black.opacity(0.96)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(width: size.width, height: size.height)
+
             AsyncImage(url: song?.coverURL) { phase in
                 switch phase {
                 case .success(let image):
-                    ZStack {
+                    VStack(spacing: 0) {
                         image
                             .resizable()
                             .scaledToFill()
-                            .frame(width: size.width, height: size.height)
-                            .blur(radius: 16)
-                            .scaleEffect(1.04)
+                            .frame(width: size.width, height: imageHeight)
                             .clipped()
-
-                        image
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: size.width, height: size.height * 0.72)
-                            .opacity(0.90)
-                            .clipped()
+                        Spacer(minLength: 0)
                     }
                     .frame(width: size.width, height: size.height)
-                    .clipped()
                 default:
                     CoverBlurBackground(url: song?.coverURL, scheme: colorScheme)
                         .frame(width: size.width, height: size.height)
@@ -490,18 +496,17 @@ struct PlayerView: View {
             .clipped()
 
             LinearGradient(
-                colors: [
-                    .black.opacity(0.08),
-                    .black.opacity(0.14),
-                    .black.opacity(0.60),
-                    .black.opacity(0.94)
+                stops: [
+                    .init(color: .clear, location: 0.00),
+                    .init(color: .clear, location: 0.30),
+                    .init(color: palette.backgroundTop.opacity(0.35), location: 0.46),
+                    .init(color: palette.backgroundBottom.opacity(0.78), location: 0.62),
+                    .init(color: .black.opacity(0.92), location: 1.00)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
             .frame(width: size.width, height: size.height)
-            Color.black.opacity(colorScheme == .dark ? 0.10 : 0.05)
-                .frame(width: size.width, height: size.height)
         }
         .frame(width: size.width, height: size.height)
         .clipped()
@@ -513,6 +518,32 @@ struct PlayerView: View {
                 BeansHaptics.tap()
                 closePlayer()
             }
+            Spacer(minLength: 0)
+            Button {
+                BeansHaptics.tap()
+                withAnimation(.spring(response: 0.24, dampingFraction: 0.86)) {
+                    showMoreActions.toggle()
+                }
+            } label: {
+                VStack(spacing: 2) {
+                    Text(song?.name ?? "Beans Music")
+                        .font(BeansFont.appFont(13, .bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Text(player.isBuffering ? "加载中..." : (player.isPlaying ? "正在播放" : "已暂停"))
+                        .font(BeansFont.appFont(10, .medium))
+                        .foregroundStyle(.white.opacity(0.68))
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 14)
+                .frame(height: 42)
+                .frame(maxWidth: 180)
+                .background(Capsule().fill(.black.opacity(0.22)))
+                .overlay(Capsule().stroke(.white.opacity(0.10), lineWidth: 0.8))
+                .contentShape(Capsule())
+            }
+            .buttonStyle(GlassPressButtonStyle(scale: 0.96))
             Spacer(minLength: 0)
             coverPlainButton(systemName: favorites.isLiked(song) ? "heart.fill" : "heart") {
                 BeansHaptics.tap()
@@ -639,6 +670,17 @@ struct PlayerView: View {
                 .contentShape(Circle())
         }
         .buttonStyle(GlassPressButtonStyle(scale: 0.92))
+    }
+
+    private var coverDismissGesture: some Gesture {
+        DragGesture(minimumDistance: 24)
+            .onEnded { value in
+                let h = value.translation.height
+                let w = abs(value.translation.width)
+                guard h > 90, h > w * 1.35 else { return }
+                BeansHaptics.medium()
+                closePlayer()
+            }
     }
 
     // MARK: - 顶栏（收起 / 状态 / 红心 / 队列）
