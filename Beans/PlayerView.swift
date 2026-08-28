@@ -235,8 +235,19 @@ struct PlayerView: View {
                         if usesCoverPlayer {
                             coverPlayerScreen(geo: geo)
                         } else {
-                            background
-                                .ignoresSafeArea()
+                            if playerSkinRaw == "cover", showLyrics {
+                                let backgroundSize = CGSize(
+                                    width: geo.size.width,
+                                    height: geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom
+                                )
+                                coverPlayerBackground(size: backgroundSize)
+                                    .frame(width: backgroundSize.width, height: backgroundSize.height)
+                                    .offset(y: -geo.safeAreaInsets.top)
+                                    .ignoresSafeArea()
+                            } else {
+                                background
+                                    .ignoresSafeArea()
+                            }
 
                             VStack(spacing: 0) {
                                 headerBar
@@ -278,6 +289,7 @@ struct PlayerView: View {
                         }
                     }
                     .frame(width: geo.size.width, height: geo.size.height)
+                    .ignoresSafeArea()
                     .clipped()
                 }
             }
@@ -444,10 +456,7 @@ struct PlayerView: View {
                 coverPlayerHeader
                     .padding(.horizontal, 20)
                     .padding(.top, max(8, safeTop + 8))
-                Spacer(minLength: 40)
-                coverPlayerCenter
-                    .padding(.horizontal, 30)
-                Spacer(minLength: 30)
+                Spacer(minLength: 0)
                 coverPlayerDeck(bottomInset: safeBottom)
                     .padding(.horizontal, 26)
                     .padding(.bottom, max(8, safeBottom))
@@ -461,7 +470,6 @@ struct PlayerView: View {
     }
 
     private func coverPlayerBackground(size: CGSize) -> some View {
-        let imageHeight = min(size.height * 0.62, max(size.width, 320))
         return ZStack {
             LinearGradient(
                 colors: [
@@ -477,14 +485,11 @@ struct PlayerView: View {
             AsyncImage(url: song?.coverURL) { phase in
                 switch phase {
                 case .success(let image):
-                    VStack(spacing: 0) {
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: size.width, height: imageHeight)
-                            .clipped()
-                        Spacer(minLength: 0)
-                    }
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: size.width, height: size.height, alignment: .top)
+                        .clipped()
                     .frame(width: size.width, height: size.height)
                 default:
                     CoverBlurBackground(url: song?.coverURL, scheme: colorScheme)
@@ -498,10 +503,10 @@ struct PlayerView: View {
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: 0.00),
-                    .init(color: .clear, location: 0.34),
-                    .init(color: palette.backgroundTop.opacity(0.30), location: 0.48),
-                    .init(color: palette.backgroundBottom.opacity(0.78), location: 0.62),
-                    .init(color: .black.opacity(0.92), location: 1.00)
+                    .init(color: .clear, location: 0.24),
+                    .init(color: palette.backgroundTop.opacity(0.28), location: 0.46),
+                    .init(color: palette.backgroundBottom.opacity(0.76), location: 0.64),
+                    .init(color: .black.opacity(0.94), location: 1.00)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -609,7 +614,10 @@ struct PlayerView: View {
     }
 
     private func coverPlayerDeck(bottomInset: CGFloat) -> some View {
-        VStack(spacing: 22) {
+        VStack(spacing: 18) {
+            coverPlayerCenter
+                .padding(.horizontal, 4)
+
             VStack(spacing: 6) {
                 SeekBar(accent: .white, track: .white.opacity(0.20), style: 0)
                 HStack {
