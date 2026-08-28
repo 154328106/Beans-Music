@@ -1242,6 +1242,30 @@ struct SettingsView: View {
 
                 Divider().overlay(Color.beansComment.opacity(0.15))
 
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "square.stack.3d.up.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.beansAmber)
+                            .frame(width: 28)
+                        Text("全局 UI 样式")
+                            .font(BeansFont.appFont(15))
+                            .foregroundStyle(Color.beansLabel)
+                        Spacer()
+                    }
+                    Picker("全局 UI 样式", selection: Binding(
+                        get: { theme.uiStyle },
+                        set: { theme.setUIStyle($0) }
+                    )) {
+                        ForEach(BeansUIStyle.allCases, id: \.self) { style in
+                            Text(style.title).tag(style)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Divider().overlay(Color.beansComment.opacity(0.15))
+
                 HStack {
                     Image(systemName: "eyedropper.halffull")
                         .font(.system(size: 14))

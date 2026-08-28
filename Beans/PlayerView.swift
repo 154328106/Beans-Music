@@ -93,6 +93,7 @@ struct PlayerView: View {
     @AppStorage("beans.lyricBackground.image") private var lyricBackgroundImagePath = ""
     @AppStorage("beans.lyricBackground.blur") private var lyricBackgroundBlur = 12.0
     @AppStorage("beans.lyricBackground.syncCover") private var lyricBackgroundSyncCover = false
+    @AppStorage("beans.playerSkin") private var playerSkinRaw = "classic"
     /// 侧边滑动手势当前位移（刷视频式切歌过渡）
     @State private var swipeOffset: CGFloat = 0
     @State private var coverDrag: CGSize = .zero
@@ -146,6 +147,10 @@ struct PlayerView: View {
 
     private var playerVisualsActive: Bool {
         player.isPlaying && !showPlayerSettings
+    }
+
+    private var usesCoverPlayer: Bool {
+        playerSkinRaw == "cover" && song != nil && !showLyrics
     }
 
     /// 当前行歌词颜色（可自定义；配色模式关闭时自动跟随封面取色）
@@ -227,18 +232,22 @@ struct PlayerView: View {
             } else {
                 GeometryReader { geo in
                     ZStack {
-                        background
-                            .ignoresSafeArea()
+                        if usesCoverPlayer {
+                            coverPlayerScreen(geo: geo)
+                        } else {
+                            background
+                                .ignoresSafeArea()
 
-                        VStack(spacing: 0) {
-                            headerBar
-                            content(geo: geo)
+                            VStack(spacing: 0) {
+                                headerBar
+                                content(geo: geo)
+                            }
+                            .foregroundStyle(palette.text)
+
+                            controlDeck(bottomInset: geo.safeAreaInsets.bottom)
+                                .frame(maxWidth: .infinity)
+                                .frame(maxHeight: .infinity, alignment: .bottom)
                         }
-                        .foregroundStyle(palette.text)
-
-                        controlDeck(bottomInset: geo.safeAreaInsets.bottom)
-                            .frame(maxWidth: .infinity)
-                            .frame(maxHeight: .infinity, alignment: .bottom)
 
                         // 布局编辑工具栏：组件选择 + X/Y/Z 滑杆 + 恢复默认 + 完成
                         if layoutMode {
@@ -415,6 +424,192 @@ struct PlayerView: View {
             CoverBlurBackground(url: song?.coverURL, scheme: colorScheme)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    // MARK: - 封面沉浸播放器（无液态玻璃）
+
+    private func coverPlayerScreen(geo: GeometryProxy) -> some View {
+        ZStack {
+            coverPlayerBackground
+            VStack(spacing: 0) {
+                coverPlayerHeader
+                    .padding(.horizontal, 20)
+                    .padding(.top, 2)
+                Spacer(minLength: 40)
+                coverPlayerCenter
+                    .padding(.horizontal, 30)
+                Spacer(minLength: 30)
+                coverPlayerDeck(bottomInset: geo.safeAreaInsets.bottom)
+                    .padding(.horizontal, 26)
+                    .padding(.bottom, max(8, geo.safeAreaInsets.bottom))
+            }
+        }
+        .foregroundStyle(Color.white)
+        .ignoresSafeArea(edges: .bottom)
+    }
+
+    private var coverPlayerBackground: some View {
+        ZStack {
+            AsyncImage(url: song?.coverURL) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                default:
+                    CoverBlurBackground(url: song?.coverURL, scheme: colorScheme)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+
+            LinearGradient(
+                colors: [
+                    .black.opacity(0.08),
+                    .black.opacity(0.14),
+                    .black.opacity(0.60),
+                    .black.opacity(0.94)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            Color.black.opacity(colorScheme == .dark ? 0.10 : 0.05)
+        }
+        .ignoresSafeArea()
+    }
+
+    private var coverPlayerHeader: some View {
+        HStack {
+            coverPlainButton(systemName: "chevron.left") {
+                BeansHaptics.tap()
+                closePlayer()
+            }
+            Spacer(minLength: 0)
+            coverPlainButton(systemName: favorites.isLiked(song) ? "heart.fill" : "heart") {
+                BeansHaptics.tap()
+                if let song {
+                    Task {
+                        if await favorites.toggle(song) {
+                            ToastCenter.shared.show(favorites.isLiked(song) ? "已收藏" : "已取消收藏")
+                        } else {
+                            ToastCenter.shared.show("收藏失败，请稍后再试")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var coverPlayerCenter: some View {
+        VStack(spacing: 12) {
+            Button {
+                BeansHaptics.tap()
+                withAnimation(.spring(response: 0.24, dampingFraction: 0.86)) {
+                    showMoreActions.toggle()
+                }
+            } label: {
+                VStack(spacing: 6) {
+                    Text(song?.name ?? "")
+                        .font(BeansFont.appFont(28, .bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .minimumScaleFactor(0.72)
+                    Text(song?.artists ?? "")
+                        .font(BeansFont.appFont(16, .medium))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(GlassPressButtonStyle(scale: 0.98))
+
+            VStack(spacing: 6) {
+                ForEach(Array(lyricPreviewRows.prefix(3).enumerated()), id: \.offset) { _, item in
+                    Text(item.text)
+                        .font(BeansFont.appFont(item.isCurrent ? 16 : 14, item.isCurrent ? .semibold : .regular))
+                        .foregroundStyle(item.isCurrent ? .white : .white.opacity(0.34))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .frame(maxWidth: .infinity)
+                }
+                if lyricPreviewRows.isEmpty {
+                    Text("暂无歌词")
+                        .font(BeansFont.appFont(14, .medium))
+                        .foregroundStyle(.white.opacity(0.42))
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .frame(height: 76)
+            .contentShape(Rectangle())
+            .onTapGesture { toggleLyrics() }
+        }
+    }
+
+    private func coverPlayerDeck(bottomInset: CGFloat) -> some View {
+        VStack(spacing: 22) {
+            VStack(spacing: 6) {
+                SeekBar(accent: .white, track: .white.opacity(0.20), style: 0)
+                HStack {
+                    Text(beansTimeString(clock.progress))
+                        .font(BeansFont.appFont(11, .regular, .monospaced))
+                        .foregroundStyle(.white.opacity(0.52))
+                    Spacer()
+                    Text(beansTimeString(clock.duration))
+                        .font(BeansFont.appFont(11, .regular, .monospaced))
+                        .foregroundStyle(.white.opacity(0.52))
+                }
+            }
+
+            HStack(spacing: 18) {
+                coverPlainButton(systemName: player.playMode.icon, size: 42, iconSize: 20) {
+                    BeansHaptics.select()
+                    player.togglePlayMode()
+                }
+                coverPlainButton(systemName: "backward.fill", size: 46, iconSize: 23) {
+                    BeansHaptics.tap()
+                    player.previous()
+                }
+                Button {
+                    BeansHaptics.tap()
+                    player.togglePlayPause()
+                } label: {
+                    PlayPauseMorphIcon(isPlaying: player.isPlaying, size: 28)
+                        .foregroundStyle(.white)
+                        .frame(width: 72, height: 72)
+                        .background(Circle().fill(.white.opacity(0.12)))
+                        .overlay(Circle().stroke(.white.opacity(0.12), lineWidth: 0.8))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(GlassPressButtonStyle(scale: 0.90))
+                coverPlainButton(systemName: "forward.fill", size: 46, iconSize: 23) {
+                    BeansHaptics.tap()
+                    player.next()
+                }
+                coverPlainButton(systemName: "list.bullet", size: 42, iconSize: 22) {
+                    BeansHaptics.tap()
+                    showQueue = true
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .padding(.bottom, bottomInset > 0 ? 0 : 12)
+    }
+
+    private func coverPlainButton(systemName: String, size: CGFloat = 42, iconSize: CGFloat = 20, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: iconSize, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: size, height: size)
+                .background(Circle().fill(.black.opacity(0.22)))
+                .overlay(Circle().stroke(.white.opacity(0.10), lineWidth: 0.8))
+                .clipShape(Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(GlassPressButtonStyle(scale: 0.92))
     }
 
     // MARK: - 顶栏（收起 / 状态 / 红心 / 队列）
@@ -2113,6 +2308,7 @@ struct PlayerSettingsSheet: View {
     @AppStorage("beans.lyricBackground.blur") private var lyricBackgroundBlur = 12.0
     @AppStorage("beans.lyricBackground.syncCover") private var lyricBackgroundSyncCover = false
     @AppStorage("beans.audio.mixothers.v1") private var mixesWithOthers = false
+    @AppStorage("beans.playerSkin") private var playerSkinRaw = "classic"
     @Environment(\.dismiss) private var dismiss
     @State private var playbackExpanded = false
     @State private var lyricDisplayExpanded = false
@@ -2358,6 +2554,20 @@ struct PlayerSettingsSheet: View {
     /// 播放卡片：切歌 / 进度条样式 / 背景光晕 / DJ 视觉
     private var playingCard: some View {
         settingCard("播放", isExpanded: $playbackExpanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("播放器样式")
+                    .font(BeansFont.appFont(13))
+                    .foregroundStyle(Color.beansLabel)
+                Picker("播放器样式", selection: $playerSkinRaw) {
+                    Text("经典").tag("classic")
+                    Text("封面沉浸").tag("cover")
+                }
+                .pickerStyle(.segmented)
+                Text("封面沉浸会用当前歌曲封面铺满背景，中间显示预览歌词，底部保留正常控制区")
+                    .font(BeansFont.appFont(12))
+                    .foregroundStyle(Color.beansComment)
+            }
+            Divider().opacity(0.5)
             settingToggle("播放控件跟随封面取色", isOn: $controlsUseCoverColor,
                           caption: "开启：播放键、进度条和高亮跟随封面；关闭：使用你设置的主题色")
             Divider().opacity(0.5)
@@ -2702,18 +2912,31 @@ struct PlayerSettingsSheet: View {
 }
 
 private struct PlayerSettingsLiquidGlass<S: Shape>: View {
+    @AppStorage("beans.uiStyle") private var uiStyleRaw = BeansUIStyle.liquid.rawValue
     let shape: S
 
+    private var uiStyle: BeansUIStyle {
+        BeansUIStyle(rawValue: uiStyleRaw) ?? .liquid
+    }
+
     var body: some View {
-        if #available(iOS 26, *) {
+        if #available(iOS 26, *), uiStyle == .liquid {
             GlassEffectContainer {
                 shape
                     .fill(.clear)
                     .glassEffect(.clear, in: shape)
             }
         } else {
-            shape
-                .fill(Color.beansGlassFill.opacity(0.72))
+            switch uiStyle {
+            case .clear, .liquid:
+                shape.fill(.ultraThinMaterial)
+            case .compact:
+                shape.fill(Color.beansGlassFill.opacity(0.62))
+            case .outline:
+                shape
+                    .fill(Color.beansGlassFill.opacity(0.72))
+                    .overlay { shape.stroke(Color.beansAmber.opacity(0.30), lineWidth: 0.9) }
+            }
         }
     }
 }

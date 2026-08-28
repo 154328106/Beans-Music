@@ -191,6 +191,24 @@ enum BeansFXStyle: String, CaseIterable {
     }
 }
 
+// MARK: - 全局 UI 风格
+
+enum BeansUIStyle: String, CaseIterable {
+    case liquid = "liquid"
+    case clear = "clear"
+    case compact = "compact"
+    case outline = "outline"
+
+    var title: String {
+        switch self {
+        case .liquid: return "默认液态"
+        case .clear: return "清透磨砂"
+        case .compact: return "紧凑淡雅"
+        case .outline: return "描边高亮"
+        }
+    }
+}
+
 // MARK: - 全局主题（ObservableObject：一处修改，全 App 即时联动）
 
 final class ThemeStore: ObservableObject {
@@ -210,6 +228,8 @@ final class ThemeStore: ObservableObject {
     @Published var wallpaperPaths: [String] = []
     /// 全局玻璃材质：液态玻璃（iOS 26 Liquid Glass）或磨砂玻璃（ultraThinMaterial）
     @Published var fxStyle: BeansFXStyle = .liquid
+    /// 全局 UI 风格：影响玻璃容器、卡片透明度与边框质感
+    @Published var uiStyle: BeansUIStyle = .liquid
 
     private let customAccentKey = "beans.accent.custom"
     private let backgroundKey = "beans.background.custom"
@@ -219,6 +239,7 @@ final class ThemeStore: ObservableObject {
     private let wallpaperDataKey = "beans.wallpapers.data"
     private let deletedKey = "beans.wallpapers.deleted"
     private let fxStyleKey = "beans.fxStyle"
+    private let uiStyleKey = "beans.uiStyle"
 
     private init() {
         accent = BeansAccent(rawValue: UserDefaults.standard.string(forKey: AccentTheme.key) ?? "") ?? .amber
@@ -229,6 +250,7 @@ final class ThemeStore: ObservableObject {
         backgroundImagePath = UserDefaults.standard.string(forKey: backgroundImageKey) ?? ""
         wallpaperPaths = UserDefaults.standard.stringArray(forKey: wallpaperListKey) ?? []
         fxStyle = BeansFXStyle(rawValue: UserDefaults.standard.string(forKey: fxStyleKey) ?? "") ?? .liquid
+        uiStyle = BeansUIStyle(rawValue: UserDefaults.standard.string(forKey: uiStyleKey) ?? "") ?? .liquid
         // 自动恢复壁纸（覆盖安装/数据迁移后：文件仍在用文件，文件丢失用 base64 备份重建）
         restoreWallpapers()
     }
@@ -318,6 +340,12 @@ final class ThemeStore: ObservableObject {
         guard fxStyle != style else { return }
         fxStyle = style
         UserDefaults.standard.set(style.rawValue, forKey: fxStyleKey)
+    }
+
+    func setUIStyle(_ style: BeansUIStyle) {
+        guard uiStyle != style else { return }
+        uiStyle = style
+        UserDefaults.standard.set(style.rawValue, forKey: uiStyleKey)
     }
 
     func set(_ newAccent: BeansAccent) {
