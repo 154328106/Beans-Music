@@ -277,6 +277,8 @@ struct PlayerView: View {
                                 .transition(.opacity.combined(with: .scale(scale: 0.94, anchor: .top)))
                         }
                     }
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .clipped()
                 }
             }
         }
@@ -429,8 +431,12 @@ struct PlayerView: View {
     // MARK: - 封面沉浸播放器（无液态玻璃）
 
     private func coverPlayerScreen(geo: GeometryProxy) -> some View {
+        let size = geo.size
         ZStack {
-            coverPlayerBackground(size: geo.size)
+            coverPlayerBackground(size: size)
+                .frame(width: size.width, height: size.height)
+                .clipped()
+                .allowsHitTesting(false)
             VStack(spacing: 0) {
                 coverPlayerHeader
                     .padding(.horizontal, 20)
@@ -443,7 +449,10 @@ struct PlayerView: View {
                     .padding(.horizontal, 26)
                     .padding(.bottom, max(8, geo.safeAreaInsets.bottom))
             }
+            .frame(width: size.width, height: size.height)
         }
+        .frame(width: size.width, height: size.height)
+        .clipped()
         .foregroundStyle(Color.white)
         .ignoresSafeArea(edges: .bottom)
     }
@@ -455,8 +464,10 @@ struct PlayerView: View {
                 case .success(let image):
                     image
                         .resizable()
-                        .scaledToFill()
-                        .frame(width: size.width, height: size.height)
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: size.width + 48, height: size.height + 48)
+                        .position(x: size.width / 2, y: size.height / 2)
+                        .blur(radius: 1.2)
                         .clipped()
                 default:
                     CoverBlurBackground(url: song?.coverURL, scheme: colorScheme)
