@@ -432,7 +432,7 @@ struct PlayerView: View {
 
     private func coverPlayerScreen(geo: GeometryProxy) -> some View {
         let size = geo.size
-        ZStack {
+        return ZStack {
             coverPlayerBackground(size: size)
                 .frame(width: size.width, height: size.height)
                 .clipped()
