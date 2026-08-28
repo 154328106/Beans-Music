@@ -430,7 +430,7 @@ struct PlayerView: View {
 
     private func coverPlayerScreen(geo: GeometryProxy) -> some View {
         ZStack {
-            coverPlayerBackground
+            coverPlayerBackground(size: geo.size)
             VStack(spacing: 0) {
                 coverPlayerHeader
                     .padding(.horizontal, 20)
@@ -448,7 +448,7 @@ struct PlayerView: View {
         .ignoresSafeArea(edges: .bottom)
     }
 
-    private var coverPlayerBackground: some View {
+    private func coverPlayerBackground(size: CGSize) -> some View {
         ZStack {
             AsyncImage(url: song?.coverURL) { phase in
                 switch phase {
@@ -456,11 +456,15 @@ struct PlayerView: View {
                     image
                         .resizable()
                         .scaledToFill()
+                        .frame(width: size.width, height: size.height)
+                        .clipped()
                 default:
                     CoverBlurBackground(url: song?.coverURL, scheme: colorScheme)
+                        .frame(width: size.width, height: size.height)
+                        .clipped()
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(width: size.width, height: size.height)
             .clipped()
 
             LinearGradient(
@@ -473,8 +477,12 @@ struct PlayerView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
+            .frame(width: size.width, height: size.height)
             Color.black.opacity(colorScheme == .dark ? 0.10 : 0.05)
+                .frame(width: size.width, height: size.height)
         }
+        .frame(width: size.width, height: size.height)
+        .clipped()
         .ignoresSafeArea()
     }
 
