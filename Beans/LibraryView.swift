@@ -4,6 +4,9 @@ enum LibraryProvider: String, CaseIterable, Identifiable {
     case netease = "网易云"
     case qq = "QQ音乐"
     case kugou = "酷狗"
+    /// 下面两个不是"平台", 是本机与自建服务器, 不受平台开关控制, 始终显示
+    case local = "本地音乐"
+    case server = "音乐服务器"
 
     var id: String { rawValue }
 
@@ -15,6 +18,10 @@ enum LibraryProvider: String, CaseIterable, Identifiable {
             return LinearGradient(colors: [Color(red: 0.15, green: 0.78, blue: 0.55), Color(red: 0.05, green: 0.58, blue: 0.42)], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .kugou:
             return LinearGradient(colors: [Color(red: 0.12, green: 0.58, blue: 0.95), Color(red: 0.02, green: 0.32, blue: 0.72)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .local:
+            return LinearGradient(colors: [Color(red: 0.45, green: 0.45, blue: 0.50), Color(red: 0.28, green: 0.28, blue: 0.33)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .server:
+            return LinearGradient(colors: [Color(red: 0.55, green: 0.35, blue: 0.90), Color(red: 0.36, green: 0.20, blue: 0.70)], startPoint: .topLeading, endPoint: .bottomTrailing)
         }
     }
 
@@ -23,6 +30,8 @@ enum LibraryProvider: String, CaseIterable, Identifiable {
         case .netease: return "cloud.fill"
         case .qq: return "play.rectangle.fill"
         case .kugou: return "music.note"
+        case .local: return "iphone"
+        case .server: return "externaldrive.connected.to.line.below"
         }
     }
 
@@ -31,6 +40,8 @@ enum LibraryProvider: String, CaseIterable, Identifiable {
         case .netease: return "BrandNetease"
         case .qq: return "BrandQQ"
         case .kugou: return "BrandKugou"
+        // 这两个用 SF Symbol, 没有品牌图
+        case .local, .server: return nil
         }
     }
 }
@@ -76,13 +87,15 @@ struct LibraryView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     header
                     providerPicker
+                    // 本机 / 自建服务器这两个 tab 有各自的整页内容, 不走板块排序
+                    if source == .local {
+                        LocalMusicSection()
+                    } else if source == .server {
+                        subsonicSection
+                    } else {
                     // 板块按用户自定义顺序渲染（可拖拽排序）
                     ForEach(libraryOrder, id: \.self) { key in
                         switch key {
-                        case "音乐服务器":
-                            subsonicSection
-                        case "本地音乐库":
-                            LocalMusicSection()
                         case "我的歌单":
                             switch source {
                             case .netease: playlistsSection
@@ -94,6 +107,7 @@ struct LibraryView: View {
                         default:
                             EmptyView()
                         }
+                    }
                     }
                 }
                 .padding(.horizontal, 16)

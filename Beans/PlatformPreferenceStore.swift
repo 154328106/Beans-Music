@@ -27,7 +27,11 @@ final class PlatformPreferenceStore: ObservableObject {
     }
 
     var enabledLibraryProviders: [LibraryProvider] {
-        LibraryProvider.allCases.filter { selectedRaw.contains($0.searchProvider.rawValue) }
+        LibraryProvider.allCases.filter {
+            // 本机/自建服务器不是平台, 不受"启用哪些平台"开关控制
+            guard let sp = $0.searchProvider else { return true }
+            return selectedRaw.contains(sp.rawValue)
+        }
     }
 
     var summaryText: String {
@@ -39,7 +43,8 @@ final class PlatformPreferenceStore: ObservableObject {
     }
 
     func isEnabled(_ provider: LibraryProvider) -> Bool {
-        isEnabled(provider.searchProvider)
+        guard let sp = provider.searchProvider else { return true }
+        return isEnabled(sp)
     }
 
     func set(_ provider: SearchProvider, enabled: Bool) {
@@ -74,11 +79,13 @@ final class PlatformPreferenceStore: ObservableObject {
 }
 
 extension LibraryProvider {
-    var searchProvider: SearchProvider {
+    /// 对应的搜索平台；本机与自建服务器没有对应平台，返回 nil
+    var searchProvider: SearchProvider? {
         switch self {
         case .netease: return .netease
         case .qq: return .qq
         case .kugou: return .kugou
+        case .local, .server: return nil
         }
     }
 }

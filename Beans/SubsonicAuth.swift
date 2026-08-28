@@ -1,66 +1,133 @@
 import Foundation
 
-/// Subsonic 服务器凭据（Navidrome / 道理鱼音乐 / gonic 等自建音乐服务通用）。
+/// 一台 Subsonic 服务器的配置。
+struct SubsonicServer: Codable, Identifiable, Equatable {
+    var id: String = UUID().uuidString
+    var name: String = ""
+    /// 形如 http://192.168.1.10:4000，末尾不带斜杠
+    var server: String = ""
+    var username: String = ""
+    var password: String = ""
+    /// 认证方式，见 SubsonicAuth.Mode；空串表示还没探测过
+    var mode: String = ""
+    /// 该服务器的封面接口是否可用（实测有的实现会对已认证请求回 403）
+    var coversSupported: Bool = true
+
+    var displayName: String {
+        if !name.isEmpty { return name }
+        if let host = URL(string: server)?.host { return host }
+        return server
+    }
+}
+
+/// 多台 Subsonic 服务器的管理（Navidrome / 道理鱼音乐 / gonic / Airsonic…）。
 ///
-/// 与网易云/QQ/酷狗那三家不同：这里连的是**用户自己的服务器**，
-/// 没有第三方登录流程，只保存「地址 + 用户名 + 密码」三件套。
-///
-/// 认证走 Subsonic 官方的 salt+token 方案（`u` / `t=md5(密码+salt)` / `s=salt`），
-/// 明文密码只留在本机 UserDefaults，不随请求上网。
+/// 与网易云那三家不同：这里连的是**用户自己的服务器**，没有第三方登录流程，
+/// 就是「地址 + 用户名 + 密码」，而且可以存多台随时切换。
+/// 明文密码只留在本机 UserDefaults。
 final class SubsonicAuth: ObservableObject {
     static let shared = SubsonicAuth()
 
-    @Published private(set) var isLoggedIn = false
-    @Published private(set) var serverName = ""
+    @Published private(set) var servers: [SubsonicServer] = []
+    @Published private(set) var currentID: String = ""
 
     private let defaults = UserDefaults.standard
-    private let key = "beans.subsonic.auth.v1"
-    private var auth: [String: String] = [:]
+    private let listKey = "beans.subsonic.servers.v2"
+    private let currentKey = "beans.subsonic.current.v2"
+    private let legacyKey = "beans.subsonic.auth.v1"
 
-    private init() {
-        if let saved = defaults.dictionary(forKey: key) as? [String: String] {
-            auth = saved
-            isLoggedIn = !(auth["server"] ?? "").isEmpty && !(auth["username"] ?? "").isEmpty
-            serverName = auth["serverName"] ?? Self.hostLabel(auth["server"] ?? "")
-        }
-    }
-
-    /// 形如 http://192.168.1.10:4000，末尾不带斜杠
-    var server: String { (auth["server"] ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
-    var username: String { auth["username"] ?? "" }
-    var password: String { auth["password"] ?? "" }
-
-    /// 认证方式。Subsonic 有两套，服务端支持哪套并不统一：
-    ///   · token    —— `t=md5(密码+salt)` + `s=salt`，密码不上网，官方推荐（Navidrome 支持）
-    ///   · password —— `p=enc:<hex>`，老式，密码等于明送（实测「道理鱼音乐」只认这套，
-    ///                 用 token 会回 `code 41: Token-based authentication is not supported`）
-    /// 先试 token，撞 41 再自动降级并记住，避免每次都白撞一次。
     enum Mode: String {
+        /// `t=md5(密码+salt)` + `s=salt`，密码不上网，官方推荐（Navidrome 支持）
         case token
+        /// `p=enc:<hex>`，老式；实测「道理鱼音乐」只认这套，用 token 会回
+        /// `code 41: Token-based authentication is not supported`
         case password
     }
 
-    var mode: Mode { Mode(rawValue: auth["mode"] ?? "") ?? .token }
+    private init() {
+        load()
+        migrateLegacyIfNeeded()
+    }
 
-    /// 服务器的封面接口是否可用。实测「道理鱼音乐」的 `getCoverArt` 对**已认证**请求
-    /// 一律回 403（它自己的实现缺陷，Navidrome 没这问题）。连接测试时探一次，
-    /// 不支持就不再为每首歌拼封面 URL，省掉一堆注定失败的请求。
-    var coversSupported: Bool { (auth["covers"] ?? "1") != "0" }
+    // MARK: - 当前服务器
+
+    var current: SubsonicServer? {
+        servers.first { $0.id == currentID } ?? servers.first
+    }
+
+    var isLoggedIn: Bool { current != nil }
+    var serverName: String { current?.displayName ?? "" }
+    var server: String { current?.server ?? "" }
+    var username: String { current?.username ?? "" }
+    var password: String { current?.password ?? "" }
+    var mode: Mode { Mode(rawValue: current?.mode ?? "") ?? .token }
+    var coversSupported: Bool { current?.coversSupported ?? true }
+
+    // MARK: - 增删改切
+
+    @MainActor
+    @discardableResult
+    func upsert(_ input: SubsonicServer) -> SubsonicServer {
+        var item = input
+        item.server = Self.normalizeURL(item.server)
+        if let idx = servers.firstIndex(where: { $0.id == item.id }) {
+            // 改了地址或账号就重新探测认证方式与封面
+            if servers[idx].server != item.server || servers[idx].username != item.username {
+                item.mode = ""
+                item.coversSupported = true
+            }
+            servers[idx] = item
+        } else {
+            servers.append(item)
+        }
+        if currentID.isEmpty { currentID = item.id }
+        save()
+        BeansLogger.shared.log("Subsonic 服务器已保存：\(item.displayName)", level: .info)
+        return item
+    }
+
+    @MainActor
+    func remove(id: String) {
+        servers.removeAll { $0.id == id }
+        if currentID == id { currentID = servers.first?.id ?? "" }
+        save()
+    }
+
+    @MainActor
+    func select(id: String) {
+        guard servers.contains(where: { $0.id == id }) else { return }
+        currentID = id
+        save()
+        BeansLogger.shared.log("已切换音乐服务器：\(serverName)", level: .info)
+    }
+
+    // MARK: - 运行时探测结果（后台线程也会调）
+
+    /// 撞到 code 41：记住这台服务器只能用老式密码认证
+    func fallbackToPasswordMode() {
+        guard mode != .password, let id = current?.id else { return }
+        updateCurrent(id: id) { $0.mode = Mode.password.rawValue }
+        BeansLogger.shared.log("服务器不支持 token 认证，已切换为密码模式", level: .info)
+    }
 
     func setCoversSupported(_ ok: Bool) {
-        guard coversSupported != ok else { return }
-        auth["covers"] = ok ? "1" : "0"
-        defaults.set(auth, forKey: key)
-        BeansLogger.shared.log("Subsonic 封面接口\(ok ? "可用" : "不可用，已停用封面请求")", level: .info)
+        guard let cur = current, cur.coversSupported != ok else { return }
+        updateCurrent(id: cur.id) { $0.coversSupported = ok }
+        BeansLogger.shared.log("服务器封面接口\(ok ? "可用" : "不可用，已停用封面请求")", level: .info)
     }
 
-    /// 撞到 code 41 时调用：记住这台服务器只能用老式密码认证
-    func fallbackToPasswordMode() {
-        guard mode != .password else { return }
-        auth["mode"] = Mode.password.rawValue
-        defaults.set(auth, forKey: key)
-        BeansLogger.shared.log("Subsonic 服务器不支持 token 认证，已切换为密码模式", level: .info)
+    private func updateCurrent(id: String, _ mutate: @escaping (inout SubsonicServer) -> Void) {
+        // @Published 必须在主线程改，否则 SwiftUI 会告警
+        Task { @MainActor in
+            guard let i = self.servers.firstIndex(where: { $0.id == id }) else { return }
+            var item = self.servers[i]
+            mutate(&item)
+            self.servers[i] = item
+            self.save()
+        }
     }
+
+    // MARK: - 签名
 
     /// token 模式每次现算一组 salt，不复用，避免抓包重放
     func signedQuery() -> [URLQueryItem] {
@@ -83,46 +150,57 @@ final class SubsonicAuth: ObservableObject {
         return items
     }
 
-    @MainActor
-    func save(server: String, username: String, password: String, serverName: String = "") {
-        var normalized = server.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !normalized.lowercased().hasPrefix("http://") && !normalized.lowercased().hasPrefix("https://") {
-            normalized = "http://" + normalized
+    // MARK: - 持久化
+
+    private func load() {
+        if let data = defaults.data(forKey: listKey),
+           let list = try? JSONDecoder().decode([SubsonicServer].self, from: data) {
+            servers = list
         }
-        while normalized.hasSuffix("/") { normalized.removeLast() }
-        let label = serverName.isEmpty ? Self.hostLabel(normalized) : serverName
-        auth = [
-            "server": normalized,
-            "username": username,
-            "password": password,
-            "serverName": label,
-            // 换服务器要重新探测认证方式与封面可用性
-            "mode": Mode.token.rawValue,
-            "covers": "1",
-        ]
-        defaults.set(auth, forKey: key)
-        self.serverName = label
-        isLoggedIn = !normalized.isEmpty && !username.isEmpty
-        BeansLogger.shared.log("Subsonic 服务器已保存：\(label)", level: .info)
+        currentID = defaults.string(forKey: currentKey) ?? servers.first?.id ?? ""
     }
 
-    @MainActor
-    func logout() {
-        auth = [:]
-        defaults.removeObject(forKey: key)
-        isLoggedIn = false
-        serverName = ""
-        BeansLogger.shared.log("Subsonic 服务器已断开", level: .info)
+    private func save() {
+        if let data = try? JSONEncoder().encode(servers) {
+            defaults.set(data, forKey: listKey)
+        }
+        defaults.set(currentID, forKey: currentKey)
+    }
+
+    /// 把 v1 的单服务器配置搬进列表，搬完删掉旧键
+    private func migrateLegacyIfNeeded() {
+        guard servers.isEmpty,
+              let old = defaults.dictionary(forKey: legacyKey) as? [String: String],
+              let addr = old["server"], !addr.isEmpty else { return }
+        let item = SubsonicServer(
+            name: old["serverName"] ?? "",
+            server: addr,
+            username: old["username"] ?? "",
+            password: old["password"] ?? "",
+            mode: old["mode"] ?? "",
+            coversSupported: (old["covers"] ?? "1") != "0"
+        )
+        servers = [item]
+        currentID = item.id
+        save()
+        defaults.removeObject(forKey: legacyKey)
+        BeansLogger.shared.log("已把旧的单服务器配置迁移到服务器列表", level: .info)
+    }
+
+    // MARK: - 小工具
+
+    static func normalizeURL(_ raw: String) -> String {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return s }
+        if !s.lowercased().hasPrefix("http://") && !s.lowercased().hasPrefix("https://") {
+            s = "http://" + s
+        }
+        while s.hasSuffix("/") { s.removeLast() }
+        return s
     }
 
     private static func randomSalt() -> String {
         let chars = "abcdefghijklmnopqrstuvwxyz0123456789"
         return String((0..<12).map { _ in chars.randomElement() ?? "0" })
-    }
-
-    /// 从 URL 里抠一个能显示的名字（拿不到就退回原串）
-    private static func hostLabel(_ urlString: String) -> String {
-        guard let host = URL(string: urlString)?.host else { return urlString }
-        return host
     }
 }
