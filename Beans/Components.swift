@@ -453,13 +453,15 @@ struct GlassButton: View {
 struct SectionHeader: View {
     let title: String
     var trailing: String?
+    var titleColor: Color = Color.beansLabel
+    var trailingColor: Color = Color.beansComment
     var onTrailingTap: (() -> Void)?
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(title)
                 .font(BeansFont.appFont(21, .bold))
-                .foregroundStyle(Color.beansLabel)
+                .foregroundStyle(titleColor)
             Spacer()
             if let trailing {
                 Button {
@@ -471,7 +473,7 @@ struct SectionHeader: View {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10, weight: .semibold))
                     }
-                    .foregroundStyle(Color.beansComment)
+                    .foregroundStyle(trailingColor)
                 }
                 .buttonStyle(GlassPressButtonStyle(scale: 0.9))
             }

@@ -473,8 +473,9 @@ struct PlayerView: View {
                                                 BeansGlass(shape: Circle())
                     }
                     .clipShape(Circle())
+                    .contentShape(Circle())
             }
-            .buttonStyle(GlassPressButtonStyle())
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 20)
         .padding(.top, 2)
@@ -2154,7 +2155,7 @@ struct PlayerSettingsSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             if let isExpanded {
                 Button {
-                    withAnimation(.spring(response: 0.26, dampingFraction: 0.88)) {
+                    withAnimation(.easeOut(duration: 0.16)) {
                         isExpanded.wrappedValue.toggle()
                     }
                     BeansHaptics.select()
@@ -2170,9 +2171,10 @@ struct PlayerSettingsSheet: View {
                             .rotationEffect(.degrees(isExpanded.wrappedValue ? 0 : -90))
                             .frame(width: 24, height: 24)
                     }
+                    .frame(minHeight: 44)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(GlassPressButtonStyle(scale: 0.98))
 
                 if isExpanded.wrappedValue {
                     content()
@@ -2187,7 +2189,9 @@ struct PlayerSettingsSheet: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background {
+            PlayerSettingsLiquidGlass(shape: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
     }
 
     /// 开关行（标题 + 可选的短说明）
@@ -2515,6 +2519,23 @@ struct PlayerSettingsSheet: View {
         case 3: return "强烈"
         case 4: return "明亮"
         default: return "极亮"
+        }
+    }
+}
+
+private struct PlayerSettingsLiquidGlass<S: Shape>: View {
+    let shape: S
+
+    var body: some View {
+        if #available(iOS 26, *) {
+            GlassEffectContainer {
+                shape
+                    .fill(.clear)
+                    .glassEffect(.clear, in: shape)
+            }
+        } else {
+            shape
+                .fill(Color.beansGlassFill.opacity(0.72))
         }
     }
 }

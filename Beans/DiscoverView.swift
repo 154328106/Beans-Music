@@ -24,6 +24,8 @@ struct DiscoverView: View {
     }
     /// 首页数据源：记住上次选择，下次打开仍保持该平台（默认网易云）
     @AppStorage("beans.homeSource") private var homeSourceRaw = SearchProvider.netease.rawValue
+    @AppStorage("beans.homeTitleColorHex") private var homeTitleColorHex = ""
+    @AppStorage("beans.homeSubtitleColorHex") private var homeSubtitleColorHex = ""
     private let homeProviders: [SearchProvider] = [.netease, .qq, .kugou]
     /// 首页数据源：网易云 / QQ音乐（与搜索页同一控件样式）
     private var source: SearchProvider {
@@ -31,6 +33,16 @@ struct DiscoverView: View {
             return .netease
         }
         return saved
+    }
+
+    private var homeTitleColor: Color {
+        if let color = Color(hex: homeTitleColorHex) { return color }
+        return Color.beansLabel
+    }
+
+    private var homeSubtitleColor: Color {
+        if let color = Color(hex: homeSubtitleColorHex) { return color }
+        return Color.beansComment
     }
     @State private var qqTopLists: [QQTopInfo] = []
     @State private var selectedQQTopList: QQTopInfo?
@@ -154,10 +166,10 @@ struct DiscoverView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(greeting)
                         .font(BeansFont.appFont(30, .bold))
-                        .foregroundStyle(Color.beansLabel)
+                        .foregroundStyle(homeTitleColor)
                     Text(auth.user?.nickname ?? "发现好音乐")
                         .font(BeansFont.appFont(13))
-                        .foregroundStyle(Color.beansComment)
+                        .foregroundStyle(homeSubtitleColor)
                 }
                 Spacer()
                 HStack(spacing: 10) {
@@ -196,7 +208,7 @@ struct DiscoverView: View {
                         Text(p.rawValue)
                             .font(BeansFont.appFont(13, .semibold))
                     }
-                    .foregroundStyle(source == p ? Color.white : Color.beansComment)
+                    .foregroundStyle(source == p ? Color.white : homeSubtitleColor)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 9)
                     .background {
@@ -285,7 +297,7 @@ struct DiscoverView: View {
 
     private var topListsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "排行榜")
+            SectionHeader(title: "排行榜", titleColor: homeTitleColor, trailingColor: homeSubtitleColor)
             VStack(spacing: 0) {
                 if ranksExpanded {
                     rankToggleButton(label: "收起", icon: "chevron.up")
@@ -366,23 +378,23 @@ struct DiscoverView: View {
             HStack(spacing: 12) {
                 Text("\(index + 1)")
                     .font(BeansFont.appFont(16, .bold, .rounded))
-                    .foregroundStyle(index < 3 ? Color.beansAmber : Color.beansComment)
+                    .foregroundStyle(index < 3 ? Color.beansAmber : homeSubtitleColor)
                     .frame(width: 24)
                 CoverImage(url: coverURL, size: 52, cornerRadius: 12)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(name)
                         .font(BeansFont.appFont(15, .semibold))
-                        .foregroundStyle(Color.beansLabel)
+                        .foregroundStyle(homeTitleColor)
                         .lineLimit(1)
                     Text(subtitle)
                         .font(BeansFont.appFont(12))
-                        .foregroundStyle(Color.beansComment)
+                        .foregroundStyle(homeSubtitleColor)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.beansComment.opacity(0.6))
+                    .foregroundStyle(homeSubtitleColor.opacity(0.6))
             }
             .padding(.vertical, 8)
             .contentShape(Rectangle())
@@ -408,7 +420,7 @@ struct DiscoverView: View {
 
     private var dailySection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionHeader(title: "每日推荐", trailing: "查看全部") {
+            SectionHeader(title: "每日推荐", trailing: "查看全部", titleColor: homeTitleColor, trailingColor: homeSubtitleColor) {
                 BeansHaptics.tap()
                 showDailyList = true
             }
@@ -438,12 +450,12 @@ struct DiscoverView: View {
                                     }
                                 Text(song.name)
                                     .font(BeansFont.appFont(12, .medium))
-                                    .foregroundStyle(Color.beansLabel)
+                                    .foregroundStyle(homeTitleColor)
                                     .lineLimit(1)
                                     .frame(width: 108, alignment: .leading)
                                 Text(song.artists.isEmpty ? song.album : song.artists)
                                     .font(BeansFont.appFont(10))
-                                    .foregroundStyle(Color.beansComment)
+                                    .foregroundStyle(homeSubtitleColor)
                                     .lineLimit(1)
                                     .frame(width: 108, alignment: .leading)
                             }
@@ -468,7 +480,7 @@ struct DiscoverView: View {
 
     private var personalizedSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: source == .qq ? "QQ歌单广场" : "歌单广场")
+            SectionHeader(title: source == .qq ? "QQ歌单广场" : "歌单广场", titleColor: homeTitleColor, trailingColor: homeSubtitleColor)
             if source == .netease {
                 // 官方分类标签：点击切换分类（「全部」为官方精品歌单）
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -482,7 +494,7 @@ struct DiscoverView: View {
                             } label: {
                                 Text(cat)
                                     .font(BeansFont.appFont(12, .medium))
-                                    .foregroundStyle(neteaseCat == cat ? Color.white : Color.beansComment)
+                                    .foregroundStyle(neteaseCat == cat ? Color.white : homeSubtitleColor)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 6)
                                     .background {
@@ -513,7 +525,7 @@ struct DiscoverView: View {
                                 .frame(maxWidth: .infinity)
                             Text(playlist.name)
                                 .font(BeansFont.appFont(12, .medium))
-                                .foregroundStyle(Color.beansLabel)
+                                .foregroundStyle(homeTitleColor)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
                         }
@@ -644,7 +656,9 @@ struct QQTopListDetailView: View {
     var body: some View {
         let _ = theme.accent
         BeansNavigationStack {
-            Group {
+            ZStack {
+                GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
+                Group {
                 if loading {
                     LoadingStateView()
                 } else if let errorMessage {
@@ -681,10 +695,8 @@ struct QQTopListDetailView: View {
                     }
                     .beansScrollContentBackgroundHidden()
                     .listStyle(.plain)
-                    .background {
-                        GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
-                    }
                 }
+            }
             }
             .navigationTitle(name)
             .navigationBarTitleDisplayMode(.inline)
@@ -732,7 +744,9 @@ struct QQPlaylistSongsSheet: View {
     var body: some View {
         let _ = theme.accent
         BeansNavigationStack {
-            Group {
+            ZStack {
+                GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
+                Group {
                 if loading {
                     LoadingStateView()
                 } else if let errorMessage {
@@ -769,10 +783,8 @@ struct QQPlaylistSongsSheet: View {
                     }
                     .beansScrollContentBackgroundHidden()
                     .listStyle(.plain)
-                    .background {
-                        GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
-                    }
                 }
+            }
             }
             .navigationTitle(playlist.name)
             .navigationBarTitleDisplayMode(.inline)
@@ -817,7 +829,9 @@ struct DailySongsSheet: View {
     var body: some View {
         let _ = theme.accent
         BeansNavigationStack {
-            Group {
+            ZStack {
+                GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
+                Group {
                 if songs.isEmpty {
                     EmptyStateView(icon: "sparkles", text: "今日推荐加载中，下拉刷新试试")
                 } else {
@@ -851,17 +865,12 @@ struct DailySongsSheet: View {
                 }
                 .beansScrollContentBackgroundHidden()
                 .listStyle(.plain)
-                .background {
-                    GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
                 }
-                }
+            }
             }
             .navigationTitle("今日推荐")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $searchText, prompt: "搜索每日推荐")
-        }
-        .background {
-            GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
         }
     }
 
@@ -891,7 +900,9 @@ struct TopListDetailView: View {
     var body: some View {
         let _ = theme.accent
         BeansNavigationStack {
-            Group {
+            ZStack {
+                GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
+                Group {
                 if loading {
                     LoadingStateView()
                 } else if let errorMessage {
@@ -929,10 +940,8 @@ struct TopListDetailView: View {
                     }
                     .beansScrollContentBackgroundHidden()
                     .listStyle(.plain)
-                    .background {
-                        GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
-                    }
                 }
+            }
             }
             .navigationTitle(topList.name)
             .navigationBarTitleDisplayMode(.inline)
@@ -999,7 +1008,9 @@ struct KugouTopListDetailView: View {
     var body: some View {
         let _ = theme.accent
         BeansNavigationStack {
-            Group {
+            ZStack {
+                GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
+                Group {
                 if loading {
                     LoadingStateView()
                 } else if let errorMessage {
@@ -1039,10 +1050,8 @@ struct KugouTopListDetailView: View {
                     }
                     .beansScrollContentBackgroundHidden()
                     .listStyle(.plain)
-                    .background {
-                        GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
-                    }
                 }
+            }
             }
             .navigationTitle(topList.name)
             .navigationBarTitleDisplayMode(.inline)

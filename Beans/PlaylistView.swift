@@ -23,7 +23,9 @@ struct PlaylistView: View {
     var body: some View {
         let _ = theme.accent
         BeansNavigationStack {
-            Group {
+            ZStack {
+                GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
+                Group {
                 if loading {
                     LoadingStateView()
                 } else if let errorMessage {
@@ -45,10 +47,8 @@ struct PlaylistView: View {
                     }
                     .beansScrollContentBackgroundHidden()
                     .listStyle(.plain)
-                    .background {
-                        GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
-                    }
                 }
+            }
             }
             .navigationTitle(playlist.name)
             .navigationBarTitleDisplayMode(.inline)

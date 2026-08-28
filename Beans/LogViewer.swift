@@ -10,6 +10,7 @@ struct LogViewerSheet: View {
     let importedText: String?
 
     @State private var filter: BeansLogLevel? = nil
+    @State private var showShare = false
 
     private var filtered: [BeansLogEntry] {
         guard let filter else { return logger.entries }
@@ -94,6 +95,13 @@ struct LogViewerSheet: View {
                         } label: {
                             Label("复制全部", systemImage: "doc.on.doc")
                         }
+                        if importedText == nil {
+                            Button {
+                                showShare = true
+                            } label: {
+                                Label("导出日志", systemImage: "square.and.arrow.up")
+                            }
+                        }
                     } label: {
                         Image(systemName: "square.and.arrow.up")
                     }
@@ -101,5 +109,8 @@ struct LogViewerSheet: View {
             }
         }
         .modifier(BeansSheetModifier(detents: [.large], dragIndicator: true))
+        .sheet(isPresented: $showShare) {
+            ShareSheet(items: [BeansLogger.shared.exportLogURL()])
+        }
     }
 }

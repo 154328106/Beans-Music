@@ -895,6 +895,8 @@ struct SettingsView: View {
     /// 可选高刷新率动效，默认关闭以降低发热
     @AppStorage("beans.enableHighRefresh") private var enableHighRefresh = false
     @AppStorage("beans.audio.mixothers.v1") private var mixesWithOthers = false
+    @AppStorage("beans.homeTitleColorHex") private var homeTitleColorHex = ""
+    @AppStorage("beans.homeSubtitleColorHex") private var homeSubtitleColorHex = ""
     @ObservedObject private var sourceStore = UnblockSourceStore.shared
 
     @State private var appearanceExpanded = false
@@ -911,9 +913,6 @@ struct SettingsView: View {
     @State private var backupMessage: String?
     /// 日志
     @State private var showLogViewer = false
-    @State private var showLogShare = false
-    @State private var showLogImport = false
-    @State private var importedLogText: String?
     @State private var showSourceImporter = false
     @State private var showUsageGuide = false
 
@@ -988,16 +987,7 @@ struct SettingsView: View {
             }
         }
         .sheet(isPresented: $showLogViewer) {
-            LogViewerSheet(importedText: importedLogText)
-        }
-        .sheet(isPresented: $showLogShare) {
-            ShareSheet(items: [BeansLogger.shared.exportLogURL()])
-        }
-        .fullScreenCover(isPresented: $showLogImport) {
-            BackupDocumentPicker { url in
-                importLogFile(url)
-            }
-            .ignoresSafeArea()
+            LogViewerSheet(importedText: nil)
         }
         .fullScreenCover(isPresented: $showRestorePicker) {
             BackupDocumentPicker { url in
@@ -1287,6 +1277,54 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                     Spacer()
                     Text("全 App 说明文字颜色")
+                        .font(BeansFont.appFont(12))
+                        .foregroundStyle(Color.beansComment)
+                }
+
+                Divider().overlay(Color.beansComment.opacity(0.15))
+
+                HStack {
+                    Image(systemName: "house.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.beansAmber)
+                        .frame(width: 28)
+                    Text("主页文字颜色")
+                        .font(BeansFont.appFont(15))
+                        .foregroundStyle(Color.beansLabel)
+                    Spacer()
+                    ColorPicker("主文字", selection: Binding(
+                        get: {
+                            if let c = Color(hex: homeTitleColorHex) { return c }
+                            return Color.beansLabel
+                        },
+                        set: { homeTitleColorHex = $0.hexString }
+                    ), supportsOpacity: false)
+                    .labelsHidden()
+                    ColorPicker("副文字", selection: Binding(
+                        get: {
+                            if let c = Color(hex: homeSubtitleColorHex) { return c }
+                            return Color.beansComment
+                        },
+                        set: { homeSubtitleColorHex = $0.hexString }
+                    ), supportsOpacity: false)
+                    .labelsHidden()
+                }
+                HStack(spacing: 12) {
+                    Button {
+                        homeTitleColorHex = ""
+                        homeSubtitleColorHex = ""
+                        BeansHaptics.select()
+                    } label: {
+                        Text("恢复默认")
+                            .font(BeansFont.appFont(13, .medium))
+                            .foregroundStyle(Color.beansAmber)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(.ultraThinMaterial, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                    Text("只影响主页标题、推荐、排行榜和歌单文案")
                         .font(BeansFont.appFont(12))
                         .foregroundStyle(Color.beansComment)
                 }
@@ -1631,12 +1669,20 @@ struct SettingsView: View {
         .buttonStyle(GlassPressButtonStyle(scale: 0.95))
     }
 
-    /// 导出：收集 beans.* 设置生成 JSON，交给系统原生导出面板
+    private static func isAccountBackupKey(_ key: String) -> Bool {
+        key == "beans.user"
+            || key.hasPrefix("beans.netease.")
+            || key.hasPrefix("beans.qqmusic.")
+            || key.hasPrefix("beans.kugou.")
+    }
+
+    /// 导出：收集除账号信息外的 beans.* 设置生成 JSON，交给系统原生导出面板
     private func exportBackup() {
         let defaults = UserDefaults.standard
         var payload: [String: Any] = [:]
         for (key, value) in defaults.dictionaryRepresentation() {
             guard key.hasPrefix("beans.") else { continue }
+            guard !Self.isAccountBackupKey(key) else { continue }
             // 超大原始 Data 直接跳过（壁纸 base64 已以字符串形式存于 beans.wallpapers.data，不受影响）
             if let data = value as? Data, data.count > 2 * 1024 * 1024 { continue }
             let safe = backupJSONSafe(value)
@@ -1656,6 +1702,7 @@ struct SettingsView: View {
             "app": "Beans Music",
             "created": ISO8601DateFormatter().string(from: Date()),
             "version": version,
+            "excluded": "account",
         ] as [String: Any]
         guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]) else {
             backupMessage = "备份生成失败：存在无法序列化的设置项"
@@ -1664,7 +1711,7 @@ struct SettingsView: View {
         }
         backupDoc = BackupDocument(data: data)
         backupMessage = nil
-        BeansLogger.shared.log("导出配置备份（\(payload.count) 项，含壁纸/字体/歌单）", level: .info)
+        BeansLogger.shared.log("导出配置备份（\(payload.count) 项，已排除账号信息，含壁纸/字体/歌单）", level: .info)
         showExportBackup = true
     }
 
@@ -1685,13 +1732,14 @@ struct SettingsView: View {
         showRestoreConfirm = true
     }
 
-    /// 恢复：把 JSON 备份中 beans.* 键写回 UserDefaults
+    /// 恢复：把 JSON 备份中除账号信息外的 beans.* 键写回 UserDefaults
     private func applyRestore(_ json: [String: Any]?) {
         guard let json else { return }
         let defaults = UserDefaults.standard
         var count = 0
         for (key, value) in json {
             guard key.hasPrefix("beans."), key != "beans.backup.meta", key != "beans.font.restore" else { continue }
+            guard !Self.isAccountBackupKey(key) else { continue }
             guard let restored = backupPlistSafe(value) else { continue }
             defaults.set(restored, forKey: key)
             count += 1
@@ -1753,30 +1801,21 @@ struct SettingsView: View {
         return nil
     }
 
-    /// 日志：查看 / 导出 / 导入 / 清空
+    /// 日志：查看 / 清空（导出入口放在日志查看器右上角）
     private var logSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title: "日志")
             VStack(spacing: 8) {
                 HStack(spacing: 10) {
                     logActionButton(icon: "doc.text.magnifyingglass", title: "查看日志") {
-                        importedLogText = nil
                         showLogViewer = true
-                    }
-                    logActionButton(icon: "square.and.arrow.up", title: "导出日志") {
-                        showLogShare = true
-                    }
-                }
-                HStack(spacing: 10) {
-                    logActionButton(icon: "square.and.arrow.down", title: "导入日志") {
-                        showLogImport = true
                     }
                     logActionButton(icon: "trash", title: "清空日志") {
                         BeansLogger.shared.clear()
                         ToastCenter.shared.show("日志已清空")
                     }
                 }
-                Text("日志记录搜索、播放、登录、导入、备份等关键事件；遇到问题可导出日志发给开发者，方便快速定位 Bug")
+                Text("日志记录搜索、播放、登录、备份等关键事件；遇到问题可在查看日志里导出，方便快速定位 Bug")
                     .font(BeansFont.appFont(11))
                     .foregroundStyle(Color.beansComment)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1803,17 +1842,6 @@ struct SettingsView: View {
             }
         }
         .buttonStyle(GlassPressButtonStyle(scale: 0.95))
-    }
-
-    /// 导入日志文件：读取文本后在日志查看器中展示
-    private func importLogFile(_ url: URL) {
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
-            ToastCenter.shared.show("读取日志文件失败")
-            return
-        }
-        importedLogText = text
-        BeansLogger.shared.log("导入日志文件：\(url.lastPathComponent)", level: .info)
-        showLogViewer = true
     }
 
     private var footerNote: some View {
