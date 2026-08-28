@@ -432,7 +432,6 @@ final class PlayerManager: NSObject, ObservableObject {
             resolved = await UnblockService.resolve(
                 name: song.name,
                 artists: song.artists,
-                durationMS: Int(song.duration * 1000),
                 neteaseID: song.id,
                 songSource: .netease,
                 strict: strict
@@ -450,7 +449,6 @@ final class PlayerManager: NSObject, ObservableObject {
             resolved = await UnblockService.resolve(
                 name: song.name,
                 artists: song.artists,
-                durationMS: Int(song.duration * 1000),
                 neteaseID: 0,
                 songSource: .qq,
                 qqMid: song.qqMid,
@@ -472,7 +470,6 @@ final class PlayerManager: NSObject, ObservableObject {
                 resolved = await UnblockService.resolve(
                     name: matched.name,
                     artists: matched.artists,
-                    durationMS: Int(matched.duration * 1000),
                     neteaseID: matched.id,
                     songSource: .netease,
                     strict: strict
@@ -483,7 +480,7 @@ final class PlayerManager: NSObject, ObservableObject {
         return (urlString, resolved)
     }
 
-    /// 酷狗兜底：官方播放失败后使用导入音源作为备选，便于验证用户导入音源是否可用。
+    /// 酷狗兜底：官方播放失败后使用内置音源作为备选。
     private func kugouFallback(song: Song, enableUnblock: Bool) async -> UnblockService.Resolved? {
         guard enableUnblock else { return nil }
         let kugouID = song.kugouHash ?? song.kugouAlbumAudioId ?? ""
@@ -493,7 +490,6 @@ final class PlayerManager: NSObject, ObservableObject {
             let resolved = await UnblockService.resolve(
                 name: song.name,
                 artists: song.artists,
-                durationMS: Int(song.duration * 1000),
                 neteaseID: 0,
                 songSource: .kugou,
                 kugouID: kugouID
@@ -514,7 +510,6 @@ final class PlayerManager: NSObject, ObservableObject {
             let resolved = await UnblockService.resolve(
                 name: matched.name,
                 artists: matched.artists,
-                durationMS: Int(matched.duration * 1000),
                 neteaseID: matched.id,
                 songSource: .netease,
                 strict: strict

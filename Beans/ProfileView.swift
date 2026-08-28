@@ -982,8 +982,8 @@ struct SettingsView: View {
     @AppStorage("beans.audioQuality") private var audioQualityRaw = BeansAudioQuality.exhigh.rawValue
     /// 底栏是否显示文字（关闭后只显示图标）
     @AppStorage("beans.tabLabelsVisible") private var tabLabelsVisible = true
-    /// 官方地址不可用时，是否尝试用户导入的音源
-    @AppStorage("beans.enableUnblock") private var enableImportedSources = true
+    /// 官方地址不可用时，是否尝试内置音源
+    @AppStorage("beans.enableUnblock") private var enableBuiltInSources = true
     /// 第三方音源播放会员歌成功时提醒，默认开启
     @AppStorage("beans.showThirdPartyVIPNotice") private var showThirdPartyVIPNotice = true
     /// 可选高刷新率动效，默认关闭以降低发热
@@ -1009,15 +1009,14 @@ struct SettingsView: View {
     @State private var backupMessage: String?
     /// 日志
     @State private var showLogViewer = false
-    @State private var showSourceImporter = false
     @State private var showUsageGuide = false
 
     private var themeMode: BeansThemeMode {
         BeansThemeMode(rawValue: themeModeRaw) ?? .system
     }
 
-    private var importedSourceCount: Int {
-        sourceStore.customSources.count + sourceStore.lxScripts.count
+    private var presetSourceCount: Int {
+        sourceStore.presetSources.count
     }
 
     var body: some View {
@@ -1064,10 +1063,6 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showChangelog) {
             ChangelogListView()
-        }
-        .sheet(isPresented: $showSourceImporter) {
-            ThirdPartySourceImportSheet()
-                .environmentObject(theme)
         }
         .sheet(isPresented: $showUsageGuide) {
             UsageGuideSheet()
@@ -1546,7 +1541,7 @@ struct SettingsView: View {
                         Text("播放设置")
                             .font(BeansFont.appFont(15))
                             .foregroundStyle(Color.beansLabel)
-                        Text("\(BeansAudioQuality(rawValue: audioQualityRaw)?.displayName ?? "高品质") · \(enableImportedSources ? "导入音源已开" : "导入音源已关")")
+                        Text("\(BeansAudioQuality(rawValue: audioQualityRaw)?.displayName ?? "高品质") · \(enableBuiltInSources ? "内置音源已开" : "内置音源已关")")
                             .font(BeansFont.appFont(11))
                             .foregroundStyle(Color.beansComment)
                             .lineLimit(1)
@@ -1635,17 +1630,17 @@ struct SettingsView: View {
 
                 Divider().overlay(Color.beansComment.opacity(0.15))
 
-                Toggle(isOn: $enableImportedSources) {
+                Toggle(isOn: $enableBuiltInSources) {
                     HStack(spacing: 12) {
                         Image(systemName: "externaldrive.connected.to.line.below")
                             .font(.system(size: 14))
-                            .foregroundStyle(Color.beansAmber)
-                            .frame(width: 28)
+                        .foregroundStyle(Color.beansAmber)
+                        .frame(width: 28)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("使用导入音源")
+                            Text("使用内置音源")
                                 .font(BeansFont.appFont(15))
                                 .foregroundStyle(Color.beansLabel)
-                            Text("仅在官方地址不可用或为试听片段时回退")
+                            Text("仅在官方地址不可用或为试听片段时回退到预设")
                                 .font(BeansFont.appFont(11))
                                 .foregroundStyle(Color.beansComment)
                         }
@@ -1664,7 +1659,7 @@ struct SettingsView: View {
                             Text("第三方播放会员歌提醒")
                                 .font(BeansFont.appFont(15))
                                 .foregroundStyle(Color.beansLabel)
-                            Text("未识别到对应会员且会员歌曲通过导入音源播放成功时提示")
+                            Text("未识别到对应会员且会员歌曲通过内置音源播放成功时提示")
                                 .font(BeansFont.appFont(11))
                                 .foregroundStyle(Color.beansComment)
                         }
@@ -1674,32 +1669,26 @@ struct SettingsView: View {
                 .tint(Color.beansAmber)
 
                 HStack(spacing: 10) {
-                    Button {
-                        BeansHaptics.tap()
-                        showSourceImporter = true
-                    } label: {
-                        Label("导入音源", systemImage: "square.and.arrow.down")
-                            .font(BeansFont.appFont(13, .semibold))
-                            .foregroundStyle(Color.beansAmber)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(.ultraThinMaterial, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
+                    Image(systemName: "shippingbox.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.beansAmber)
+                    Text("内置音源预设")
+                        .font(BeansFont.appFont(13, .semibold))
+                        .foregroundStyle(Color.beansLabel)
                     Spacer()
-                    Text(importedSourceCount == 0 ? "尚未导入" : "\(importedSourceCount) 个")
+                    Text("\(presetSourceCount) 个")
                         .font(BeansFont.appFont(12))
                         .foregroundStyle(Color.beansComment)
                 }
 
-                ForEach(sourceStore.customSources) { source in
+                ForEach(sourceStore.presetSources) { source in
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(source.name)
                                 .font(BeansFont.appFont(13, .medium))
                                 .foregroundStyle(Color.beansLabel)
                                 .lineLimit(1)
-                            Text(source.headers["source"]?.uppercased() ?? source.kind)
+                            Text("内置预设 · \(source.kind.replacingOccurrences(of: "paid-", with: "").uppercased())")
                                 .font(BeansFont.appFont(10))
                                 .foregroundStyle(Color.beansComment)
                         }
@@ -1707,48 +1696,6 @@ struct SettingsView: View {
                         Toggle("", isOn: sourceEnabledBinding(source.id))
                             .labelsHidden()
                             .tint(Color.beansAmber)
-                        Button {
-                            sourceStore.remove(source)
-                            BeansHaptics.tap()
-                        } label: {
-                            Image(systemName: "trash")
-                                .font(.system(size: 13))
-                                .foregroundStyle(.red)
-                                .frame(width: 30, height: 30)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("删除音源")
-                    }
-                }
-
-                ForEach(sourceStore.lxScripts) { source in
-                    HStack(spacing: 10) {
-                        Image(systemName: "curlybraces.square.fill")
-                            .font(.system(size: 14))
-                            .foregroundStyle(Color.beansAmber)
-                            .frame(width: 28, height: 28)
-                            .background(Color.beansGlassFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(source.name)
-                                .font(BeansFont.appFont(13, .medium))
-                                .foregroundStyle(Color.beansLabel)
-                                .lineLimit(1)
-                            Text("LX JavaScript 音源")
-                                .font(BeansFont.appFont(10))
-                                .foregroundStyle(Color.beansComment)
-                        }
-                        Spacer()
-                        Button {
-                            sourceStore.removeLxScript(source)
-                            BeansHaptics.tap()
-                        } label: {
-                            Image(systemName: "trash")
-                                .font(.system(size: 13))
-                                .foregroundStyle(.red)
-                                .frame(width: 30, height: 30)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("删除 LX 音源")
                     }
                 }
 
@@ -1765,10 +1712,10 @@ struct SettingsView: View {
 
     private func sourceEnabledBinding(_ id: String) -> Binding<Bool> {
         Binding(
-            get: { sourceStore.customSources.first(where: { $0.id == id })?.enabled ?? false },
+            get: { sourceStore.presetSources.first(where: { $0.id == id })?.enabled ?? false },
             set: { value in
-                guard let index = sourceStore.customSources.firstIndex(where: { $0.id == id }) else { return }
-                sourceStore.customSources[index].enabled = value
+                guard let index = sourceStore.presetSources.firstIndex(where: { $0.id == id }) else { return }
+                sourceStore.presetSources[index].enabled = value
             }
         )
     }
