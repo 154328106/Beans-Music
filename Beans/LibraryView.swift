@@ -101,6 +101,8 @@ struct LibraryView: View {
                             case .netease: playlistsSection
                             case .qq: qqSection
                             case .kugou: kugouSection
+                            // 本机/自建服务器有各自的整页内容, 走不到板块这一层
+                            case .local, .server: EmptyView()
                             }
                         case "最近播放":
                             historySection
@@ -212,6 +214,8 @@ struct LibraryView: View {
         case .netease: return "网易云歌单"
         case .qq: return "QQ 音乐收藏与歌单"
         case .kugou: return "酷狗云端歌单"
+        case .local: return "本机音乐"
+        case .server: return "自建音乐服务器"
         }
     }
 
@@ -461,6 +465,9 @@ struct LibraryView: View {
             await loadQQPlaylists(force: force)
         case .kugou:
             await loadKugouPlaylists(force: force)
+        // 本机音乐由 LocalMusicSection 自己管；服务器内容进二级页时再拉
+        case .local, .server:
+            break
         }
     }
 
@@ -656,6 +663,9 @@ struct LibraryView: View {
             return
         }
         switch source {
+        // 本机/自建服务器不支持在这里建歌单
+        case .local, .server:
+            return
         case .netease:
             guard auth.isLoggedIn else {
                 ToastCenter.shared.show("请先登录后再创建歌单")
@@ -703,6 +713,9 @@ struct LibraryView: View {
     private func confirmDeletePlaylist() {
         guard let playlist = pendingDelete else { return }
         switch source {
+        // 本机/自建服务器不支持在这里删歌单
+        case .local, .server:
+            return
         case .netease:
             Task {
                 do {
