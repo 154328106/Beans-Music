@@ -20,18 +20,18 @@ struct SubsonicServerSheet: View {
         NavigationView {
             Form {
                 Section {
-                    TextField("http://192.168.1.10:4000", text: $server)
+                    TextField("服务器地址（必填）", text: $server)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
-                    TextField("用户名", text: $username)
+                    TextField("用户名（必填）", text: $username)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     SecureField("密码", text: $password)
                 } header: {
                     Text("服务器")
                 } footer: {
-                    Text("支持 Subsonic 协议的自建服务：Navidrome、道理鱼音乐、gonic、Airsonic 等。地址不写 http:// 会自动补上。")
+                    Text("支持 Subsonic 协议的自建服务：Navidrome、道理鱼音乐、gonic、Airsonic 等。\n地址形如 192.168.1.10:4000，不写 http:// 会自动补上。")
                 }
 
                 Section {
@@ -44,6 +44,13 @@ struct SubsonicServerSheet: View {
                         }
                     }
                     .disabled(testing || server.isEmpty || username.isEmpty)
+
+                    // 按钮灰着时把原因说清楚, 否则用户会以为是 App 卡了
+                    if !testing && (server.isEmpty || username.isEmpty) {
+                        Text(server.isEmpty ? "请先填写服务器地址" : "请先填写用户名")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
 
                     if let result {
                         Text(result)

@@ -45,6 +45,9 @@ struct LibraryView: View {
     @ObservedObject private var platformPrefs = PlatformPreferenceStore.shared
 
     @State private var showHistory = false
+    @State private var showSubsonicServer = false
+    @State private var showSubsonicLibrary = false
+    @ObservedObject private var subsonicAuth = SubsonicAuth.shared
     @State private var showSectionSort = false
     /// 音乐库板块顺序（本地音乐库 / 我的歌单 / 最近播放，可自定义）
     @State private var libraryOrder = SectionOrderStore.load(SectionOrderStore.libraryKey, defaults: SectionOrderStore.libraryDefaults)
@@ -76,6 +79,8 @@ struct LibraryView: View {
                     // 板块按用户自定义顺序渲染（可拖拽排序）
                     ForEach(libraryOrder, id: \.self) { key in
                         switch key {
+                        case "音乐服务器":
+                            subsonicSection
                         case "本地音乐库":
                             LocalMusicSection()
                         case "我的歌单":
@@ -127,6 +132,12 @@ struct LibraryView: View {
             guard platformPrefs.isEnabled(SearchProvider.kugou) else { return }
             source = .kugou
             Task { await loadKugouPlaylists(force: true) }
+        }
+        .sheet(isPresented: $showSubsonicServer) {
+            SubsonicServerSheet()
+        }
+        .sheet(isPresented: $showSubsonicLibrary) {
+            NavigationView { SubsonicLibraryView() }
         }
         .sheet(isPresented: $showHistory) {
             HistoryView()
@@ -305,6 +316,58 @@ struct LibraryView: View {
             }
         }
         .buttonStyle(.plain)
+    }
+
+    /// 自建音乐服务器板块：没连过就引导去填，连上了直接进曲库
+    private var subsonicSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "音乐服务器", trailing: subsonicAuth.isLoggedIn ? "浏览" : "去连接") {
+                if subsonicAuth.isLoggedIn {
+                    showSubsonicLibrary = true
+                } else {
+                    showSubsonicServer = true
+                }
+            }
+            if subsonicAuth.isLoggedIn {
+                Button {
+                    BeansHaptics.tap()
+                    showSubsonicLibrary = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "externaldrive.connected.to.line.below")
+                            .font(.system(size: 15))
+                            .foregroundStyle(Color.beansHighlight)
+                            .frame(width: 28)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(subsonicAuth.serverName)
+                                .font(BeansFont.appFont(14, .semibold))
+                                .foregroundStyle(Color.beansLabel)
+                            Text("歌单 · 专辑 · 随便听听")
+                                .font(BeansFont.appFont(11))
+                                .foregroundStyle(Color.beansComment)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Color.beansComment)
+                    }
+                    .padding(14)
+                    .background {
+                        BeansGlass(shape: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    }
+                }
+                .buttonStyle(GlassPressButtonStyle(scale: 0.98))
+                .contextMenu {
+                    Button {
+                        showSubsonicServer = true
+                    } label: {
+                        Label("服务器设置", systemImage: "gearshape")
+                    }
+                }
+            } else {
+                EmptyStateView(icon: "externaldrive.badge.plus", text: "连接 Navidrome / 道理鱼音乐等自建服务")
+            }
+        }
     }
 
     private var historySection: some View {

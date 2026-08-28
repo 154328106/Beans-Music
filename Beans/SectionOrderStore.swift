@@ -8,7 +8,7 @@ enum SectionOrderStore {
     static let profileKey = "beans.profile.sectionOrder"
 
     /// 音乐库板块默认顺序
-    static let libraryDefaults = ["我的歌单", "最近播放", "本地音乐库"]
+    static let libraryDefaults = ["音乐服务器", "我的歌单", "最近播放", "本地音乐库"]
     /// 主页板块默认顺序
     static let homeDefaults = ["每日推荐", "排行榜", "歌单广场"]
     /// 我的界面板块默认顺序
