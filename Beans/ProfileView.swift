@@ -1227,6 +1227,21 @@ struct SettingsView: View {
 
                 Divider().overlay(Color.beansComment.opacity(0.15))
 
+                // 玻璃材质：液态玻璃仅 iOS 26+ 可用，低版本隐藏该开关（自动使用磨砂玻璃）
+                if #available(iOS 26, *) {
+                    Picker("玻璃材质", selection: Binding(
+                        get: { theme.fxStyle },
+                        set: { theme.setFXStyle($0) }
+                    )) {
+                        ForEach(BeansFXStyle.allCases, id: \.self) { style in
+                            Text(style.title).tag(style)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Divider().overlay(Color.beansComment.opacity(0.15))
+
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Image(systemName: "square.stack.3d.up.fill")
