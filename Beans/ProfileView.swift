@@ -38,7 +38,7 @@ struct ProfileView: View {
     @State private var pendingUpdateInfo: UpdateChecker.ReleaseInfo?
     @State private var updateShareFile: ShareFileItem?
     @State private var updateShareFileURL: URL?
-    @State private var showCommunityQR = false
+    @State private var didRefreshProfileAccount = false
     @ObservedObject private var qqAuth = QQMusicAuth.shared
     @ObservedObject private var kugouAuth = KugouMusicAuth.shared
     @ObservedObject private var platformPrefs = PlatformPreferenceStore.shared
@@ -135,9 +135,13 @@ struct ProfileView: View {
             }
             .beansScrollIndicatorsHidden()
         }
-        .task(id: auth.isLoggedIn) {
+        .task {
+            guard !didRefreshProfileAccount else { return }
+            didRefreshProfileAccount = true
             await auth.refreshAccount()
-            await qqAuth.fetchVIPStatus()
+            if qqAuth.isLoggedIn {
+                await qqAuth.fetchVIPStatus()
+            }
         }
         .sheet(isPresented: $showHistory) {
             HistoryView()
@@ -160,10 +164,6 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showUsageGuide) {
             UsageGuideSheet()
-        }
-        .sheet(isPresented: $showCommunityQR) {
-            CommunityQRSheet()
-                .environmentObject(theme)
         }
         .sheet(item: $updateShareFile, onDismiss: cleanupUpdateShareFile) { item in
             ShareSheet(items: [item.url])
@@ -676,7 +676,9 @@ struct ProfileView: View {
     private var communityCard: some View {
         Button {
             BeansHaptics.tap()
-            showCommunityQR = true
+            if let url = URL(string: "https://t.me/+k8oYhsIU4sgzOTM1") {
+                UIApplication.shared.open(url)
+            }
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "person.2.fill")
@@ -687,12 +689,12 @@ struct ProfileView: View {
                     Text("交流群")
                         .font(BeansFont.appFont(14, .semibold))
                         .foregroundStyle(Color.beansLabel)
-                    Text("点击查看二维码")
+                    Text("点击跳转 Telegram")
                         .font(BeansFont.appFont(11))
                         .foregroundStyle(Color.beansComment)
                 }
                 Spacer()
-                Image(systemName: "qrcode.viewfinder")
+                Image(systemName: "arrow.up.forward.app")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color.beansComment)
             }
@@ -986,8 +988,8 @@ struct SettingsView: View {
     @AppStorage("beans.enableUnblock") private var enableBuiltInSources = true
     /// 第三方音源播放会员歌成功时提醒，默认开启
     @AppStorage("beans.showThirdPartyVIPNotice") private var showThirdPartyVIPNotice = true
-    /// 可选高刷新率动效，默认关闭以降低发热
-    @AppStorage("beans.enableHighRefresh") private var enableHighRefresh = false
+    /// 可选高刷新率动效，默认开启；可手动关闭以降低发热
+    @AppStorage("beans.enableHighRefresh") private var enableHighRefresh = true
     @AppStorage("beans.audio.mixothers.v1") private var mixesWithOthers = false
     @AppStorage("beans.labelColorHex") private var labelColorHex = ""
     @ObservedObject private var sourceStore = UnblockSourceStore.shared
@@ -1619,7 +1621,7 @@ struct SettingsView: View {
                             Text("高刷新动效")
                                 .font(BeansFont.appFont(15))
                                 .foregroundStyle(Color.beansLabel)
-                            Text("默认关闭以降低发热；开启后在支持 ProMotion 的设备上动画更丝滑")
+                            Text("默认开启；在支持 ProMotion 的设备上让设置、我的和播放器动画更丝滑")
                                 .font(BeansFont.appFont(11))
                                 .foregroundStyle(Color.beansComment)
                         }

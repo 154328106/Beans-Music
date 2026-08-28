@@ -1,12 +1,16 @@
 import QuartzCore
 import Foundation
 
-/// 可选高刷新率保持器。默认不启用，避免静止页面也持续唤醒主线程导致发热。
+/// 可选高刷新率保持器。配合 Info.plist 的 CADisableMinimumFrameDurationOnPhone 解开 60fps 上限。
 final class HighRefreshKeeper {
     static let shared = HighRefreshKeeper()
     private var displayLink: CADisplayLink?
 
     private init() {}
+
+    static func registerDefaults() {
+        UserDefaults.standard.register(defaults: ["beans.enableHighRefresh": true])
+    }
 
     func configureFromDefaults() {
         configure(enabled: UserDefaults.standard.bool(forKey: "beans.enableHighRefresh"))
@@ -24,7 +28,7 @@ final class HighRefreshKeeper {
         guard displayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(tick))
         if #available(iOS 15.0, *) {
-            link.preferredFrameRateRange = CAFrameRateRange(minimum: 90, maximum: 120)
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
         } else {
             link.preferredFramesPerSecond = 120
         }

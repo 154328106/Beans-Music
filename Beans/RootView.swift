@@ -41,8 +41,8 @@ struct RootView: View {
     @AppStorage("beans.disclaimerAccepted") private var disclaimerAccepted = false
     /// 底栏是否显示文字（关闭后只显示图标）
     @AppStorage("beans.tabLabelsVisible") private var tabLabelsVisible = true
-    /// 可选高刷新率，默认关闭，降低静止页面发热
-    @AppStorage("beans.enableHighRefresh") private var enableHighRefresh = false
+    /// 可选高刷新率，默认开启；需要省电时可在设置里关闭。
+    @AppStorage("beans.enableHighRefresh") private var enableHighRefresh = true
     /// 版本更新说明弹窗
     @State private var showWhatsNew = false
     /// 自动检测更新结果

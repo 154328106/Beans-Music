@@ -119,18 +119,15 @@ struct DiscoverView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .beansNeteaseLoginDidUpdate)) { _ in
                 guard platformPrefs.isEnabled(SearchProvider.netease) else { return }
-                homeSourceRaw = SearchProvider.netease.rawValue
-                Task { await load(force: true) }
+                reloadAfterLoginUpdate(.netease)
             }
             .onReceive(NotificationCenter.default.publisher(for: .beansQQLoginDidUpdate)) { _ in
                 guard platformPrefs.isEnabled(SearchProvider.qq) else { return }
-                homeSourceRaw = SearchProvider.qq.rawValue
-                Task { await load(force: true) }
+                reloadAfterLoginUpdate(.qq)
             }
             .onReceive(NotificationCenter.default.publisher(for: .beansKugouLoginDidUpdate)) { _ in
                 guard platformPrefs.isEnabled(SearchProvider.kugou) else { return }
-                homeSourceRaw = SearchProvider.kugou.rawValue
-                Task { await load(force: true) }
+                reloadAfterLoginUpdate(.kugou)
             }
             .sheet(item: $selectedTopList) { topList in
                 TopListDetailView(topList: topList)
@@ -642,6 +639,14 @@ struct DiscoverView: View {
             if !hasAnyData {
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+
+    private func reloadAfterLoginUpdate(_ provider: SearchProvider) {
+        if source == provider {
+            Task { await load(force: true) }
+        } else {
+            homeSourceRaw = provider.rawValue
         }
     }
 
