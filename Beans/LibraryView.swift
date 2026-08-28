@@ -42,6 +42,7 @@ struct LibraryView: View {
     @EnvironmentObject private var favorites: FavoritesStore
     @ObservedObject private var qqAuth = QQMusicAuth.shared
     @ObservedObject private var kugouAuth = KugouMusicAuth.shared
+    @ObservedObject private var platformPrefs = PlatformPreferenceStore.shared
 
     @State private var showHistory = false
     @State private var showSectionSort = false
@@ -59,6 +60,7 @@ struct LibraryView: View {
     @State private var kugouPlaylists: [Playlist] = []
     @State private var kugouLoading = false
     @State private var kugouSavedAt = Date.distantPast
+    private var libraryProviders: [LibraryProvider] { platformPrefs.enabledLibraryProviders }
 
     var body: some View {
         let _ = theme.accent
@@ -95,32 +97,34 @@ struct LibraryView: View {
             }
             .beansScrollIndicatorsHidden()
             .refreshable {
-                if source == .qq {
-                    await loadQQPlaylists(force: true)
-                } else if source == .kugou {
-                    await loadKugouPlaylists(force: true)
-                } else {
-                    await auth.loadLibrary()
-                }
+                await refreshCurrentSource(force: true)
             }
         }
-        .task { await auth.loadLibrary() }
+        .task {
+            source = platformPrefs.ensureVisible(source)
+        }
         .task(id: source) {
-            if source == .qq {
-                await loadQQPlaylists()
-            } else if source == .kugou {
-                await loadKugouPlaylists()
-            }
+            await refreshCurrentSource(force: false)
+        }
+        .onAppear {
+            source = platformPrefs.ensureVisible(source)
+        }
+        .onReceive(platformPrefs.changes) { _ in
+            let next = platformPrefs.ensureVisible(source)
+            if next != source { source = next }
         }
         .onReceive(NotificationCenter.default.publisher(for: .beansNeteaseLoginDidUpdate)) { _ in
+            guard platformPrefs.isEnabled(SearchProvider.netease) else { return }
             source = .netease
             Task { await auth.loadLibrary() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .beansQQLoginDidUpdate)) { _ in
+            guard platformPrefs.isEnabled(SearchProvider.qq) else { return }
             source = .qq
             Task { await loadQQPlaylists(force: true) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .beansKugouLoginDidUpdate)) { _ in
+            guard platformPrefs.isEnabled(SearchProvider.kugou) else { return }
             source = .kugou
             Task { await loadKugouPlaylists(force: true) }
         }
@@ -143,7 +147,7 @@ struct LibraryView: View {
             Button("创建") { createPlaylist() }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("输入歌单名称，创建后同步到\(source == .netease ? "网易云" : "QQ 音乐")")
+            Text("输入歌单名称，创建后同步到\(source.rawValue)")
         }
         .confirmationDialog("确定删除歌单「\(pendingDelete?.name ?? "")」吗？", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("删除", role: .destructive) { confirmDeletePlaylist() }
@@ -332,7 +336,7 @@ struct LibraryView: View {
     /// 平台选择（网易云 / QQ音乐，样式与主页一致）
     private var providerPicker: some View {
         HStack(spacing: 4) {
-            ForEach(LibraryProvider.allCases) { p in
+            ForEach(libraryProviders) { p in
                 Button {
                     BeansHaptics.tap()
                     if source != p { source = p }
@@ -370,6 +374,17 @@ struct LibraryView: View {
         }
         .clipShape(Capsule())
         .beansCardShadow(radius: 6, y: 2)
+    }
+
+    private func refreshCurrentSource(force: Bool) async {
+        switch source {
+        case .netease:
+            await auth.loadLibrary()
+        case .qq:
+            await loadQQPlaylists(force: force)
+        case .kugou:
+            await loadKugouPlaylists(force: force)
+        }
     }
 
     /// QQ 模式整体内容：用户歌单（创建 + 收藏同步）

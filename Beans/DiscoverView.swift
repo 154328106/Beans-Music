@@ -4,6 +4,7 @@ struct DiscoverView: View {
     @EnvironmentObject private var theme: ThemeStore
     @EnvironmentObject private var auth: AuthStore
     @EnvironmentObject private var player: PlayerManager
+    @ObservedObject private var platformPrefs = PlatformPreferenceStore.shared
 
     @State private var topLists: [TopList] = []
     @State private var dailySongs: [Song] = []
@@ -24,11 +25,11 @@ struct DiscoverView: View {
     }
     /// 首页数据源：记住上次选择，下次打开仍保持该平台（默认网易云）
     @AppStorage("beans.homeSource") private var homeSourceRaw = SearchProvider.netease.rawValue
-    private let homeProviders: [SearchProvider] = [.netease, .qq, .kugou]
+    private var homeProviders: [SearchProvider] { platformPrefs.enabledSearchProviders }
     /// 首页数据源：网易云 / QQ音乐（与搜索页同一控件样式）
     private var source: SearchProvider {
         guard let saved = SearchProvider(rawValue: homeSourceRaw), homeProviders.contains(saved) else {
-            return .netease
+            return homeProviders.first ?? .netease
         }
         return saved
     }
@@ -40,6 +41,8 @@ struct DiscoverView: View {
     @State private var selectedQQPlaylist: Playlist?
     /// 排行榜展开状态：收起显示前 3，展开显示前 10
     @State private var ranksExpanded = false
+    /// 歌单广场展开状态：收起显示前 6，展开显示全部
+    @State private var playlistsExpanded = false
     /// 首次启动免责声明：确认进入后若加载失败自动刷新
     @AppStorage("beans.disclaimerAccepted") private var disclaimerAccepted = false
     /// 网易云歌单广场当前分类（「全部」展示官方精品歌单）
@@ -91,8 +94,14 @@ struct DiscoverView: View {
             .task(id: source) { await load(force: false) }
             .onAppear {
                 guard let saved = SearchProvider(rawValue: homeSourceRaw), homeProviders.contains(saved) else {
-                    homeSourceRaw = SearchProvider.netease.rawValue
+                    homeSourceRaw = (homeProviders.first ?? .netease).rawValue
                     return
+                }
+            }
+            .onReceive(platformPrefs.changes) { _ in
+                let next = platformPrefs.ensureVisible(source)
+                if next != source {
+                    homeSourceRaw = next.rawValue
                 }
             }
             .onChange(of: source) { _ in
@@ -105,11 +114,18 @@ struct DiscoverView: View {
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .beansNeteaseLoginDidUpdate)) { _ in
+                guard platformPrefs.isEnabled(SearchProvider.netease) else { return }
                 homeSourceRaw = SearchProvider.netease.rawValue
                 Task { await load(force: true) }
             }
             .onReceive(NotificationCenter.default.publisher(for: .beansQQLoginDidUpdate)) { _ in
+                guard platformPrefs.isEnabled(SearchProvider.qq) else { return }
                 homeSourceRaw = SearchProvider.qq.rawValue
+                Task { await load(force: true) }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .beansKugouLoginDidUpdate)) { _ in
+                guard platformPrefs.isEnabled(SearchProvider.kugou) else { return }
+                homeSourceRaw = SearchProvider.kugou.rawValue
                 Task { await load(force: true) }
             }
             .sheet(item: $selectedTopList) { topList in
@@ -509,7 +525,7 @@ struct DiscoverView: View {
                 }
             }
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                ForEach(personalized) { playlist in
+                ForEach(displayedPlaylists) { playlist in
                     Button {
                         if source == .qq {
                             selectedQQPlaylist = playlist
@@ -535,7 +551,34 @@ struct DiscoverView: View {
                     .buttonStyle(GlassPressButtonStyle(scale: 0.96))
                 }
             }
+            if personalized.count > collapsedPlaylistCount {
+                Button {
+                    BeansHaptics.select()
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
+                        playlistsExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(playlistsExpanded ? "收起歌单广场" : "展开全部（\(personalized.count)）")
+                            .font(BeansFont.appFont(13, .semibold))
+                        Image(systemName: playlistsExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundStyle(Color.beansAmber)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+                    .background { BeansGlass(shape: Capsule()) }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(GlassPressButtonStyle(scale: 0.97))
+            }
         }
+    }
+
+    private var collapsedPlaylistCount: Int { 6 }
+
+    private var displayedPlaylists: [Playlist] {
+        playlistsExpanded ? personalized : Array(personalized.prefix(collapsedPlaylistCount))
     }
 
     // MARK: - 动作

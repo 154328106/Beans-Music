@@ -88,6 +88,9 @@ struct PlayerView: View {
     @AppStorage("beans.lyricTiltY") private var lyricTiltY = 0
     /// 歌词进度偏移（秒）：歌词与音频不同步时手动校正，正数提前、负数延后
     @AppStorage("beans.lyricOffset") private var lyricOffset = 0.0
+    /// 歌词界面自定义背景
+    @AppStorage("beans.lyricBackground.image") private var lyricBackgroundImagePath = ""
+    @AppStorage("beans.lyricBackground.blur") private var lyricBackgroundBlur = 12.0
     /// 侧边滑动手势当前位移（刷视频式切歌过渡）
     @State private var swipeOffset: CGFloat = 0
     @State private var coverDrag: CGSize = .zero
@@ -733,8 +736,10 @@ struct PlayerView: View {
 
     /// 歌词模式：左上小封面 + 歌名信息条 + 居中歌词（自动布局，歌词可滚动到底部透过底栏玻璃）
     private func lyricsPanel(geo: GeometryProxy) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
+        ZStack {
+            lyricBackgroundLayer
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
                 Button {
                     toggleLyrics()
                 } label: {
@@ -805,9 +810,24 @@ struct PlayerView: View {
                 }
             }
             .padding(.bottom, deckInset + geo.safeAreaInsets.bottom)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .id("lyricsPanel-\(song?.identityKey ?? "none")")
+    }
+
+    @ViewBuilder
+    private var lyricBackgroundLayer: some View {
+        if !lyricBackgroundImagePath.isEmpty,
+           let image = UIImage(contentsOfFile: lyricBackgroundImagePath) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .blur(radius: CGFloat(lyricBackgroundBlur))
+                .overlay(Color.black.opacity(0.42))
+                .clipped()
+                .ignoresSafeArea()
+        }
     }
 
     // MARK: - 空态兜底（歌曲数据为空时不出现空白页）
@@ -2002,6 +2022,8 @@ struct PlayerSettingsSheet: View {
     @AppStorage("beans.lyricTilt") private var lyricTilt = 0
     @AppStorage("beans.lyricTiltY") private var lyricTiltY = 0
     @AppStorage("beans.lyricOffset") private var lyricOffset = 0.0
+    @AppStorage("beans.lyricBackground.image") private var lyricBackgroundImagePath = ""
+    @AppStorage("beans.lyricBackground.blur") private var lyricBackgroundBlur = 12.0
     @AppStorage("beans.audio.mixothers.v1") private var mixesWithOthers = false
     @Environment(\.dismiss) private var dismiss
     @State private var playbackExpanded = false
@@ -2009,6 +2031,7 @@ struct PlayerSettingsSheet: View {
     @State private var lyricEffectExpanded = false
     @State private var layoutExpanded = false
     @State private var coverExpanded = false
+    @State private var showLyricBackgroundPicker = false
 
     /// 左右倾斜文案：0 关闭，负值左倾、正值右倾
     private var tiltYText: String {
@@ -2152,6 +2175,18 @@ struct PlayerSettingsSheet: View {
                     Button("完成") { dismiss() }
                 }
             }
+        }
+        .fullScreenCover(isPresented: $showLyricBackgroundPicker) {
+            WallpaperPhotoPicker { data in
+                if let path = LyricBackgroundStore.save(data) {
+                    lyricBackgroundImagePath = path
+                    BeansHaptics.success()
+                    ToastCenter.shared.show("歌词背景已应用")
+                } else {
+                    ToastCenter.shared.show("歌词背景保存失败")
+                }
+            }
+            .ignoresSafeArea()
         }
     }
 
@@ -2447,6 +2482,51 @@ struct PlayerSettingsSheet: View {
                 .font(BeansFont.appFont(14))
             ColorPicker("渐变结束色", selection: gradEnd, supportsOpacity: false)
                 .font(BeansFont.appFont(14))
+            Divider().opacity(0.5)
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("歌词界面背景")
+                        .font(BeansFont.appFont(13))
+                        .foregroundStyle(Color.beansLabel)
+                    Text(lyricBackgroundImagePath.isEmpty ? "未设置" : "已使用自定义图片")
+                        .font(BeansFont.appFont(12))
+                        .foregroundStyle(Color.beansComment)
+                }
+                Spacer()
+                Button {
+                    showLyricBackgroundPicker = true
+                    BeansHaptics.tap()
+                } label: {
+                    Text("上传")
+                        .font(BeansFont.appFont(12, .semibold))
+                        .foregroundStyle(Color.beansAmber)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.ultraThinMaterial, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                if !lyricBackgroundImagePath.isEmpty {
+                    Button {
+                        LyricBackgroundStore.clear()
+                        lyricBackgroundImagePath = ""
+                        BeansHaptics.select()
+                    } label: {
+                        Text("清除")
+                            .font(BeansFont.appFont(12, .semibold))
+                            .foregroundStyle(Color.red)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(.ultraThinMaterial, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            if !lyricBackgroundImagePath.isEmpty {
+                settingSlider("背景模糊", valueText: "\(Int(lyricBackgroundBlur))") {
+                    Slider(value: $lyricBackgroundBlur, in: 0...30, step: 1)
+                        .tint(Color.beansAmber)
+                }
+            }
             HStack {
                 Button("恢复默认颜色") {
                     currentColorRaw = ""

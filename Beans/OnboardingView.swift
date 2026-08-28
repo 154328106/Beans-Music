@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - 首次使用引导页（分页引导 + 免责确认）
 
-/// 首次进入 App 时的引导式提示：欢迎 → DIY 美化 → 三平台 → 免责确认。
+/// 首次进入 App 时的引导式提示：欢迎 → DIY 美化 → 平台选择 → 免责确认。
 /// 免责确认沿用原硬性要求：必须输入「我已了解并同意继续使用」才能进入软件。
 struct OnboardingView: View {
     let onFinish: () -> Void
@@ -250,72 +250,37 @@ struct OnboardingView: View {
         .beansCardShadow(radius: 8, y: 3)
     }
 
-    // MARK: 第 3 页 · 三平台
+    // MARK: 第 3 页 · 平台选择
 
     private var platformPage: some View {
         VStack(spacing: 20) {
             Spacer()
-            Image(systemName: "arrow.left.arrow.right")
+            Image(systemName: "checklist")
                 .font(.system(size: 40))
                 .foregroundStyle(LinearGradient.beansAccent)
 
-            Text("三平台聚合，一个 App 全听遍")
+            Text("选择需要的平台")
                 .font(BeansFont.appFont(26, .bold))
                 .foregroundStyle(Color.beansLabel)
 
-            Text("网易云 + QQ 音乐 + 酷狗歌单同步")
+            Text("主页、搜索、歌单同步和账号登录只显示你选择的平台")
                 .font(BeansFont.appFont(14))
                 .foregroundStyle(Color.beansSecondary)
+                .multilineTextAlignment(.center)
+                .lineSpacing(4)
+                .padding(.horizontal, 28)
 
-            VStack(spacing: 12) {
-                platformRow(imageName: "BrandNetease", tint: Color(red: 0.87, green: 0.23, blue: 0.23),
-                            title: "网易云音乐",
-                            detail: "扫码 / 网页登录，同步歌单、收藏、听歌排行、VIP")
-                platformRow(imageName: "BrandQQ", tint: Color(red: 0.13, green: 0.51, blue: 0.95),
-                            title: "QQ 音乐",
-                            detail: "扫码 / 网页 / Cookie 登录，同步歌单与 VIP")
-                platformRow(imageName: "BrandKugou", tint: Color(red: 0.12, green: 0.55, blue: 1.0),
-                            title: "酷狗音乐",
-                            detail: "登录同步云端歌单，并支持酷狗歌曲搜索")
-            }
-            .padding(.horizontal, 28)
+            PlatformPreferencePicker()
+                .padding(.horizontal, 28)
+
+            Text("至少保留一个平台；版权声明仍保留全部平台说明")
+                .font(BeansFont.appFont(11))
+                .foregroundStyle(Color.beansSecondary.opacity(0.82))
+                .padding(.horizontal, 34)
 
             Spacer()
             Spacer()
         }
-    }
-
-    private func platformRow(imageName: String, tint: Color, title: String, detail: String) -> some View {
-        HStack(spacing: 14) {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(tint.opacity(0.16))
-                .frame(width: 46, height: 46)
-                .overlay(
-                    Image(imageName)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 30, height: 30)
-                )
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(BeansFont.appFont(15, .bold))
-                    .foregroundStyle(Color.beansLabel)
-                Text(detail)
-                    .font(BeansFont.appFont(12))
-                    .foregroundStyle(Color.beansSecondary)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.beansCard.opacity(0.75))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(Color.beansLabel.opacity(0.08), lineWidth: 1)
-        )
-        .beansCardShadow(radius: 8, y: 3)
     }
 
     // MARK: 第 4 页 · 免责确认

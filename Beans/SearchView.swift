@@ -93,7 +93,8 @@ struct SearchView: View {
 
     @State private var keyword = ""
     @State private var provider: SearchProvider = .netease
-    private let searchProviders: [SearchProvider] = [.netease, .qq, .kugou]
+    @ObservedObject private var platformPrefs = PlatformPreferenceStore.shared
+    private var searchProviders: [SearchProvider] { platformPrefs.enabledSearchProviders }
     /// 已加载热门搜索的 provider（避免切 tab 反复加载）
     @State private var hotLoadedProvider: SearchProvider?
     @State private var resultType: SearchResultType = .song
@@ -163,6 +164,16 @@ struct SearchView: View {
             guard !trimmed.isEmpty else { return }
             debounceTask?.cancel()
             Task { await startSearch(trimmed) }
+        }
+        .onAppear {
+            provider = platformPrefs.ensureVisible(provider)
+        }
+        .onReceive(platformPrefs.changes) { _ in
+            let next = platformPrefs.ensureVisible(provider)
+            if next != provider {
+                provider = next
+                hotLoadedProvider = nil
+            }
         }
         .sheet(item: $showAddToPlaylist) { song in
             AddToPlaylistSheet(song: song)

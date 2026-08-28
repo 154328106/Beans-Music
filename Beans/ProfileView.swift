@@ -41,6 +41,7 @@ struct ProfileView: View {
     @State private var showCommunityQR = false
     @ObservedObject private var qqAuth = QQMusicAuth.shared
     @ObservedObject private var kugouAuth = KugouMusicAuth.shared
+    @ObservedObject private var platformPrefs = PlatformPreferenceStore.shared
 
     private var themeMode: BeansThemeMode {
         BeansThemeMode(rawValue: themeModeRaw) ?? .system
@@ -54,21 +55,27 @@ struct ProfileView: View {
     /// 登录状态的合并提示（展示各平台真实昵称）
     private var accountStatusLine: String {
         var parts: [String] = []
-        if auth.isLoggedIn {
+        if platformPrefs.isEnabled(SearchProvider.netease), auth.isLoggedIn {
             if let nick = auth.user?.nickname, !nick.isEmpty {
                 parts.append("网易云 \(nick)")
             } else {
                 parts.append("网易云 UID \(auth.user?.uid ?? 0)")
             }
         }
-        if qqAuth.isLoggedIn {
+        if platformPrefs.isEnabled(SearchProvider.qq), qqAuth.isLoggedIn {
             parts.append(qqAuth.nickname.isEmpty ? "QQ 已登录" : qqAuth.nickname)
         }
-        if kugouAuth.isLoggedIn {
+        if platformPrefs.isEnabled(SearchProvider.kugou), kugouAuth.isLoggedIn {
             parts.append(kugouAuth.nickname.isEmpty ? "酷狗已登录" : kugouAuth.nickname)
         }
-        if parts.isEmpty { return "登录后可同步网易云 / QQ / 酷狗歌单" }
+        if parts.isEmpty { return "登录后可同步 \(platformPrefs.summaryText) 歌单" }
         return parts.joined(separator: " · ")
+    }
+
+    private var hasVisibleAccountLogin: Bool {
+        (platformPrefs.isEnabled(SearchProvider.netease) && auth.isLoggedIn)
+            || (platformPrefs.isEnabled(SearchProvider.qq) && qqAuth.isLoggedIn)
+            || (platformPrefs.isEnabled(SearchProvider.kugou) && kugouAuth.isLoggedIn)
     }
 
     /// 顶部标题 + 右上角设置齿轮
@@ -78,7 +85,7 @@ struct ProfileView: View {
                 Text("我的")
                     .font(BeansFont.appFont(30, .bold))
                     .foregroundStyle(Color.beansLabel)
-                Text("网易云 / QQ / 酷狗账号与外观设置")
+                Text("\(platformPrefs.summaryText) 账号与外观设置")
                     .font(BeansFont.appFont(13))
                     .foregroundStyle(Color.beansComment)
             }
@@ -295,7 +302,9 @@ struct ProfileView: View {
             }
             .buttonStyle(.plain)
 
-            if auth.isLoggedIn || qqAuth.isLoggedIn || kugouAuth.isLoggedIn {
+            if (platformPrefs.isEnabled(SearchProvider.netease) && auth.isLoggedIn)
+                || (platformPrefs.isEnabled(SearchProvider.qq) && qqAuth.isLoggedIn)
+                || (platformPrefs.isEnabled(SearchProvider.kugou) && kugouAuth.isLoggedIn) {
                 platformStatusRow
             }
         }
@@ -309,13 +318,13 @@ struct ProfileView: View {
     /// 每个登录平台单独展示登录成功状态（网易云 / QQ 音乐）
     private var platformStatusRow: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if auth.isLoggedIn {
+            if platformPrefs.isEnabled(SearchProvider.netease), auth.isLoggedIn {
                 platformChip(imageName: "BrandNetease", name: "网易云", status: auth.user?.nickname ?? "已登录", badge: auth.user?.vipBadge)
             }
-            if qqAuth.isLoggedIn {
+            if platformPrefs.isEnabled(SearchProvider.qq), qqAuth.isLoggedIn {
                 platformChip(imageName: "BrandQQ", name: "QQ 音乐", status: qqAuth.nickname.isEmpty ? "已登录" : qqAuth.nickname, badge: qqAuth.vipBadge)
             }
-            if kugouAuth.isLoggedIn {
+            if platformPrefs.isEnabled(SearchProvider.kugou), kugouAuth.isLoggedIn {
                 platformChip(imageName: "BrandKugou", name: "酷狗音乐", status: kugouAuth.nickname.isEmpty ? "已登录" : kugouAuth.nickname, badge: kugouAuth.vipBadge)
             }
         }
@@ -404,7 +413,7 @@ struct ProfileView: View {
                 featureCell(icon: "clock.arrow.circlepath", title: "播放历史", subtitle: "最近播放 \(player.history.count) 首") {
                     showHistory = true
                 }
-                featureCell(icon: qqAuth.isLoggedIn || auth.isLoggedIn || kugouAuth.isLoggedIn ? "checkmark.seal.fill" : "globe", title: "账号与登录", subtitle: qqAuth.isLoggedIn || auth.isLoggedIn || kugouAuth.isLoggedIn ? accountStatusLine : "统一登录网易云 / QQ / 酷狗") {
+                featureCell(icon: hasVisibleAccountLogin ? "checkmark.seal.fill" : "globe", title: "账号与登录", subtitle: hasVisibleAccountLogin ? accountStatusLine : "登录 \(platformPrefs.summaryText)") {
                     BeansHaptics.tap()
                     showAccountHub = true
                 }
@@ -749,6 +758,7 @@ struct AccountHubSheet: View {
     @EnvironmentObject private var auth: AuthStore
     @ObservedObject private var qqAuth = QQMusicAuth.shared
     @ObservedObject private var kugouAuth = KugouMusicAuth.shared
+    @ObservedObject private var platformPrefs = PlatformPreferenceStore.shared
     @Environment(\.dismiss) private var dismiss
 
     @State private var showNeteaseLogin = false
@@ -765,10 +775,10 @@ struct AccountHubSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
                         SectionHeader(title: "账号")
-                        neteaseCard
-                        qqCard
-                        kugouCard
-                        Text("网易云、QQ 音乐、酷狗音乐登录后可同步歌单并提升可播成功率")
+                        if platformPrefs.isEnabled(SearchProvider.netease) { neteaseCard }
+                        if platformPrefs.isEnabled(SearchProvider.qq) { qqCard }
+                        if platformPrefs.isEnabled(SearchProvider.kugou) { kugouCard }
+                        Text("\(platformPrefs.summaryText) 登录后可同步歌单并提升可播成功率")
                             .font(BeansFont.appFont(11))
                             .foregroundStyle(Color.beansComment)
                             .padding(.horizontal, 4)
@@ -981,8 +991,10 @@ struct SettingsView: View {
     @AppStorage("beans.audio.mixothers.v1") private var mixesWithOthers = false
     @AppStorage("beans.labelColorHex") private var labelColorHex = ""
     @ObservedObject private var sourceStore = UnblockSourceStore.shared
+    @ObservedObject private var platformPrefs = PlatformPreferenceStore.shared
 
     @State private var appearanceExpanded = false
+    @State private var platformExpanded = false
     @State private var showWallpaperPicker = false
     @State private var showFontImporter = false
     /// 更新日志
@@ -1010,6 +1022,7 @@ struct SettingsView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 22) {
                         appearanceSection
+                        platformSection
                         playbackSection
                         changelogSection
                         backupSection
@@ -1098,6 +1111,53 @@ struct SettingsView: View {
             ToastCenter.shared.show("字体已应用：\(name)")
         } else {
             ToastCenter.shared.show("字体安装失败，请使用 ttf / otf 文件")
+        }
+    }
+
+    private var platformSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                BeansHaptics.select()
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    platformExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "checklist")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.beansAmber)
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("平台显示")
+                            .font(BeansFont.appFont(15))
+                            .foregroundStyle(Color.beansLabel)
+                        Text(platformPrefs.summaryText)
+                            .font(BeansFont.appFont(11))
+                            .foregroundStyle(Color.beansComment)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    Image(systemName: platformExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.beansComment.opacity(0.6))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 13)
+                .background {
+                    BeansGlass(shape: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(GlassPressButtonStyle(scale: 0.98))
+
+            if platformExpanded {
+                PlatformPreferencePicker()
+                    .padding(14)
+                    .background {
+                        BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
     }
 
@@ -1785,6 +1845,7 @@ struct SettingsView: View {
         let defaults = UserDefaults.standard
         var payload: [String: Any] = [:]
         theme.refreshWallpaperBackupForExport()
+        LyricBackgroundStore.refreshForExport()
         for (key, value) in defaults.dictionaryRepresentation() {
             guard Self.isBackupCandidateKey(key) else { continue }
             guard !Self.isExcludedBackupKey(key) else { continue }
@@ -1851,6 +1912,8 @@ struct SettingsView: View {
         }
         // 恢复壁纸：写回 beans.wallpapers.* 后重建文件（沙盒路径变化也能恢复）
         theme.reloadWallpapersFromBackup()
+        // 恢复歌词背景图片：路径变化时按备份的 base64 重建文件
+        LyricBackgroundStore.restoreFromBackup()
         // 恢复字体文件
         if let fontPayload = json["beans.font.restore"] as? [String: Any],
            let name = fontPayload["name"] as? String,

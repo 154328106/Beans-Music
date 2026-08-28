@@ -212,6 +212,7 @@ struct LocalPlaylistDetailSheet: View {
 
 struct LocalSearchAddSheet: View {
     @ObservedObject private var store = LocalLibraryStore.shared
+    @ObservedObject private var platformPrefs = PlatformPreferenceStore.shared
     @EnvironmentObject private var player: PlayerManager
     @EnvironmentObject private var auth: AuthStore
     @Environment(\.dismiss) private var dismiss
@@ -221,7 +222,7 @@ struct LocalSearchAddSheet: View {
     @State private var results: [Song] = []
     @State private var searching = false
     @State private var provider: SearchProvider = .netease
-    private let searchProviders: [SearchProvider] = [.netease, .qq]
+    private var searchProviders: [SearchProvider] { platformPrefs.enabledSearchProviders }
     @State private var task: Task<Void, Never>?
 
     var body: some View {
@@ -287,6 +288,13 @@ struct LocalSearchAddSheet: View {
             }
         }
         .modifier(BeansSheetModifier(detents: [.medium, .large], dragIndicator: true))
+        .onAppear {
+            provider = platformPrefs.ensureVisible(provider)
+        }
+        .onReceive(platformPrefs.changes) { _ in
+            let next = platformPrefs.ensureVisible(provider)
+            if next != provider { provider = next }
+        }
     }
 
     private func runSearch() {
