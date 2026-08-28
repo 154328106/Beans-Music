@@ -33,6 +33,19 @@ enum ChangelogStore {
 
     static let logs: [VersionLog] = [
         VersionLog(
+            id: "1.5.4",
+            version: "1.5.4",
+            title: "歌手主页与播放列表体验修复",
+            features: [
+                "歌手主页背景同步主页壁纸"
+            ],
+            fixes: [
+                "修复长歌名撑宽歌曲列表布局的问题，统一使用有限宽度和尾部截断",
+                "修复歌手主页只加载 30 首歌曲的问题，网易云和 QQ 音乐改为分页加载更多歌曲",
+                "修复播放器播放列表默认位置，改为 x=5、y=0"
+            ]
+        ),
+        VersionLog(
             id: "1.5.3",
             version: "1.5.3",
             title: "备份、歌词背景与界面体验优化",

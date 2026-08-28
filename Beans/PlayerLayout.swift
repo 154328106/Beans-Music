@@ -81,7 +81,7 @@ enum PlayerLayoutStore {
         case .loop:
             return PlayerLayoutEntry(x: 5, y: 0, scale: 1.15)
         case .queue:
-            return PlayerLayoutEntry(x: 0, y: -5, scale: 1.15)
+            return PlayerLayoutEntry(x: 5, y: 0, scale: 1.15)
         case .previous, .next:
             return PlayerLayoutEntry(x: 0, y: 0, scale: 1)
         case .grabber:
