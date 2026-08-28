@@ -78,10 +78,6 @@ struct ProfileView: View {
             || (platformPrefs.isEnabled(SearchProvider.kugou) && kugouAuth.isLoggedIn)
     }
 
-    private var importedSourceCount: Int {
-        sourceStore.customSources.count + sourceStore.lxScripts.count
-    }
-
     /// 顶部标题 + 右上角设置齿轮
     private var header: some View {
         HStack(alignment: .center) {
@@ -1018,6 +1014,10 @@ struct SettingsView: View {
 
     private var themeMode: BeansThemeMode {
         BeansThemeMode(rawValue: themeModeRaw) ?? .system
+    }
+
+    private var importedSourceCount: Int {
+        sourceStore.customSources.count + sourceStore.lxScripts.count
     }
 
     var body: some View {
