@@ -301,7 +301,10 @@ struct DiscoverView: View {
             .padding(.vertical, 6)
             .background {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Color.black.opacity(0.10))
+                    .fill(Color.black.opacity(0.06))
+                    .background {
+                        BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    }
                     .overlay {
                         RoundedRectangle(cornerRadius: 22, style: .continuous)
                             .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.8)
