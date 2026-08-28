@@ -87,6 +87,7 @@ struct RootView: View {
                 Spacer()
                 if player.currentSong != nil {
                     MiniPlayerView(showPlayer: $showPlayer)
+                        .environmentObject(player.clock)
                         .padding(.horizontal, 12)
                         .padding(.bottom, 62)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -98,6 +99,7 @@ struct RootView: View {
             PlayerView(isPresented: $showPlayer)
                 .environmentObject(favorites)
                 .environmentObject(player)
+                .environmentObject(player.clock)
                 .environmentObject(auth)
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.86), value: player.currentSong?.id)

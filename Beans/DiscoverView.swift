@@ -24,8 +24,6 @@ struct DiscoverView: View {
     }
     /// 首页数据源：记住上次选择，下次打开仍保持该平台（默认网易云）
     @AppStorage("beans.homeSource") private var homeSourceRaw = SearchProvider.netease.rawValue
-    @AppStorage("beans.homeTitleColorHex") private var homeTitleColorHex = ""
-    @AppStorage("beans.homeSubtitleColorHex") private var homeSubtitleColorHex = ""
     private let homeProviders: [SearchProvider] = [.netease, .qq, .kugou]
     /// 首页数据源：网易云 / QQ音乐（与搜索页同一控件样式）
     private var source: SearchProvider {
@@ -35,15 +33,6 @@ struct DiscoverView: View {
         return saved
     }
 
-    private var homeTitleColor: Color {
-        if let color = Color(hex: homeTitleColorHex) { return color }
-        return Color.beansLabel
-    }
-
-    private var homeSubtitleColor: Color {
-        if let color = Color(hex: homeSubtitleColorHex) { return color }
-        return Color.beansComment
-    }
     @State private var qqTopLists: [QQTopInfo] = []
     @State private var selectedQQTopList: QQTopInfo?
     @State private var kugouTopLists: [KugouTopInfo] = []
@@ -166,10 +155,10 @@ struct DiscoverView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(greeting)
                         .font(BeansFont.appFont(30, .bold))
-                        .foregroundStyle(homeTitleColor)
+                        .foregroundStyle(Color.beansLabel)
                     Text(auth.user?.nickname ?? "发现好音乐")
                         .font(BeansFont.appFont(13))
-                        .foregroundStyle(homeSubtitleColor)
+                        .foregroundStyle(Color.beansComment)
                 }
                 Spacer()
                 HStack(spacing: 10) {
@@ -208,7 +197,7 @@ struct DiscoverView: View {
                         Text(p.rawValue)
                             .font(BeansFont.appFont(13, .semibold))
                     }
-                    .foregroundStyle(source == p ? Color.white : homeSubtitleColor)
+                    .foregroundStyle(source == p ? Color.white : Color.beansComment)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 9)
                     .background {
@@ -297,7 +286,7 @@ struct DiscoverView: View {
 
     private var topListsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "排行榜", titleColor: homeTitleColor, trailingColor: homeSubtitleColor)
+            SectionHeader(title: "排行榜")
             VStack(spacing: 0) {
                 if ranksExpanded {
                     rankToggleButton(label: "收起", icon: "chevron.up")
@@ -311,9 +300,14 @@ struct DiscoverView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
             .background {
-                                BeansGlass(shape: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color.black.opacity(0.10))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.8)
+                    }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .beansCardShadow(radius: 9, y: 3)
             .id("rankTopSection")
         }
@@ -378,23 +372,23 @@ struct DiscoverView: View {
             HStack(spacing: 12) {
                 Text("\(index + 1)")
                     .font(BeansFont.appFont(16, .bold, .rounded))
-                    .foregroundStyle(index < 3 ? Color.beansAmber : homeSubtitleColor)
+                    .foregroundStyle(index < 3 ? Color.beansAmber : Color.beansComment)
                     .frame(width: 24)
                 CoverImage(url: coverURL, size: 52, cornerRadius: 12)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(name)
                         .font(BeansFont.appFont(15, .semibold))
-                        .foregroundStyle(homeTitleColor)
+                        .foregroundStyle(Color.beansLabel)
                         .lineLimit(1)
                     Text(subtitle)
                         .font(BeansFont.appFont(12))
-                        .foregroundStyle(homeSubtitleColor)
+                        .foregroundStyle(Color.beansComment)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(homeSubtitleColor.opacity(0.6))
+                    .foregroundStyle(Color.beansComment.opacity(0.6))
             }
             .padding(.vertical, 8)
             .contentShape(Rectangle())
@@ -420,7 +414,7 @@ struct DiscoverView: View {
 
     private var dailySection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionHeader(title: "每日推荐", trailing: "查看全部", titleColor: homeTitleColor, trailingColor: homeSubtitleColor) {
+            SectionHeader(title: "每日推荐", trailing: "查看全部") {
                 BeansHaptics.tap()
                 showDailyList = true
             }
@@ -450,12 +444,12 @@ struct DiscoverView: View {
                                     }
                                 Text(song.name)
                                     .font(BeansFont.appFont(12, .medium))
-                                    .foregroundStyle(homeTitleColor)
+                                    .foregroundStyle(Color.beansLabel)
                                     .lineLimit(1)
                                     .frame(width: 108, alignment: .leading)
                                 Text(song.artists.isEmpty ? song.album : song.artists)
                                     .font(BeansFont.appFont(10))
-                                    .foregroundStyle(homeSubtitleColor)
+                                    .foregroundStyle(Color.beansComment)
                                     .lineLimit(1)
                                     .frame(width: 108, alignment: .leading)
                             }
@@ -480,7 +474,7 @@ struct DiscoverView: View {
 
     private var personalizedSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: source == .qq ? "QQ歌单广场" : "歌单广场", titleColor: homeTitleColor, trailingColor: homeSubtitleColor)
+            SectionHeader(title: source == .qq ? "QQ歌单广场" : "歌单广场")
             if source == .netease {
                 // 官方分类标签：点击切换分类（「全部」为官方精品歌单）
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -494,7 +488,7 @@ struct DiscoverView: View {
                             } label: {
                                 Text(cat)
                                     .font(BeansFont.appFont(12, .medium))
-                                    .foregroundStyle(neteaseCat == cat ? Color.white : homeSubtitleColor)
+                                    .foregroundStyle(neteaseCat == cat ? Color.white : Color.beansComment)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 6)
                                     .background {
@@ -525,7 +519,7 @@ struct DiscoverView: View {
                                 .frame(maxWidth: .infinity)
                             Text(playlist.name)
                                 .font(BeansFont.appFont(12, .medium))
-                                .foregroundStyle(homeTitleColor)
+                                .foregroundStyle(Color.beansLabel)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
                         }

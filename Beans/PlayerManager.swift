@@ -27,6 +27,27 @@ enum PlayMode: String, CaseIterable, Identifiable {
     }
 }
 
+final class PlaybackClock: ObservableObject {
+    @Published private(set) var progress: Double = 0
+    @Published private(set) var duration: Double = 0
+
+    func update(progress: Double? = nil, duration: Double? = nil) {
+        let apply = {
+            if let progress, abs(progress - self.progress) > 0.01 {
+                self.progress = progress
+            }
+            if let duration, abs(duration - self.duration) > 0.01 {
+                self.duration = duration
+            }
+        }
+        if Thread.isMainThread {
+            apply()
+        } else {
+            DispatchQueue.main.async(execute: apply)
+        }
+    }
+}
+
 final class PlayerManager: NSObject, ObservableObject {
     @Published var queue: [Song] = []
     @Published var currentIndex = 0
@@ -35,8 +56,13 @@ final class PlayerManager: NSObject, ObservableObject {
     @Published var loadFailed = false
     /// 切歌代次：防止旧歌的 URL 解析任务覆盖新歌（快速切歌时）
     private var loadGeneration = 0
-    @Published var progress: Double = 0
-    @Published var duration: Double = 0
+    let clock = PlaybackClock()
+    var progress: Double = 0 {
+        didSet { clock.update(progress: progress) }
+    }
+    var duration: Double = 0 {
+        didSet { clock.update(duration: duration) }
+    }
     @Published var playMode: PlayMode = .sequential
     @Published var rate: Double = 1.0
     @Published var sleepTimerEndsAt: Date?

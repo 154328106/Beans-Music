@@ -13,6 +13,7 @@ import UIKit
 struct PlayerView: View {
     @EnvironmentObject private var theme: ThemeStore
     @EnvironmentObject private var player: PlayerManager
+    @EnvironmentObject private var clock: PlaybackClock
     @EnvironmentObject private var auth: AuthStore
     @EnvironmentObject private var favorites: FavoritesStore
     @Environment(\.colorScheme) private var colorScheme
@@ -215,31 +216,36 @@ struct PlayerView: View {
 
     var body: some View {
         let _ = theme.accent
-        GeometryReader { geo in
-            ZStack {
-                background
-                    .ignoresSafeArea()
+        Group {
+            if showPlayerSettings {
+                Color.clear.ignoresSafeArea()
+            } else {
+                GeometryReader { geo in
+                    ZStack {
+                        background
+                            .ignoresSafeArea()
 
-                VStack(spacing: 0) {
-                    headerBar
-                    content(geo: geo)
+                        VStack(spacing: 0) {
+                            headerBar
+                            content(geo: geo)
+                        }
+                        .foregroundStyle(palette.text)
+
+                        controlDeck(bottomInset: geo.safeAreaInsets.bottom)
+                            .frame(maxWidth: .infinity)
+                            .frame(maxHeight: .infinity, alignment: .bottom)
+
+                        // 布局编辑工具栏：组件选择 + X/Y/Z 滑杆 + 恢复默认 + 完成
+                        if layoutMode {
+                            layoutToolbar
+                                .contentShape(Rectangle())
+                                .frame(maxWidth: .infinity)
+                                .frame(maxHeight: .infinity, alignment: .top)
+                                .padding(.top, 54)
+                                .transition(.opacity)
+                        }
+                    }
                 }
-                .foregroundStyle(palette.text)
-
-                controlDeck(bottomInset: geo.safeAreaInsets.bottom)
-                    .frame(maxWidth: .infinity)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
-
-                // 布局编辑工具栏：组件选择 + X/Y/Z 滑杆 + 恢复默认 + 完成
-                if layoutMode {
-                    layoutToolbar
-                        .contentShape(Rectangle())
-                        .frame(maxWidth: .infinity)
-                        .frame(maxHeight: .infinity, alignment: .top)
-                        .padding(.top, 54)
-                        .transition(.opacity)
-                }
-
             }
         }
         .task(id: song?.identityKey) {
@@ -276,7 +282,7 @@ struct PlayerView: View {
                 CommentsSheet(song: song)
             }
         }
-        .sheet(isPresented: $showPlayerSettings) {
+        .fullScreenCover(isPresented: $showPlayerSettings) {
             PlayerSettingsSheet()
         }
         .sheet(isPresented: $showShare) {
@@ -696,7 +702,7 @@ struct PlayerView: View {
         var answer: Int?
         while low <= high {
             let mid = (low + high) / 2
-            if lyrics[mid].time <= LyricTiming.effectiveProgress(player.progress, userOffset: lyricOffset) {
+            if lyrics[mid].time <= LyricTiming.effectiveProgress(clock.progress, userOffset: lyricOffset) {
                 answer = mid
                 low = mid + 1
             } else {
@@ -926,12 +932,12 @@ struct PlayerView: View {
             SeekBar(accent: progressAccent, track: palette.secondary.opacity(0.3), style: progressBarStyle)
             HStack(spacing: 6) {
                 seekPillButton("gobackward.15") { player.seekBy(-15) }
-                Text(beansTimeString(player.progress))
+                Text(beansTimeString(clock.progress))
                     .font(BeansFont.appFont(10, .regular, .monospaced))
                     .foregroundStyle(palette.secondary)
                     .frame(minWidth: 34, alignment: .leading)
                 Spacer(minLength: 0)
-                Text(beansTimeString(player.duration))
+                Text(beansTimeString(clock.duration))
                     .font(BeansFont.appFont(10, .regular, .monospaced))
                     .foregroundStyle(palette.secondary)
                     .frame(minWidth: 34, alignment: .trailing)
@@ -1389,6 +1395,7 @@ struct PlayerView: View {
 
 struct SeekBar: View {
     @EnvironmentObject private var player: PlayerManager
+    @EnvironmentObject private var clock: PlaybackClock
     let accent: Color
     let track: Color
     /// 进度条样式：0 流光 / 1 辉光 / 2 极光 / 3 波浪
@@ -1401,13 +1408,13 @@ struct SeekBar: View {
     @State private var lastPreviewSecond: Int?
 
     private var progress: Double {
-        scrubbing ? scrubValue : player.progress
+        scrubbing ? scrubValue : clock.progress
     }
 
     var body: some View {
         GeometryReader { geo in
             let width = geo.size.width
-            let total = max(player.duration, 1)
+            let total = max(clock.duration, 1)
             let ratio = min(max(progress / total, 0), 1)
             let thumbX = min(max(width * ratio, 10), max(width - 10, 10))
 
@@ -1657,6 +1664,7 @@ private struct WaveBar: View {
 
 struct LyricsSection: View {
     @EnvironmentObject private var player: PlayerManager
+    @EnvironmentObject private var clock: PlaybackClock
     let lyrics: [LyricLine]
     let accent: Color
     let secondary: Color
@@ -1701,7 +1709,7 @@ struct LyricsSection: View {
         var answer: Int?
         while low <= high {
             let mid = (low + high) / 2
-            if lyrics[mid].time <= LyricTiming.effectiveProgress(player.progress, userOffset: Double(lyricOffset)) {
+            if lyrics[mid].time <= LyricTiming.effectiveProgress(clock.progress, userOffset: Double(lyricOffset)) {
                 answer = mid
                 low = mid + 1
             } else {
@@ -2124,15 +2132,15 @@ struct PlayerSettingsSheet: View {
         let _ = theme.accent
         BeansNavigationStack {
             ScrollView {
-                LazyVStack(spacing: 14) {
+                LazyVStack(spacing: 8) {
                     playingCard
                     lyricDisplayCard
                     lyricEffectCard
                     layoutCard
                     coverCard
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
             }
             .background {
                 GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
@@ -2145,14 +2153,13 @@ struct PlayerSettingsSheet: View {
                 }
             }
         }
-        .modifier(BeansSheetModifier(detents: [.medium, .large], dragIndicator: true))
     }
 
     // MARK: - 设置卡片（液态玻璃圆角分组，紧凑排版）
 
     /// 设置卡片容器：液态玻璃圆角卡片
     private func settingCard<Content: View>(_ title: String, isExpanded: Binding<Bool>? = nil, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 9) {
             if let isExpanded {
                 Button {
                     withAnimation(.easeOut(duration: 0.16)) {
@@ -2162,7 +2169,7 @@ struct PlayerSettingsSheet: View {
                 } label: {
                     HStack(spacing: 10) {
                         Text(title)
-                            .font(BeansFont.appFont(14, .bold))
+                            .font(BeansFont.appFont(13, .bold))
                             .foregroundStyle(Color.beansLabel)
                         Spacer()
                         Image(systemName: "chevron.down")
@@ -2171,7 +2178,7 @@ struct PlayerSettingsSheet: View {
                             .rotationEffect(.degrees(isExpanded.wrappedValue ? 0 : -90))
                             .frame(width: 24, height: 24)
                     }
-                    .frame(minHeight: 44)
+                    .frame(minHeight: 38)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(GlassPressButtonStyle(scale: 0.98))
@@ -2187,10 +2194,11 @@ struct PlayerSettingsSheet: View {
                 content()
             }
         }
-        .padding(14)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            PlayerSettingsLiquidGlass(shape: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            PlayerSettingsLiquidGlass(shape: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
 

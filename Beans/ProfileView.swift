@@ -895,8 +895,7 @@ struct SettingsView: View {
     /// 可选高刷新率动效，默认关闭以降低发热
     @AppStorage("beans.enableHighRefresh") private var enableHighRefresh = false
     @AppStorage("beans.audio.mixothers.v1") private var mixesWithOthers = false
-    @AppStorage("beans.homeTitleColorHex") private var homeTitleColorHex = ""
-    @AppStorage("beans.homeSubtitleColorHex") private var homeSubtitleColorHex = ""
+    @AppStorage("beans.labelColorHex") private var labelColorHex = ""
     @ObservedObject private var sourceStore = UnblockSourceStore.shared
 
     @State private var appearanceExpanded = false
@@ -1288,31 +1287,26 @@ struct SettingsView: View {
                         .font(.system(size: 14))
                         .foregroundStyle(Color.beansAmber)
                         .frame(width: 28)
-                    Text("主页文字颜色")
+                    Text("主文字颜色")
                         .font(BeansFont.appFont(15))
                         .foregroundStyle(Color.beansLabel)
                     Spacer()
-                    ColorPicker("主文字", selection: Binding(
+                    ColorPicker("", selection: Binding(
                         get: {
-                            if let c = Color(hex: homeTitleColorHex) { return c }
+                            if let c = Color(hex: labelColorHex) { return c }
                             return Color.beansLabel
                         },
-                        set: { homeTitleColorHex = $0.hexString }
-                    ), supportsOpacity: false)
-                    .labelsHidden()
-                    ColorPicker("副文字", selection: Binding(
-                        get: {
-                            if let c = Color(hex: homeSubtitleColorHex) { return c }
-                            return Color.beansComment
-                        },
-                        set: { homeSubtitleColorHex = $0.hexString }
+                        set: {
+                            labelColorHex = $0.hexString
+                            theme.objectWillChange.send()
+                        }
                     ), supportsOpacity: false)
                     .labelsHidden()
                 }
                 HStack(spacing: 12) {
                     Button {
-                        homeTitleColorHex = ""
-                        homeSubtitleColorHex = ""
+                        labelColorHex = ""
+                        theme.objectWillChange.send()
                         BeansHaptics.select()
                     } label: {
                         Text("恢复默认")
@@ -1324,7 +1318,7 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
                     Spacer()
-                    Text("只影响主页标题、推荐、排行榜和歌单文案")
+                    Text("全 App 主文字颜色")
                         .font(BeansFont.appFont(12))
                         .foregroundStyle(Color.beansComment)
                 }

@@ -19,10 +19,17 @@ extension UIColor {
         light: UIColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 1),
         dark: UIColor(red: 0.110, green: 0.110, blue: 0.118, alpha: 1)    // #1C1C1E
     )
-    static let beansLabel = beansDynamic(
+    private static let beansDefaultLabel = beansDynamic(
         light: UIColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 1),
         dark: UIColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 1)
     )
+    static var beansLabel: UIColor {
+        if let raw = UserDefaults.standard.string(forKey: "beans.labelColorHex"),
+           let custom = UIColor(hex: raw) {
+            return custom
+        }
+        return beansDefaultLabel
+    }
     static let beansSecondary = beansDynamic(
         light: UIColor(red: 0.424, green: 0.424, blue: 0.439, alpha: 1),  // #6C6C70
         dark: UIColor(red: 0.596, green: 0.596, blue: 0.624, alpha: 1)    // #98989F
@@ -50,7 +57,7 @@ extension UIColor {
 extension Color {
     static let beansBackground = Color(uiColor: .beansBackground)
     static let beansCard = Color(uiColor: .beansCard)
-    static let beansLabel = Color(uiColor: .beansLabel)
+    static var beansLabel: Color { Color(uiColor: .beansLabel) }
     static let beansSecondary = Color(uiColor: .beansSecondary)
 
     /// 全局说明文字（注释）颜色：可在「我的 → 外观」中自定义；默认跟随次要文字色
