@@ -995,6 +995,7 @@ struct SettingsView: View {
 
     @State private var appearanceExpanded = false
     @State private var platformExpanded = false
+    @State private var playbackExpanded = false
     @State private var showWallpaperPicker = false
     @State private var showFontImporter = false
     /// 更新日志
@@ -1526,7 +1527,41 @@ struct SettingsView: View {
     /// 播放与歌词设置（借鉴 Kumone：音质 / 免费听歌 / 显示歌词翻译）
     private var playbackSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "播放设置")
+            Button {
+                BeansHaptics.select()
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    playbackExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.beansAmber)
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("播放设置")
+                            .font(BeansFont.appFont(15))
+                            .foregroundStyle(Color.beansLabel)
+                        Text("\(BeansAudioQuality(rawValue: audioQualityRaw)?.displayName ?? "高品质") · \(enableImportedSources ? "导入音源已开" : "导入音源已关")")
+                            .font(BeansFont.appFont(11))
+                            .foregroundStyle(Color.beansComment)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    Image(systemName: playbackExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.beansComment.opacity(0.6))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 13)
+                .background {
+                    BeansGlass(shape: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(GlassPressButtonStyle(scale: 0.98))
+
+            if playbackExpanded {
             VStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 12) {
@@ -1688,6 +1723,8 @@ struct SettingsView: View {
                                 BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
             }
             .beansCardShadow(radius: 9, y: 3)
+            .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
     }
 
