@@ -59,6 +59,9 @@ enum SearchProvider: String, CaseIterable, Identifiable {
         case .kugou: return LinearGradient(
             colors: [Color(red: 0.12, green: 0.58, blue: 0.95), Color(red: 0.02, green: 0.32, blue: 0.72)],
             startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .subsonic: return LinearGradient(
+            colors: [Color(red: 0.55, green: 0.35, blue: 0.90), Color(red: 0.36, green: 0.20, blue: 0.70)],
+            startPoint: .topLeading, endPoint: .bottomTrailing)
         }
     }
 
@@ -67,6 +70,7 @@ enum SearchProvider: String, CaseIterable, Identifiable {
         case .netease: return "cloud.fill"
         case .qq: return "play.rectangle.fill"
         case .kugou: return "music.note"
+        case .subsonic: return "externaldrive.connected.to.line.below"
         }
     }
 
@@ -75,6 +79,8 @@ enum SearchProvider: String, CaseIterable, Identifiable {
         case .netease: return "BrandNetease"
         case .qq: return "BrandQQ"
         case .kugou: return "BrandKugou"
+        // 本地音乐用 SF Symbol, 没有品牌图
+        case .subsonic: return nil
         }
     }
 }

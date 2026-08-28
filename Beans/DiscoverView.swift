@@ -286,6 +286,8 @@ struct DiscoverView: View {
         case .netease: return neteaseTopLists.count
         case .qq: return qqTopLists.count
         case .kugou: return kugouTopLists.count
+        // 本地音乐没有榜单
+        case .subsonic: return 0
         }
     }
 
@@ -299,6 +301,7 @@ struct DiscoverView: View {
         case .netease: return !topLists.isEmpty
         case .qq: return !qqTopLists.isEmpty
         case .kugou: return !kugouTopLists.isEmpty
+        case .subsonic: return false
         }
     }
 
@@ -711,6 +714,9 @@ struct DiscoverView: View {
         var snapshot = DiscoverCache.Snapshot()
         snapshot.savedAt = Date()
         switch source {
+        // 本地音乐在 load() 开头就已分流返回, 走不到这里
+        case .subsonic:
+            return
         case .qq:
             async let a = QQMusicAPI.shared.recommendSongs(limit: 30)
             async let b = QQMusicAPI.shared.topLists()
