@@ -21,6 +21,9 @@ struct ProfileView: View {
     @State private var showAccountHub = false
     /// 设置页（外观 + 歌词翻译等）
     @State private var showSettings = false
+    @State private var showSubsonicServer = false
+    @State private var showSubsonicLibrary = false
+    @ObservedObject private var subsonicAuth = SubsonicAuth.shared
     @State private var showSectionSort = false
     /// 我的界面板块顺序（账号 / 关于，可自定义）
     @State private var profileOrder = SectionOrderStore.load(SectionOrderStore.profileKey, defaults: SectionOrderStore.profileDefaults)
@@ -126,6 +129,7 @@ struct ProfileView: View {
                         }
                     }
                     // 更新入口固定放在“我的”页面最底部，避免被板块排序隐藏。
+                    subsonicCard
                     updateLinkCard
                     communityCard
                 }
@@ -157,6 +161,12 @@ struct ProfileView: View {
             SettingsView()
                 .environmentObject(theme)
                 .environmentObject(player)
+        }
+        .sheet(isPresented: $showSubsonicServer) {
+            SubsonicServerSheet()
+        }
+        .sheet(isPresented: $showSubsonicLibrary) {
+            NavigationStack { SubsonicLibraryView() }
         }
         .sheet(isPresented: $showSectionSort) {
             SectionOrderSheet(title: "我的板块排序", sections: SectionOrderStore.profileDefaults, order: $profileOrder)
@@ -673,6 +683,52 @@ struct ProfileView: View {
     }
 
     /// 我的页底部交流群入口
+    /// 自建音乐服务器入口：没连过就去填地址，连上了就直接进曲库（长按可改配置）
+    private var subsonicCard: some View {
+        Button {
+            BeansHaptics.tap()
+            if subsonicAuth.isLoggedIn {
+                showSubsonicLibrary = true
+            } else {
+                showSubsonicServer = true
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "externaldrive.connected.to.line.below")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Color.beansHighlight)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("音乐服务器")
+                        .font(BeansFont.appFont(14, .semibold))
+                        .foregroundStyle(Color.beansLabel)
+                    Text(subsonicAuth.isLoggedIn
+                         ? "已连接 \(subsonicAuth.serverName) · 点击浏览曲库"
+                         : "连接 Navidrome / 道理鱼音乐等自建服务")
+                        .font(BeansFont.appFont(11))
+                        .foregroundStyle(Color.beansComment)
+                }
+                Spacer()
+                Image(systemName: subsonicAuth.isLoggedIn ? "chevron.right" : "plus.circle")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.beansComment)
+            }
+            .padding(16)
+            .background {
+                BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            }
+        }
+        .buttonStyle(GlassPressButtonStyle(scale: 0.98))
+        .beansCardShadow(radius: 9, y: 3)
+        .contextMenu {
+            Button {
+                showSubsonicServer = true
+            } label: {
+                Label("服务器设置", systemImage: "gearshape")
+            }
+        }
+    }
+
     private var communityCard: some View {
         Button {
             BeansHaptics.tap()

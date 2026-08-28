@@ -42,8 +42,19 @@ final class SubsonicAPI {
         return comps.url
     }
 
-    /// 发一次请求并返回**已拍平**的 `subsonic-response` 字典
+    /// 发一次请求并返回**已拍平**的 `subsonic-response` 字典。
+    /// 撞上 `code 41`（服务端不支持 token 认证）时自动降级为密码模式并重试一次。
     private func request(_ endpoint: String, _ extra: [URLQueryItem] = []) async throws -> [String: Any] {
+        do {
+            return try await send(endpoint, extra)
+        } catch SubsonicError.server(let code, let message) where code == 41 {
+            guard auth.mode == .token else { throw SubsonicError.server(code: code, message: message) }
+            auth.fallbackToPasswordMode()
+            return try await send(endpoint, extra)
+        }
+    }
+
+    private func send(_ endpoint: String, _ extra: [URLQueryItem] = []) async throws -> [String: Any] {
         guard let url = makeURL(endpoint, extra) else { throw SubsonicError.notConfigured }
         var req = URLRequest(url: url)
         req.timeoutInterval = 15
@@ -117,9 +128,9 @@ final class SubsonicAPI {
         makeURL("stream.view", [URLQueryItem(name: "id", value: id)])
     }
 
-    /// 封面直链
+    /// 封面直链（服务器封面接口不可用时直接返回 nil，界面走占位图）
     func coverURL(id: String, size: Int = 512) -> URL? {
-        guard !id.isEmpty else { return nil }
+        guard !id.isEmpty, auth.coversSupported else { return nil }
         return makeURL("getCoverArt.view", [
             URLQueryItem(name: "id", value: id),
             URLQueryItem(name: "size", value: String(size)),
@@ -150,6 +161,33 @@ final class SubsonicAPI {
     func ping() async throws -> String {
         let r = try await request("ping.view")
         return Self.str(r["version"])
+    }
+
+    /// 设置页「测试连接」：验证凭据 + 探一次封面可用性
+    /// 返回服务器版本号；凭据不对会抛错，封面不可用只是记个标记不算失败
+    @discardableResult
+    func testConnection() async throws -> String {
+        let version = try await ping()
+        await probeCovers()
+        return version
+    }
+
+    /// 拿一张真实专辑封面试试；HTTP 非 2xx 或拿不到图片就判定不支持
+    private func probeCovers() async {
+        // 先探测前, 把开关打开, 否则 coverURL 会直接返回 nil 探了个寂寞
+        auth.setCoversSupported(true)
+        guard let first = try? await albums(type: "newest", size: 1).first,
+              let url = first.coverURL else {
+            return
+        }
+        do {
+            let (data, resp) = try await URLSession.shared.data(from: url)
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            let looksLikeImage = (resp.mimeType ?? "").hasPrefix("image/")
+            auth.setCoversSupported((200..<300).contains(code) && looksLikeImage && !data.isEmpty)
+        } catch {
+            auth.setCoversSupported(false)
+        }
     }
 
     /// 搜索（歌曲）
