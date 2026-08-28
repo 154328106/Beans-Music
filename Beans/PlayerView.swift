@@ -235,19 +235,8 @@ struct PlayerView: View {
                         if usesCoverPlayer {
                             coverPlayerScreen(geo: geo)
                         } else {
-                            if playerSkinRaw == "cover", showLyrics {
-                                let backgroundSize = CGSize(
-                                    width: geo.size.width,
-                                    height: geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom
-                                )
-                                coverPlayerBackground(size: backgroundSize)
-                                    .frame(width: backgroundSize.width, height: backgroundSize.height)
-                                    .offset(y: -geo.safeAreaInsets.top)
-                                    .ignoresSafeArea()
-                            } else {
-                                background
-                                    .ignoresSafeArea()
-                            }
+                            background
+                                .ignoresSafeArea()
 
                             VStack(spacing: 0) {
                                 headerBar
@@ -288,9 +277,7 @@ struct PlayerView: View {
                                 .transition(.opacity.combined(with: .scale(scale: 0.94, anchor: .top)))
                         }
                     }
-                    .frame(width: geo.size.width, height: geo.size.height)
                     .ignoresSafeArea()
-                    .clipped()
                 }
             }
         }
@@ -440,90 +427,56 @@ struct PlayerView: View {
         }
     }
 
-    // MARK: - 封面沉浸播放器
+    // MARK: - 控制中心播放器（保留非液态视觉，不再让封面尺寸参与布局）
 
     private func coverPlayerScreen(geo: GeometryProxy) -> some View {
         let size = geo.size
-        let safeTop = geo.safeAreaInsets.top
-        let safeBottom = geo.safeAreaInsets.bottom
-        let backgroundSize = CGSize(width: size.width, height: size.height + safeTop + safeBottom)
         return ZStack {
-            coverPlayerBackground(size: backgroundSize)
-                .frame(width: backgroundSize.width, height: backgroundSize.height)
-                .offset(y: -safeTop)
-                .allowsHitTesting(false)
-            VStack(spacing: 0) {
-                coverPlayerHeader
-                    .padding(.horizontal, 20)
-                    .padding(.top, max(8, safeTop + 8))
-                Spacer(minLength: 0)
-                coverPlayerDeck(bottomInset: safeBottom)
-                    .padding(.horizontal, 26)
-                    .padding(.bottom, max(8, safeBottom))
+            controlCenterBackground
+
+            VStack(spacing: 10) {
+                controlCenterHeader
+                controlCenterMediaCard
+                controlCenterTiles
+                controlCenterPlaybackCard
             }
-            .frame(width: size.width, height: size.height)
+            .padding(.horizontal, 16)
+            .padding(.top, geo.safeAreaInsets.top + 4)
+            .padding(.bottom, geo.safeAreaInsets.bottom + 8)
+            .frame(width: size.width, height: size.height, alignment: .top)
         }
         .frame(width: size.width, height: size.height)
-        .foregroundStyle(Color.white)
+        .foregroundStyle(.white)
         .ignoresSafeArea()
         .simultaneousGesture(coverDismissGesture)
     }
 
-    private func coverPlayerBackground(size: CGSize) -> some View {
-        return ZStack {
+    private var controlCenterBackground: some View {
+        ZStack {
+            CoverBlurBackground(url: song?.coverURL, scheme: colorScheme)
+                .ignoresSafeArea()
             LinearGradient(
                 colors: [
-                    palette.backgroundTop,
-                    palette.backgroundBottom,
-                    .black.opacity(0.96)
+                    .black.opacity(colorScheme == .dark ? 0.34 : 0.48),
+                    palette.backgroundTop.opacity(0.58),
+                    .black.opacity(0.82)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .frame(width: size.width, height: size.height)
-
-            AsyncImage(url: song?.coverURL) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: size.width, height: size.height, alignment: .top)
-                        .clipped()
-                    .frame(width: size.width, height: size.height)
-                default:
-                    CoverBlurBackground(url: song?.coverURL, scheme: colorScheme)
-                        .frame(width: size.width, height: size.height)
-                        .clipped()
-                }
-            }
-            .frame(width: size.width, height: size.height)
-            .clipped()
-
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0.00),
-                    .init(color: .clear, location: 0.24),
-                    .init(color: palette.backgroundTop.opacity(0.28), location: 0.46),
-                    .init(color: palette.backgroundBottom.opacity(0.76), location: 0.64),
-                    .init(color: .black.opacity(0.94), location: 1.00)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(width: size.width, height: size.height)
+            .ignoresSafeArea()
         }
-        .frame(width: size.width, height: size.height)
-        .clipped()
     }
 
-    private var coverPlayerHeader: some View {
-        HStack {
-            coverPlainButton(systemName: "chevron.left") {
+    private var controlCenterHeader: some View {
+        HStack(spacing: 12) {
+            controlCenterIconButton(systemName: "chevron.down", size: 38, iconSize: 15) {
                 BeansHaptics.tap()
                 closePlayer()
             }
+
             Spacer(minLength: 0)
+
             Button {
                 BeansHaptics.tap()
                 withAnimation(.spring(response: 0.24, dampingFraction: 0.86)) {
@@ -531,26 +484,29 @@ struct PlayerView: View {
                 }
             } label: {
                 VStack(spacing: 2) {
-                    Text(song?.name ?? "Beans Music")
-                        .font(BeansFont.appFont(13, .bold))
-                        .foregroundStyle(.white)
+                    Text(player.isBuffering ? "加载中…" : (player.isPlaying ? "正在播放" : "已暂停"))
+                        .font(BeansFont.appFont(12, .semibold))
+                        .lineLimit(1)
+                    Text(song?.album ?? "Beans Music")
+                        .font(BeansFont.appFont(10))
+                        .foregroundStyle(.white.opacity(0.66))
                         .lineLimit(1)
                         .truncationMode(.tail)
-                    Text(player.isBuffering ? "加载中..." : (player.isPlaying ? "正在播放" : "已暂停"))
-                        .font(BeansFont.appFont(10, .medium))
-                        .foregroundStyle(.white.opacity(0.68))
-                        .lineLimit(1)
                 }
-                .padding(.horizontal, 14)
-                .frame(height: 42)
-                .frame(maxWidth: 180)
-                .background(Capsule().fill(.black.opacity(0.22)))
-                .overlay(Capsule().stroke(.white.opacity(0.10), lineWidth: 0.8))
-                .contentShape(Capsule())
+                .frame(minWidth: 118, maxWidth: 190)
+                .frame(height: 38)
+                .contentShape(Rectangle())
             }
             .buttonStyle(GlassPressButtonStyle(scale: 0.96))
+
             Spacer(minLength: 0)
-            coverPlainButton(systemName: favorites.isLiked(song) ? "heart.fill" : "heart") {
+
+            controlCenterIconButton(
+                systemName: favorites.isLiked(song) ? "heart.fill" : "heart",
+                size: 38,
+                iconSize: 15,
+                accent: favorites.isLiked(song) ? Color(red: 0.98, green: 0.36, blue: 0.46) : .white
+            ) {
                 BeansHaptics.tap()
                 if let song {
                     Task {
@@ -565,119 +521,251 @@ struct PlayerView: View {
         }
     }
 
-    private var coverPlayerCenter: some View {
-        VStack(spacing: 12) {
-            Button {
-                BeansHaptics.tap()
-                withAnimation(.spring(response: 0.24, dampingFraction: 0.86)) {
-                    showMoreActions.toggle()
+    /// 媒体卡片：封面只作为固定尺寸缩略图，点击封面查看完整歌词，点击信息打开更多操作。
+    private var controlCenterMediaCard: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                Button {
+                    toggleLyrics()
+                } label: {
+                    CoverImage(url: song?.coverURL, size: 92, cornerRadius: 18)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .strokeBorder(.white.opacity(0.18), lineWidth: 1)
+                        }
                 }
-            } label: {
-                VStack(spacing: 6) {
-                    Text(song?.name ?? "")
-                        .font(BeansFont.appFont(28, .bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.center)
-                        .minimumScaleFactor(0.72)
-                    Text(song?.artists ?? "")
-                        .font(BeansFont.appFont(16, .medium))
-                        .foregroundStyle(.white.opacity(0.72))
+                .buttonStyle(GlassPressButtonStyle(scale: 0.94))
+
+                Button {
+                    BeansHaptics.tap()
+                    withAnimation(.spring(response: 0.24, dampingFraction: 0.86)) {
+                        showMoreActions.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(song?.name ?? "未在播放")
+                                .font(BeansFont.appFont(18, .bold))
+                                .lineLimit(2)
+                                .truncationMode(.tail)
+                                .minimumScaleFactor(0.68)
+                            Text(song?.artists ?? "Beans Music")
+                                .font(BeansFont.appFont(13, .medium))
+                                .foregroundStyle(.white.opacity(0.68))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            Text(player.isBuffering ? "加载中…" : (player.isPlaying ? "正在播放" : "已暂停"))
+                                .font(BeansFont.appFont(10))
+                                .foregroundStyle(.white.opacity(0.42))
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.62))
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(GlassPressButtonStyle(scale: 0.98))
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(Array(lyricPreviewRows.prefix(2).enumerated()), id: \.offset) { _, item in
+                    Text(item.text)
+                        .font(BeansFont.appFont(item.isCurrent ? 13 : 12, item.isCurrent ? .semibold : .regular))
+                        .foregroundStyle(item.isCurrent ? .white : .white.opacity(0.42))
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
-                .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(GlassPressButtonStyle(scale: 0.98))
-
-            VStack(spacing: 6) {
-                ForEach(Array(lyricPreviewRows.prefix(3).enumerated()), id: \.offset) { _, item in
-                    Text(item.text)
-                        .font(BeansFont.appFont(item.isCurrent ? 16 : 14, item.isCurrent ? .semibold : .regular))
-                        .foregroundStyle(item.isCurrent ? .white : .white.opacity(0.34))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                        .frame(maxWidth: .infinity)
-                }
                 if lyricPreviewRows.isEmpty {
-                    Text("暂无歌词")
-                        .font(BeansFont.appFont(14, .medium))
+                    Text("暂无歌词，点击封面查看完整歌词")
+                        .font(BeansFont.appFont(11))
                         .foregroundStyle(.white.opacity(0.42))
-                        .frame(maxWidth: .infinity)
+                        .lineLimit(1)
                 }
             }
-            .frame(height: 76)
+            .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
             .contentShape(Rectangle())
             .onTapGesture { toggleLyrics() }
+
+            VStack(spacing: 5) {
+                SeekBar(accent: .white, track: .white.opacity(0.22), style: 0)
+                HStack {
+                    Text(beansTimeString(clock.progress))
+                    Spacer(minLength: 0)
+                    Text(beansTimeString(clock.duration))
+                }
+                .font(BeansFont.appFont(10, .regular, .monospaced))
+                .foregroundStyle(.white.opacity(0.54))
+            }
+        }
+        .padding(14)
+        .background(controlCenterPanelBackground(cornerRadius: 24))
+    }
+
+    private var controlCenterTiles: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: 10),
+                GridItem(.flexible(), spacing: 10)
+            ],
+            spacing: 10
+        ) {
+            controlCenterTile(
+                title: "播放模式",
+                value: player.playMode.title,
+                systemName: player.playMode.icon,
+                accent: player.playMode == .shuffle
+            ) {
+                BeansHaptics.select()
+                player.togglePlayMode()
+            }
+            controlCenterTile(
+                title: "播放列表",
+                value: "查看当前队列",
+                systemName: "list.bullet"
+            ) {
+                BeansHaptics.tap()
+                showQueue = true
+            }
+            controlCenterTile(
+                title: "定时关闭",
+                value: player.sleepTimerRemaining > 0 ? beansTimeString(Double(player.sleepTimerRemaining)) : "未设置",
+                systemName: player.sleepTimerRemaining > 0 ? "moon.zzz.fill" : "moon.zzz",
+                accent: player.sleepTimerRemaining > 0
+            ) {
+                BeansHaptics.tap()
+                showSleepTimer = true
+            }
+            controlCenterTile(
+                title: "更多设置",
+                value: "播放器与歌词",
+                systemName: "slider.horizontal.3"
+            ) {
+                BeansHaptics.tap()
+                showPlayerSettings = true
+            }
         }
     }
 
-    private func coverPlayerDeck(bottomInset: CGFloat) -> some View {
-        VStack(spacing: 18) {
-            coverPlayerCenter
-                .padding(.horizontal, 4)
+    private func controlCenterTile(
+        title: String,
+        value: String,
+        systemName: String,
+        accent: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: systemName)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(accent ? controlAccent : .white)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        Circle()
+                            .fill(accent ? controlAccent.opacity(0.22) : .white.opacity(0.10))
+                    )
 
-            VStack(spacing: 6) {
-                SeekBar(accent: .white, track: .white.opacity(0.20), style: 0)
-                HStack {
-                    Text(beansTimeString(clock.progress))
-                        .font(BeansFont.appFont(11, .regular, .monospaced))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(BeansFont.appFont(12, .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Text(value)
+                        .font(BeansFont.appFont(10))
                         .foregroundStyle(.white.opacity(0.52))
-                    Spacer()
-                    Text(beansTimeString(clock.duration))
-                        .font(BeansFont.appFont(11, .regular, .monospaced))
-                        .foregroundStyle(.white.opacity(0.52))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 58)
+            .background(controlCenterPanelBackground(cornerRadius: 18))
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(GlassPressButtonStyle(scale: 0.97))
+    }
+
+    private var controlCenterPlaybackCard: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Label("播放控制", systemImage: "waveform")
+                    .font(BeansFont.appFont(12, .semibold))
+                Spacer(minLength: 0)
+                Text(player.isPlaying ? "播放中" : "已暂停")
+                    .font(BeansFont.appFont(10, .medium))
+                    .foregroundStyle(.white.opacity(0.54))
             }
 
             HStack(spacing: 18) {
-                coverPlainButton(systemName: player.playMode.icon, size: 42, iconSize: 20) {
-                    BeansHaptics.select()
-                    player.togglePlayMode()
-                }
-                coverPlainButton(systemName: "backward.fill", size: 46, iconSize: 23) {
+                controlCenterIconButton(systemName: "backward.fill", size: 42, iconSize: 19) {
                     BeansHaptics.tap()
                     player.previous()
                 }
+
                 Button {
                     BeansHaptics.tap()
                     player.togglePlayPause()
                 } label: {
-                    PlayPauseMorphIcon(isPlaying: player.isPlaying, size: 28)
+                    PlayPauseMorphIcon(isPlaying: player.isPlaying, size: 25)
                         .foregroundStyle(.white)
-                        .frame(width: 72, height: 72)
-                        .background(Circle().fill(.white.opacity(0.12)))
-                        .overlay(Circle().stroke(.white.opacity(0.12), lineWidth: 0.8))
-                        .clipShape(Circle())
+                        .frame(width: 64, height: 64)
+                        .background(
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [controlAccent.opacity(0.92), controlAccentSoft.opacity(0.84)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                        )
+                        .overlay(Circle().strokeBorder(.white.opacity(0.22), lineWidth: 1))
+                        .shadow(color: controlAccent.opacity(0.36), radius: 10, y: 5)
                 }
                 .buttonStyle(GlassPressButtonStyle(scale: 0.90))
-                coverPlainButton(systemName: "forward.fill", size: 46, iconSize: 23) {
+
+                controlCenterIconButton(systemName: "forward.fill", size: 42, iconSize: 19) {
                     BeansHaptics.tap()
                     player.next()
-                }
-                coverPlainButton(systemName: "list.bullet", size: 42, iconSize: 22) {
-                    BeansHaptics.tap()
-                    showQueue = true
                 }
             }
             .frame(maxWidth: .infinity)
         }
-        .padding(.bottom, bottomInset > 0 ? 0 : 12)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(controlCenterPanelBackground(cornerRadius: 24))
     }
 
-    private func coverPlainButton(systemName: String, size: CGFloat = 42, iconSize: CGFloat = 20, action: @escaping () -> Void) -> some View {
+    private func controlCenterIconButton(
+        systemName: String,
+        size: CGFloat = 42,
+        iconSize: CGFloat = 20,
+        accent: Color = .white,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: iconSize, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(accent)
                 .frame(width: size, height: size)
-                .background(Circle().fill(.black.opacity(0.22)))
-                .overlay(Circle().stroke(.white.opacity(0.10), lineWidth: 0.8))
+                .background(Circle().fill(.black.opacity(0.38)))
+                .overlay(Circle().strokeBorder(.white.opacity(0.15), lineWidth: 0.8))
                 .clipShape(Circle())
                 .contentShape(Circle())
         }
         .buttonStyle(GlassPressButtonStyle(scale: 0.92))
+    }
+
+    private func controlCenterPanelBackground(cornerRadius: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(.black.opacity(0.46))
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(.white.opacity(0.14), lineWidth: 0.8)
+            }
     }
 
     private var coverDismissGesture: some Gesture {
@@ -825,7 +913,11 @@ struct PlayerView: View {
         .padding(14)
         .frame(width: 292)
         .background {
-            BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            if usesCoverPlayer {
+                controlCenterPanelBackground(cornerRadius: 22)
+            } else {
+                BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .beansCardShadow(radius: 14, y: 8)
@@ -2639,10 +2731,10 @@ struct PlayerSettingsSheet: View {
                     .foregroundStyle(Color.beansLabel)
                 Picker("播放器样式", selection: $playerSkinRaw) {
                     Text("经典").tag("classic")
-                    Text("封面沉浸").tag("cover")
+                    Text("控制中心").tag("cover")
                 }
                 .pickerStyle(.segmented)
-                Text("封面沉浸会用当前歌曲封面铺满背景，中间显示预览歌词，底部保留正常控制区")
+                Text("控制中心样式使用固定尺寸封面、歌曲信息和分组控制，不使用液态玻璃")
                     .font(BeansFont.appFont(12))
                     .foregroundStyle(Color.beansComment)
             }
