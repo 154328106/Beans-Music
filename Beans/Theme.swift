@@ -240,7 +240,7 @@ final class ThemeStore: ObservableObject {
     /// 注：已彻底移除旧版“重置即删除背景图”的逻辑（它会导致更新后壁纸消失）。
     private func restoreWallpapers() {
         let dir = Self.wallpaperDirectory()
-        let backup = UserDefaults.standard.dictionary(forKey: wallpaperDataKey) as? [String: String] ?? [:]
+        var backup = UserDefaults.standard.dictionary(forKey: wallpaperDataKey) as? [String: String] ?? [:]
         let deleted = deletedWallpaperPaths()
         var restored: [String] = []
         for path in wallpaperPaths {
@@ -250,11 +250,13 @@ final class ThemeStore: ObservableObject {
                 continue
             }
             // 覆盖安装后沙盒容器路径会变：备份重建必须写到当前沙盒的有效路径
-            guard let b64 = backup[path], let data = Data(base64Encoded: b64) else { continue }
+            guard let b64 = Self.wallpaperBackupValue(for: path, in: backup),
+                  let data = Data(base64Encoded: b64) else { continue }
             let fileName = URL(fileURLWithPath: path).lastPathComponent
             let newPath = Self.wallpaperDirectory().appendingPathComponent(fileName).path
             if (try? data.write(to: URL(fileURLWithPath: newPath), options: .atomic)) != nil {
                 restored.append(newPath)
+                backup[newPath] = b64
             }
         }
         if let names = try? FileManager.default.contentsOfDirectory(atPath: dir.path) {
@@ -268,12 +270,14 @@ final class ThemeStore: ObservableObject {
         saveWallpaperList()
         if !backgroundImagePath.isEmpty, !deleted.contains(backgroundImagePath) {
             if !FileManager.default.fileExists(atPath: backgroundImagePath),
-               let b64 = backup[backgroundImagePath], let data = Data(base64Encoded: b64) {
+               let b64 = Self.wallpaperBackupValue(for: backgroundImagePath, in: backup),
+               let data = Data(base64Encoded: b64) {
                 let fileName = URL(fileURLWithPath: backgroundImagePath).lastPathComponent
                 let newPath = Self.wallpaperDirectory().appendingPathComponent(fileName).path
                 if (try? data.write(to: URL(fileURLWithPath: newPath), options: .atomic)) != nil {
                     backgroundImagePath = newPath
                     UserDefaults.standard.set(newPath, forKey: backgroundImageKey)
+                    backup[newPath] = b64
                 }
             }
             if !FileManager.default.fileExists(atPath: backgroundImagePath) {
@@ -281,12 +285,25 @@ final class ThemeStore: ObservableObject {
                 UserDefaults.standard.set(backgroundImagePath, forKey: backgroundImageKey)
             }
         }
+        UserDefaults.standard.set(backup, forKey: wallpaperDataKey)
         invalidateBackgroundCache()
     }
 
     /// 配置备份恢复后调用：按 UserDefaults 中的壁纸列表与 base64 备份重建壁纸文件
     func reloadWallpapersFromBackup() {
         restoreWallpapers()
+    }
+
+    /// 导出配置备份前调用：把当前壁纸文件内容补进 UserDefaults，避免只备份到旧沙盒路径。
+    func refreshWallpaperBackupForExport() {
+        var backup = UserDefaults.standard.dictionary(forKey: wallpaperDataKey) as? [String: String] ?? [:]
+        let candidates = ([backgroundImagePath] + wallpaperPaths).filter { !$0.isEmpty }
+        for path in candidates {
+            guard FileManager.default.fileExists(atPath: path),
+                  let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { continue }
+            backup[path] = data.base64EncodedString()
+        }
+        UserDefaults.standard.set(backup, forKey: wallpaperDataKey)
     }
 
     /// 切换全局玻璃材质（液态 / 磨砂）
@@ -439,6 +456,12 @@ final class ThemeStore: ObservableObject {
 
     private func deletedWallpaperPaths() -> Set<String> {
         Set(UserDefaults.standard.stringArray(forKey: deletedKey) ?? [])
+    }
+
+    private static func wallpaperBackupValue(for path: String, in backup: [String: String]) -> String? {
+        if let exact = backup[path] { return exact }
+        let fileName = URL(fileURLWithPath: path).lastPathComponent
+        return backup.first { URL(fileURLWithPath: $0.key).lastPathComponent == fileName }?.value
     }
     /// 归一化背景图：长边统一到 1600px；原图过小时放大到该尺寸并轻度高斯模糊柔化，
     /// 铺满屏幕时既不会像素化，也不会因小图拉伸引发布局/视觉问题

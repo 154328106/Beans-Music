@@ -1759,6 +1759,7 @@ struct SettingsView: View {
             || key.hasPrefix("beans.log")
             || key.hasPrefix("beans.crash")
             || key == "beans.launchInProgress"
+            || key == "beans.wallpapers.deleted"
     }
 
     private static func isSystemBackupKey(_ key: String) -> Bool {
@@ -1783,6 +1784,7 @@ struct SettingsView: View {
     private func exportBackup() {
         let defaults = UserDefaults.standard
         var payload: [String: Any] = [:]
+        theme.refreshWallpaperBackupForExport()
         for (key, value) in defaults.dictionaryRepresentation() {
             guard Self.isBackupCandidateKey(key) else { continue }
             guard !Self.isExcludedBackupKey(key) else { continue }
