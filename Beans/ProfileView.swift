@@ -677,7 +677,7 @@ struct AccountHubSheet: View {
     var body: some View {
         BeansNavigationStack {
             ZStack {
-                GlassBackdrop()
+                GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
                         SectionHeader(title: "账号")

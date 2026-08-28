@@ -138,6 +138,10 @@ struct PlayerView: View {
         return controlAccent
     }
 
+    private var playerVisualsActive: Bool {
+        player.isPlaying && !showPlayerSettings
+    }
+
     /// 当前行歌词颜色（可自定义；配色模式关闭时自动跟随封面取色）
     private var lyricCurrentColor: Color {
         guard lyricGradMode == 1 else { return palette.accent }
@@ -333,14 +337,14 @@ struct PlayerView: View {
             AmbientGlowView(
                 accent: palette.accent,
                 secondary: palette.secondary,
-                isPlaying: player.isPlaying,
+                isPlaying: playerVisualsActive,
                 breath: playerBreath
             )
             if djVisualEnabled {
                 DJVisualView(
                     accent: palette.accent,
                     secondary: palette.secondary,
-                    isPlaying: player.isPlaying,
+                    isPlaying: playerVisualsActive,
                     intensity: djVisualIntensity
                 )
             }
@@ -545,7 +549,7 @@ struct PlayerView: View {
                     CoverImage(url: song?.coverURL, size: size, cornerRadius: coverRadius, emptyHint: player.isBuffering ? "等待开始播放…" : nil)
                         .matchedGeometryEffect(id: "playerCover", in: coverNS)
                         .id(song?.identityKey ?? "empty-cover")
-                        .modifier(CoverSpin(enabled: circularCover && circularCoverSpin, isPlaying: player.isPlaying))
+                        .modifier(CoverSpin(enabled: circularCover && circularCoverSpin, isPlaying: playerVisualsActive))
                         .overlay {
                             RoundedRectangle(cornerRadius: coverRadius, style: .continuous)
                                 .strokeBorder(.white.opacity(0.28), lineWidth: 1)
@@ -729,7 +733,7 @@ struct PlayerView: View {
                 } label: {
                     CoverImage(url: song?.coverURL, size: 48, cornerRadius: circularCover ? 24 : 12)
                         .matchedGeometryEffect(id: "playerCover", in: coverNS)
-                        .modifier(CoverSpin(enabled: circularCover && circularCoverSpin, isPlaying: player.isPlaying))
+                        .modifier(CoverSpin(enabled: circularCover && circularCoverSpin, isPlaying: playerVisualsActive))
                         .overlay {
                             RoundedRectangle(cornerRadius: circularCover ? 24 : 12, style: .continuous)
                                 .strokeBorder(.white.opacity(0.2), lineWidth: 1)
@@ -1959,6 +1963,7 @@ struct LyricPreset {
 // MARK: - 播放器设置（更多菜单 → 播放器设置：进度条样式 / 背景光晕 / 歌词字号 / 颜色色盘）
 
 struct PlayerSettingsSheet: View {
+    @EnvironmentObject private var theme: ThemeStore
     @AppStorage("beans.playerBreath") private var breath = 0.6
     @AppStorage("beans.playerControlsUseCoverColor") private var controlsUseCoverColor = true
     @AppStorage("beans.progressBarStyle") private var progressBarStyle = 0
@@ -2115,6 +2120,7 @@ struct PlayerSettingsSheet: View {
     }
 
     var body: some View {
+        let _ = theme.accent
         BeansNavigationStack {
             ScrollView {
                 LazyVStack(spacing: 14) {
@@ -2127,7 +2133,9 @@ struct PlayerSettingsSheet: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
             }
-            .background(Color(.systemGroupedBackground).ignoresSafeArea())
+            .background {
+                GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
+            }
             .navigationTitle("播放器设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

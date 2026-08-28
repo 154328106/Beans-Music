@@ -17,7 +17,7 @@ struct QQLoginSheet: View {
     var body: some View {
         let _ = theme.accent
         ZStack {
-            GlassBackdrop()
+            GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
             VStack(spacing: 16) {
                 Capsule()
                     .fill(Color.beansComment.opacity(0.3))

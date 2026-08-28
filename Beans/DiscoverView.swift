@@ -632,14 +632,17 @@ struct DiscoverView: View {
 struct QQTopListDetailView: View {
     @EnvironmentObject private var player: PlayerManager
     @EnvironmentObject private var auth: AuthStore
+    @EnvironmentObject private var theme: ThemeStore
 
     let topID: Int
     let name: String
     @State private var tracks: [Song] = []
     @State private var loading = true
     @State private var errorMessage: String?
+    @State private var searchText = ""
 
     var body: some View {
+        let _ = theme.accent
         BeansNavigationStack {
             Group {
                 if loading {
@@ -651,21 +654,53 @@ struct QQTopListDetailView: View {
                 } else {
                     List {
                         Section {
-                            ForEach(Array(tracks.enumerated()), id: \.element.identityKey) { index, song in
+                            HStack(spacing: 12) {
+                                GlassButton(title: "播放全部", systemName: "play.fill", prominent: true) {
+                                    guard !filteredTracks.isEmpty else { return }
+                                    BeansHaptics.tap()
+                                    player.play(songs: filteredTracks, startAt: 0)
+                                }
+                                GlassButton(title: "随机播放", systemName: "shuffle") {
+                                    guard !filteredTracks.isEmpty else { return }
+                                    BeansHaptics.tap()
+                                    player.play(songs: filteredTracks, startAt: Int.random(in: 0..<filteredTracks.count))
+                                }
+                            }
+                            .listRowBackground(Color.clear)
+                            .padding(.vertical, 8)
+                        }
+                        Section {
+                            ForEach(Array(filteredTracks.enumerated()), id: \.element.identityKey) { index, song in
                                 SongCell(song: song, glassRow: true) {
-                                    player.play(songs: tracks, startAt: index)
+                                    player.play(songs: filteredTracks, startAt: index)
                                 }
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
                             }
                         }
                     }
+                    .beansScrollContentBackgroundHidden()
+                    .listStyle(.plain)
+                    .background {
+                        GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
+                    }
                 }
             }
             .navigationTitle(name)
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, prompt: "搜索榜单歌曲")
         }
         .task { await load() }
+    }
+
+    private var filteredTracks: [Song] {
+        let kw = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !kw.isEmpty else { return tracks }
+        return tracks.filter { song in
+            song.name.lowercased().contains(kw)
+                || song.artists.lowercased().contains(kw)
+                || song.album.lowercased().contains(kw)
+        }
     }
 
     private func load() async {
@@ -686,13 +721,16 @@ struct QQTopListDetailView: View {
 struct QQPlaylistSongsSheet: View {
     @EnvironmentObject private var player: PlayerManager
     @EnvironmentObject private var auth: AuthStore
+    @EnvironmentObject private var theme: ThemeStore
 
     let playlist: Playlist
     @State private var tracks: [Song] = []
     @State private var loading = true
     @State private var errorMessage: String?
+    @State private var searchText = ""
 
     var body: some View {
+        let _ = theme.accent
         BeansNavigationStack {
             Group {
                 if loading {
@@ -704,21 +742,53 @@ struct QQPlaylistSongsSheet: View {
                 } else {
                     List {
                         Section {
-                            ForEach(Array(tracks.enumerated()), id: \.element.identityKey) { index, song in
+                            HStack(spacing: 12) {
+                                GlassButton(title: "播放全部", systemName: "play.fill", prominent: true) {
+                                    guard !filteredTracks.isEmpty else { return }
+                                    BeansHaptics.tap()
+                                    player.play(songs: filteredTracks, startAt: 0)
+                                }
+                                GlassButton(title: "随机播放", systemName: "shuffle") {
+                                    guard !filteredTracks.isEmpty else { return }
+                                    BeansHaptics.tap()
+                                    player.play(songs: filteredTracks, startAt: Int.random(in: 0..<filteredTracks.count))
+                                }
+                            }
+                            .listRowBackground(Color.clear)
+                            .padding(.vertical, 8)
+                        }
+                        Section {
+                            ForEach(Array(filteredTracks.enumerated()), id: \.element.identityKey) { index, song in
                                 SongCell(song: song, glassRow: true) {
-                                    player.play(songs: tracks, startAt: index)
+                                    player.play(songs: filteredTracks, startAt: index)
                                 }
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
                             }
                         }
                     }
+                    .beansScrollContentBackgroundHidden()
+                    .listStyle(.plain)
+                    .background {
+                        GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
+                    }
                 }
             }
             .navigationTitle(playlist.name)
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, prompt: "搜索歌单内歌曲")
         }
         .task { await load() }
+    }
+
+    private var filteredTracks: [Song] {
+        let kw = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !kw.isEmpty else { return tracks }
+        return tracks.filter { song in
+            song.name.lowercased().contains(kw)
+                || song.artists.lowercased().contains(kw)
+                || song.album.lowercased().contains(kw)
+        }
     }
 
     private func load() async {
@@ -742,6 +812,7 @@ struct DailySongsSheet: View {
     @EnvironmentObject private var theme: ThemeStore
 
     let songs: [Song]
+    @State private var searchText = ""
 
     var body: some View {
         let _ = theme.accent
@@ -754,32 +825,53 @@ struct DailySongsSheet: View {
                     Section {
                         HStack(spacing: 12) {
                             GlassButton(title: "播放全部", systemName: "play.fill", prominent: true) {
+                                guard !filteredSongs.isEmpty else { return }
                                 BeansHaptics.tap()
-                                player.play(songs: songs, startAt: 0)
+                                player.play(songs: filteredSongs, startAt: 0)
                             }
                             GlassButton(title: "随机播放", systemName: "shuffle") {
+                                guard !filteredSongs.isEmpty else { return }
                                 BeansHaptics.tap()
-                                player.play(songs: songs, startAt: Int.random(in: 0..<songs.count))
+                                player.play(songs: filteredSongs, startAt: Int.random(in: 0..<filteredSongs.count))
                             }
                         }
                         .listRowBackground(Color.clear)
                         .padding(.vertical, 8)
                     }
                     Section {
-                        ForEach(Array(songs.enumerated()), id: \.element.identityKey) { index, song in
+                        ForEach(Array(filteredSongs.enumerated()), id: \.element.identityKey) { index, song in
                             SongCell(song: song, glassRow: true) {
                                 BeansHaptics.tap()
-                                player.play(songs: songs, startAt: index)
+                                player.play(songs: filteredSongs, startAt: index)
                             }
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                         }
                     }
                 }
+                .beansScrollContentBackgroundHidden()
+                .listStyle(.plain)
+                .background {
+                    GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
+                }
                 }
             }
             .navigationTitle("今日推荐")
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, prompt: "搜索每日推荐")
+        }
+        .background {
+            GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
+        }
+    }
+
+    private var filteredSongs: [Song] {
+        let kw = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !kw.isEmpty else { return songs }
+        return songs.filter { song in
+            song.name.lowercased().contains(kw)
+                || song.artists.lowercased().contains(kw)
+                || song.album.lowercased().contains(kw)
         }
     }
 }
@@ -794,8 +886,10 @@ struct TopListDetailView: View {
     @State private var tracks: [Song] = []
     @State private var loading = true
     @State private var errorMessage: String?
+    @State private var searchText = ""
 
     var body: some View {
+        let _ = theme.accent
         BeansNavigationStack {
             Group {
                 if loading {
@@ -808,19 +902,41 @@ struct TopListDetailView: View {
                     List {
                         header
                         Section {
-                            ForEach(Array(tracks.enumerated()), id: \.element.identityKey) { index, song in
+                            HStack(spacing: 12) {
+                                GlassButton(title: "播放全部", systemName: "play.fill", prominent: true) {
+                                    guard !filteredTracks.isEmpty else { return }
+                                    BeansHaptics.tap()
+                                    player.play(songs: filteredTracks, startAt: 0)
+                                }
+                                GlassButton(title: "随机播放", systemName: "shuffle") {
+                                    guard !filteredTracks.isEmpty else { return }
+                                    BeansHaptics.tap()
+                                    player.play(songs: filteredTracks, startAt: Int.random(in: 0..<filteredTracks.count))
+                                }
+                            }
+                            .listRowBackground(Color.clear)
+                            .padding(.vertical, 8)
+                        }
+                        Section {
+                            ForEach(Array(filteredTracks.enumerated()), id: \.element.identityKey) { index, song in
                                 SongCell(song: song, glassRow: true) {
-                                    player.play(songs: tracks, startAt: index)
+                                    player.play(songs: filteredTracks, startAt: index)
                                 }
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
                             }
                         }
                     }
+                    .beansScrollContentBackgroundHidden()
+                    .listStyle(.plain)
+                    .background {
+                        GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
+                    }
                 }
             }
             .navigationTitle(topList.name)
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, prompt: "搜索榜单歌曲")
         }
         .task { await load() }
     }
@@ -844,6 +960,16 @@ struct TopListDetailView: View {
         .padding(.vertical, 8)
     }
 
+    private var filteredTracks: [Song] {
+        let kw = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !kw.isEmpty else { return tracks }
+        return tracks.filter { song in
+            song.name.lowercased().contains(kw)
+                || song.artists.lowercased().contains(kw)
+                || song.album.lowercased().contains(kw)
+        }
+    }
+
     private func load() async {
         loading = true
         errorMessage = nil
@@ -861,14 +987,17 @@ struct TopListDetailView: View {
 
 struct KugouTopListDetailView: View {
     @EnvironmentObject private var player: PlayerManager
+    @EnvironmentObject private var theme: ThemeStore
     @Environment(\.dismiss) private var dismiss
 
     let topList: KugouTopInfo
     @State private var tracks: [Song] = []
     @State private var loading = true
     @State private var errorMessage: String?
+    @State private var searchText = ""
 
     var body: some View {
+        let _ = theme.accent
         BeansNavigationStack {
             Group {
                 if loading {
@@ -883,9 +1012,25 @@ struct KugouTopListDetailView: View {
                     List {
                         header
                         Section {
-                            ForEach(Array(tracks.enumerated()), id: \.element.identityKey) { index, song in
+                            HStack(spacing: 12) {
+                                GlassButton(title: "播放全部", systemName: "play.fill", prominent: true) {
+                                    guard !filteredTracks.isEmpty else { return }
+                                    BeansHaptics.tap()
+                                    player.play(songs: filteredTracks, startAt: 0)
+                                }
+                                GlassButton(title: "随机播放", systemName: "shuffle") {
+                                    guard !filteredTracks.isEmpty else { return }
+                                    BeansHaptics.tap()
+                                    player.play(songs: filteredTracks, startAt: Int.random(in: 0..<filteredTracks.count))
+                                }
+                            }
+                            .listRowBackground(Color.clear)
+                            .padding(.vertical, 8)
+                        }
+                        Section {
+                            ForEach(Array(filteredTracks.enumerated()), id: \.element.identityKey) { index, song in
                                 SongCell(song: song, glassRow: true) {
-                                    player.play(songs: tracks, startAt: index)
+                                    player.play(songs: filteredTracks, startAt: index)
                                 }
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
@@ -894,10 +1039,14 @@ struct KugouTopListDetailView: View {
                     }
                     .beansScrollContentBackgroundHidden()
                     .listStyle(.plain)
+                    .background {
+                        GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
+                    }
                 }
             }
             .navigationTitle(topList.name)
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, prompt: "搜索榜单歌曲")
         }
         .task { await load() }
     }
@@ -923,6 +1072,16 @@ struct KugouTopListDetailView: View {
         }
         .padding(.vertical, 8)
         .listRowBackground(Color.clear)
+    }
+
+    private var filteredTracks: [Song] {
+        let kw = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !kw.isEmpty else { return tracks }
+        return tracks.filter { song in
+            song.name.lowercased().contains(kw)
+                || song.artists.lowercased().contains(kw)
+                || song.album.lowercased().contains(kw)
+        }
     }
 
     private func load() async {

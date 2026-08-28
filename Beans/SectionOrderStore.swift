@@ -42,9 +42,11 @@ struct SectionOrderSheet: View {
     /// 全部可用板块名（用于补全新板块）
     let sections: [String]
     @Binding var order: [String]
+    @EnvironmentObject private var theme: ThemeStore
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        let _ = theme.accent
         Group {
             if #available(iOS 16.0, *) {
                 listView
@@ -84,6 +86,9 @@ struct SectionOrderSheet: View {
             }
             .environment(\.editMode, .constant(.active))
             .beansScrollContentBackgroundHidden()
+            .background {
+                GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
+            }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -11,6 +11,7 @@ enum PlaylistSortMode: String, CaseIterable, Identifiable {
 struct PlaylistView: View {
     @EnvironmentObject private var player: PlayerManager
     @EnvironmentObject private var auth: AuthStore
+    @EnvironmentObject private var theme: ThemeStore
 
     let playlist: Playlist
     @State private var tracks: [Song] = []
@@ -20,6 +21,7 @@ struct PlaylistView: View {
     @State private var sortMode: PlaylistSortMode = .original
 
     var body: some View {
+        let _ = theme.accent
         BeansNavigationStack {
             Group {
                 if loading {
@@ -43,7 +45,9 @@ struct PlaylistView: View {
                     }
                     .beansScrollContentBackgroundHidden()
                     .listStyle(.plain)
-                    .background(LinearGradient.beansBackdrop)
+                    .background {
+                        GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
+                    }
                 }
             }
             .navigationTitle(playlist.name)

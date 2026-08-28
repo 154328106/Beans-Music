@@ -12,7 +12,7 @@ struct KugouLoginSheet: View {
     var body: some View {
         let _ = theme.accent
         ZStack {
-            GlassBackdrop()
+            GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
             VStack(spacing: 18) {
                 Capsule()
                     .fill(Color.beansComment.opacity(0.3))
@@ -170,4 +170,3 @@ struct KugouLoginSheet: View {
         }
     }
 }
-
