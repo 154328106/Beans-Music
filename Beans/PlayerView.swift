@@ -1990,6 +1990,11 @@ struct PlayerSettingsSheet: View {
     @AppStorage("beans.lyricOffset") private var lyricOffset = 0.0
     @AppStorage("beans.audio.mixothers.v1") private var mixesWithOthers = false
     @Environment(\.dismiss) private var dismiss
+    @State private var playbackExpanded = false
+    @State private var lyricDisplayExpanded = false
+    @State private var lyricEffectExpanded = false
+    @State private var layoutExpanded = false
+    @State private var coverExpanded = false
 
     /// 左右倾斜文案：0 关闭，负值左倾、正值右倾
     private var tiltYText: String {
@@ -2137,12 +2142,40 @@ struct PlayerSettingsSheet: View {
     // MARK: - 设置卡片（液态玻璃圆角分组，紧凑排版）
 
     /// 设置卡片容器：液态玻璃圆角卡片
-    private func settingCard<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func settingCard<Content: View>(_ title: String, isExpanded: Binding<Bool>? = nil, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(BeansFont.appFont(14, .bold))
-                .foregroundStyle(Color.beansLabel)
-            content()
+            if let isExpanded {
+                Button {
+                    withAnimation(.spring(response: 0.26, dampingFraction: 0.88)) {
+                        isExpanded.wrappedValue.toggle()
+                    }
+                    BeansHaptics.select()
+                } label: {
+                    HStack(spacing: 10) {
+                        Text(title)
+                            .font(BeansFont.appFont(14, .bold))
+                            .foregroundStyle(Color.beansLabel)
+                        Spacer()
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.beansComment)
+                            .rotationEffect(.degrees(isExpanded.wrappedValue ? 0 : -90))
+                            .frame(width: 24, height: 24)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if isExpanded.wrappedValue {
+                    content()
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            } else {
+                Text(title)
+                    .font(BeansFont.appFont(14, .bold))
+                    .foregroundStyle(Color.beansLabel)
+                content()
+            }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -2181,7 +2214,7 @@ struct PlayerSettingsSheet: View {
 
     /// 播放卡片：切歌 / 进度条样式 / 背景光晕 / DJ 视觉
     private var playingCard: some View {
-        settingCard("播放") {
+        settingCard("播放", isExpanded: $playbackExpanded) {
             settingToggle("播放控件跟随封面取色", isOn: $controlsUseCoverColor,
                           caption: "开启：播放键、进度条和高亮跟随封面；关闭：使用你设置的主题色")
             Divider().opacity(0.5)
@@ -2287,7 +2320,7 @@ struct PlayerSettingsSheet: View {
     }
 
     private var lyricDisplayCard: some View {
-        settingCard("歌词显示") {
+        settingCard("歌词显示", isExpanded: $lyricDisplayExpanded) {
             settingSlider("歌词字号", valueText: "\(fontSize) pt") {
                 Slider(
                     value: Binding(get: { Double(fontSize) }, set: { fontSize = Int($0) }),
@@ -2328,7 +2361,7 @@ struct PlayerSettingsSheet: View {
 
     /// 歌词效果卡片：模糊 / 发光 / 渐变预设 / 配色
     private var lyricEffectCard: some View {
-        settingCard("歌词效果") {
+        settingCard("歌词效果", isExpanded: $lyricEffectExpanded) {
             settingSlider("模糊起始距离", valueText: "\(lyricBlurStart) 行") {
                 Slider(value: Binding(get: { Double(lyricBlurStart) }, set: { lyricBlurStart = Int($0) }), in: 0...4, step: 1)
                     .tint(Color.beansAmber)
@@ -2419,7 +2452,7 @@ struct PlayerSettingsSheet: View {
 
     /// 布局卡片：自定义底部布局 / 指示线 / 歌词对齐
     private var layoutCard: some View {
-        settingCard("布局") {
+        settingCard("布局", isExpanded: $layoutExpanded) {
             settingToggle("自定义底部布局", isOn: Binding(
                 get: { layoutMode },
                 set: { newValue in
@@ -2457,7 +2490,7 @@ struct PlayerSettingsSheet: View {
 
     /// 封面卡片：圆形封面 / 旋转
     private var coverCard: some View {
-        settingCard("封面") {
+        settingCard("封面", isExpanded: $coverExpanded) {
             settingToggle("圆形封面模式", isOn: $circularCover,
                           caption: "播放器封面与歌词页左上角封面显示为圆形")
             Divider().opacity(0.5)
