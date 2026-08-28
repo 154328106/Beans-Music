@@ -605,7 +605,10 @@ final class PlayerManager: NSObject, ObservableObject {
                 self.progress = time.seconds
             }
             if let itemDuration = player.currentItem?.duration, itemDuration.isNumeric {
-                self.duration = itemDuration.seconds
+                let seconds = itemDuration.seconds
+                if seconds.isFinite, abs(seconds - self.duration) > 0.25 {
+                    self.duration = seconds
+                }
             }
             let waiting = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
             if waiting != self.isBuffering {
@@ -693,6 +696,15 @@ final class PlayerManager: NSObject, ObservableObject {
     }
 
     private func configureAudioSession() {
+        if Self.applyAudioMixPreference(mixesWithOthers) {
+            sessionConfigured = true
+        } else {
+            sessionConfigured = false
+        }
+    }
+
+    @discardableResult
+    static func applyAudioMixPreference(_ mixesWithOthers: Bool) -> Bool {
         do {
             let session = AVAudioSession.sharedInstance()
             // 「与其他音频同时播放」开关：开启时 mixWithOthers，打开其他音频软件也能继续播放；关闭则自动暂停
@@ -702,10 +714,10 @@ final class PlayerManager: NSObject, ObservableObject {
                 try session.setCategory(.playback, mode: .default)
             }
             try session.setActive(true)
-            sessionConfigured = true
+            return true
         } catch {
-            sessionConfigured = false
             BeansLogger.shared.log("音频会话配置失败：\(error.localizedDescription)", level: .error)
+            return false
         }
     }
 

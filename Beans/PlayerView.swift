@@ -1988,7 +1988,7 @@ struct PlayerSettingsSheet: View {
     @AppStorage("beans.lyricTilt") private var lyricTilt = 0
     @AppStorage("beans.lyricTiltY") private var lyricTiltY = 0
     @AppStorage("beans.lyricOffset") private var lyricOffset = 0.0
-    @EnvironmentObject private var player: PlayerManager
+    @AppStorage("beans.audio.mixothers.v1") private var mixesWithOthers = false
     @Environment(\.dismiss) private var dismiss
 
     /// 左右倾斜文案：0 关闭，负值左倾、正值右倾
@@ -2233,8 +2233,11 @@ struct PlayerSettingsSheet: View {
                 }
             }
             Divider().opacity(0.5)
-            settingToggle("与其他音频同时播放", isOn: Binding(get: { player.mixesWithOthers }, set: { player.mixesWithOthers = $0 }),
+            settingToggle("与其他音频同时播放", isOn: $mixesWithOthers,
                           caption: "默认关闭以显示锁屏/灵动岛；开启后可与其他 App 声音同时播放")
+                .onChange(of: mixesWithOthers) { value in
+                    PlayerManager.applyAudioMixPreference(value)
+                }
         }
     }
 

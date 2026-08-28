@@ -882,7 +882,6 @@ struct AccountHubSheet: View {
 
 struct SettingsView: View {
     @EnvironmentObject private var theme: ThemeStore
-    @EnvironmentObject private var player: PlayerManager
     @Environment(\.dismiss) private var dismiss
     @AppStorage("beans.themeMode") private var themeModeRaw = BeansThemeMode.system.rawValue
     /// 音质等级（借鉴 Kumone）
@@ -895,6 +894,7 @@ struct SettingsView: View {
     @AppStorage("beans.showThirdPartyVIPNotice") private var showThirdPartyVIPNotice = true
     /// 可选高刷新率动效，默认关闭以降低发热
     @AppStorage("beans.enableHighRefresh") private var enableHighRefresh = false
+    @AppStorage("beans.audio.mixothers.v1") private var mixesWithOthers = false
     @ObservedObject private var sourceStore = UnblockSourceStore.shared
 
     @State private var appearanceExpanded = false
@@ -1375,7 +1375,7 @@ struct SettingsView: View {
 
                 Divider().overlay(Color.beansComment.opacity(0.15))
 
-                Toggle(isOn: Binding(get: { player.mixesWithOthers }, set: { player.mixesWithOthers = $0 })) {
+                Toggle(isOn: $mixesWithOthers) {
                     HStack(spacing: 12) {
                         Image(systemName: "speaker.wave.2.fill")
                             .font(.system(size: 14))
@@ -1393,6 +1393,9 @@ struct SettingsView: View {
                 }
                 .toggleStyle(.switch)
                 .tint(Color.beansAmber)
+                .onChange(of: mixesWithOthers) { value in
+                    PlayerManager.applyAudioMixPreference(value)
+                }
 
                 Divider().overlay(Color.beansComment.opacity(0.15))
 
