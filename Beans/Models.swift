@@ -147,10 +147,11 @@ struct Song: Identifiable, Hashable, Codable {
         kugouAlbumAudioId = nil
         kugouAlbumId = nil
         kugouQualityHashes = nil
+        subsonicId = nil
         fee = json["fee"] as? Int ?? 0
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, artists, album, coverURL, duration, source, qqMid, qqMediaMid, kugouHash, kugouAlbumAudioId, kugouAlbumId, kugouQualityHashes, fee }
+    private enum CodingKeys: String, CodingKey { case id, name, artists, album, coverURL, duration, source, qqMid, qqMediaMid, kugouHash, kugouAlbumAudioId, kugouAlbumId, kugouQualityHashes, fee, subsonicId }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -167,6 +168,7 @@ struct Song: Identifiable, Hashable, Codable {
         kugouAlbumAudioId = try c.decodeIfPresent(String.self, forKey: .kugouAlbumAudioId)
         kugouAlbumId = try c.decodeIfPresent(String.self, forKey: .kugouAlbumId)
         kugouQualityHashes = try c.decodeIfPresent([String: String].self, forKey: .kugouQualityHashes)
+        subsonicId = try c.decodeIfPresent(String.self, forKey: .subsonicId)
         fee = try c.decodeIfPresent(Int.self, forKey: .fee) ?? 0
     }
 
@@ -185,6 +187,7 @@ struct Song: Identifiable, Hashable, Codable {
         try c.encodeIfPresent(kugouAlbumAudioId, forKey: .kugouAlbumAudioId)
         try c.encodeIfPresent(kugouAlbumId, forKey: .kugouAlbumId)
         try c.encodeIfPresent(kugouQualityHashes, forKey: .kugouQualityHashes)
+        try c.encodeIfPresent(subsonicId, forKey: .subsonicId)
         try c.encode(fee, forKey: .fee)
     }
 }
