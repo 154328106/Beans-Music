@@ -177,20 +177,6 @@ enum BeansAccent: String, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - 全局玻璃材质（液态 / 磨砂）
-
-enum BeansFXStyle: String, CaseIterable {
-    case liquid
-    case frosted
-
-    var title: String {
-        switch self {
-        case .liquid: return "液态玻璃"
-        case .frosted: return "磨砂玻璃"
-        }
-    }
-}
-
 // MARK: - 全局 UI 风格
 
 enum BeansUIStyle: String, CaseIterable {
@@ -226,8 +212,6 @@ final class ThemeStore: ObservableObject {
     @Published var backgroundImagePath: String = ""
     /// 壁纸库：所有已上传壁纸的文件路径
     @Published var wallpaperPaths: [String] = []
-    /// 全局玻璃材质：液态玻璃（iOS 26 Liquid Glass）或磨砂玻璃（ultraThinMaterial）
-    @Published var fxStyle: BeansFXStyle = .liquid
     /// 全局 UI 风格：影响玻璃容器、卡片透明度与边框质感
     @Published var uiStyle: BeansUIStyle = .liquid
 
@@ -238,7 +222,6 @@ final class ThemeStore: ObservableObject {
     private let wallpaperListKey = "beans.wallpapers.list"
     private let wallpaperDataKey = "beans.wallpapers.data"
     private let deletedKey = "beans.wallpapers.deleted"
-    private let fxStyleKey = "beans.fxStyle"
     private let uiStyleKey = "beans.uiStyle"
 
     private init() {
@@ -249,7 +232,6 @@ final class ThemeStore: ObservableObject {
         backgroundSyncAll = UserDefaults.standard.object(forKey: syncAllKey) as? Bool ?? true
         backgroundImagePath = UserDefaults.standard.string(forKey: backgroundImageKey) ?? ""
         wallpaperPaths = UserDefaults.standard.stringArray(forKey: wallpaperListKey) ?? []
-        fxStyle = BeansFXStyle(rawValue: UserDefaults.standard.string(forKey: fxStyleKey) ?? "") ?? .liquid
         uiStyle = BeansUIStyle(rawValue: UserDefaults.standard.string(forKey: uiStyleKey) ?? "") ?? .liquid
         // 自动恢复壁纸（覆盖安装/数据迁移后：文件仍在用文件，文件丢失用 base64 备份重建）
         restoreWallpapers()
@@ -333,13 +315,6 @@ final class ThemeStore: ObservableObject {
             backup[path] = data.base64EncodedString()
         }
         UserDefaults.standard.set(backup, forKey: wallpaperDataKey)
-    }
-
-    /// 切换全局玻璃材质（液态 / 磨砂）
-    func setFXStyle(_ style: BeansFXStyle) {
-        guard fxStyle != style else { return }
-        fxStyle = style
-        UserDefaults.standard.set(style.rawValue, forKey: fxStyleKey)
     }
 
     func setUIStyle(_ style: BeansUIStyle) {

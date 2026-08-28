@@ -118,10 +118,9 @@ struct WallpaperImage: View {
     }
 }
 
-// MARK: - 全局玻璃材质容器（跟随设置：液态玻璃 / 磨砂玻璃）
+// MARK: - 全局容器（跟随全局 UI 样式）
 
 struct BeansGlass<S: Shape>: View {
-    @AppStorage("beans.fxStyle") private var fxStyleRaw = BeansFXStyle.liquid.rawValue
     @AppStorage("beans.uiStyle") private var uiStyleRaw = BeansUIStyle.liquid.rawValue
 
     let shape: S
@@ -131,7 +130,7 @@ struct BeansGlass<S: Shape>: View {
     }
 
     private var isLiquid: Bool {
-        (BeansFXStyle(rawValue: fxStyleRaw) ?? .liquid) == .liquid && uiStyle == .liquid
+        uiStyle == .liquid
     }
 
     var body: some View {
@@ -165,11 +164,10 @@ struct BeansGlass<S: Shape>: View {
     }
 }
 
-// MARK: - 玻璃卡片（清透版）
+// MARK: - 通用卡片（跟随全局 UI 样式）
 
 struct GlassCard<Content: View>: View {
     var cornerRadius: CGFloat = 24
-    @AppStorage("beans.fxStyle") private var fxStyleRaw = BeansFXStyle.liquid.rawValue
     @AppStorage("beans.uiStyle") private var uiStyleRaw = BeansUIStyle.liquid.rawValue
     @ViewBuilder var content: () -> Content
 
@@ -178,7 +176,7 @@ struct GlassCard<Content: View>: View {
     }
 
     private var isLiquid: Bool {
-        (BeansFXStyle(rawValue: fxStyleRaw) ?? .liquid) == .liquid && uiStyle == .liquid
+        uiStyle == .liquid
     }
 
     private var resolvedCornerRadius: CGFloat {
