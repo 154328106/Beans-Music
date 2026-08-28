@@ -17,7 +17,7 @@ struct SubsonicServerSheet: View {
     @State private var succeeded = false
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             Form {
                 Section {
                     TextField("http://192.168.1.10:4000", text: $server)
@@ -71,7 +71,7 @@ struct SubsonicServerSheet: View {
             .navigationTitle("音乐服务器")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button("完成") { dismiss() }
                 }
             }

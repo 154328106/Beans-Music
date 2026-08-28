@@ -93,7 +93,7 @@ struct SubsonicLibraryView: View {
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $keyword, prompt: "搜索服务器上的音乐")
         .onSubmit(of: .search) { Task { await search() } }
-        .onChange(of: keyword) { _, newValue in
+        .onChange(of: keyword) { newValue in
             if newValue.isEmpty && searching {
                 searching = false
                 songs = []
@@ -110,7 +110,7 @@ struct SubsonicLibraryView: View {
             .padding(.vertical, 8)
             .background(.bar)
         }
-        .onChange(of: tab) { _, _ in
+        .onChange(of: tab) { _ in
             songs = []
             title = ""
             keyword = ""

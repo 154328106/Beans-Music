@@ -166,7 +166,7 @@ struct ProfileView: View {
             SubsonicServerSheet()
         }
         .sheet(isPresented: $showSubsonicLibrary) {
-            NavigationStack { SubsonicLibraryView() }
+            NavigationView { SubsonicLibraryView() }
         }
         .sheet(isPresented: $showSectionSort) {
             SectionOrderSheet(title: "我的板块排序", sections: SectionOrderStore.profileDefaults, order: $profileOrder)
