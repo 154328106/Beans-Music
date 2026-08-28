@@ -285,6 +285,13 @@ final class ThemeStore: ObservableObject {
                 UserDefaults.standard.set(backgroundImagePath, forKey: backgroundImageKey)
             }
         }
+        if !backgroundImagePath.isEmpty,
+           FileManager.default.fileExists(atPath: backgroundImagePath),
+           !wallpaperPaths.contains(backgroundImagePath),
+           !deleted.contains(backgroundImagePath) {
+            wallpaperPaths.insert(backgroundImagePath, at: 0)
+            saveWallpaperList()
+        }
         UserDefaults.standard.set(backup, forKey: wallpaperDataKey)
         invalidateBackgroundCache()
     }

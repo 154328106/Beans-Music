@@ -36,62 +36,74 @@ struct CommentsSheet: View {
 
     var body: some View {
         let _ = theme.accent
-        BeansNavigationStack {
-            Group {
-                if loading {
-                    LoadingStateView()
-                } else if let errorMessage {
-                    ErrorStateView(message: errorMessage) {
-                        Task { await load(reset: true) }
-                    }
-                } else if song.source == .kugou {
-                    kugouCommentList
-                } else if song.source == .qq {
-                    qqCommentList
-                } else if let page {
-                    if page.hot.isEmpty && page.comments.isEmpty {
-                        EmptyStateView(icon: "bubble.left", text: "暂无评论")
-                    } else {
-                        List {
-                            Section {
-                                Text("《\(song.name)》 · 共 \(page.total) 条评论")
-                                    .font(BeansFont.appFont(12))
-                                    .foregroundStyle(Color.beansComment)
-                            }
-                            if !page.hot.isEmpty {
-                                Section("精彩评论") {
-                                    ForEach(page.hot) { comment in
-                                        CommentRow(comment: comment)
-                                    }
-                                }
-                            }
-                            if !page.comments.isEmpty {
-                                Section("最新评论") {
-                                    ForEach(page.comments) { comment in
-                                        CommentRow(comment: comment)
-                                    }
-                                }
-                            }
-                            if page.comments.count >= limit {
-                                Section {
-                                    Button {
-                                        Task { await loadMore() }
-                                    } label: {
-                                        Text("加载更多")
-                                            .font(BeansFont.appFont(14, .semibold))
-                                            .foregroundStyle(Color.beansAmber)
-                                            .frame(maxWidth: .infinity)
-                                    }
-                                }
-                            }
+        ZStack {
+            GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
+            BeansNavigationStack {
+                Group {
+                    if loading {
+                        LoadingStateView()
+                    } else if let errorMessage {
+                        ErrorStateView(message: errorMessage) {
+                            Task { await load(reset: true) }
+                        }
+                    } else if song.source == .kugou {
+                        kugouCommentList
+                    } else if song.source == .qq {
+                        qqCommentList
+                    } else if let page {
+                        if page.hot.isEmpty && page.comments.isEmpty {
+                            EmptyStateView(icon: "bubble.left", text: "暂无评论")
+                        } else {
+                            neteaseCommentList(page)
                         }
                     }
                 }
+                .navigationTitle("评论")
+                .navigationBarTitleDisplayMode(.inline)
             }
-            .navigationTitle("评论")
-            .navigationBarTitleDisplayMode(.inline)
         }
         .task { await load(reset: true) }
+    }
+
+    private func neteaseCommentList(_ page: NetEaseAPI.SongCommentPage) -> some View {
+        List {
+            Section {
+                Text("《\(song.name)》 · 共 \(page.total) 条评论")
+                    .font(BeansFont.appFont(12))
+                    .foregroundStyle(Color.beansComment)
+            }
+            .listRowBackground(Color.clear)
+            if !page.hot.isEmpty {
+                Section("精彩评论") {
+                    ForEach(page.hot) { comment in
+                        CommentRow(comment: comment)
+                            .listRowBackground(Color.clear)
+                    }
+                }
+            }
+            if !page.comments.isEmpty {
+                Section("最新评论") {
+                    ForEach(page.comments) { comment in
+                        CommentRow(comment: comment)
+                            .listRowBackground(Color.clear)
+                    }
+                }
+            }
+            if page.comments.count >= limit {
+                Section {
+                    Button {
+                        Task { await loadMore() }
+                    } label: {
+                        Text("加载更多")
+                            .font(BeansFont.appFont(14, .semibold))
+                            .foregroundStyle(Color.beansAmber)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .listRowBackground(Color.clear)
+            }
+        }
+        .beansScrollContentBackgroundHidden()
     }
 
     private func load(reset: Bool) async {
@@ -162,9 +174,11 @@ struct CommentsSheet: View {
                             .font(BeansFont.appFont(12))
                             .foregroundStyle(Color.beansComment)
                     }
+                    .listRowBackground(Color.clear)
                     Section("评论") {
                         ForEach(qqComments) { comment in
                             CommentRow(comment: comment)
+                                .listRowBackground(Color.clear)
                         }
                     }
                     if qqTotal <= 0 || qqComments.count < qqTotal {
@@ -178,8 +192,10 @@ struct CommentsSheet: View {
                                     .frame(maxWidth: .infinity)
                             }
                         }
+                        .listRowBackground(Color.clear)
                     }
                 }
+                .beansScrollContentBackgroundHidden()
             }
         }
     }
@@ -203,9 +219,11 @@ struct CommentsSheet: View {
                             .font(BeansFont.appFont(12))
                             .foregroundStyle(Color.beansComment)
                     }
+                    .listRowBackground(Color.clear)
                     Section("评论") {
                         ForEach(kugouComments) { comment in
                             CommentRow(comment: comment)
+                                .listRowBackground(Color.clear)
                         }
                     }
                     if kugouTotal <= 0 || kugouComments.count < kugouTotal {
@@ -220,8 +238,10 @@ struct CommentsSheet: View {
                                     .frame(maxWidth: .infinity)
                             }
                         }
+                        .listRowBackground(Color.clear)
                     }
                 }
+                .beansScrollContentBackgroundHidden()
             }
         }
     }

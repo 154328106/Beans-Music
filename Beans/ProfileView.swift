@@ -1910,6 +1910,7 @@ struct SettingsView: View {
             defaults.set(restored, forKey: key)
             count += 1
         }
+        defaults.removeObject(forKey: "beans.wallpapers.deleted")
         // 恢复壁纸：写回 beans.wallpapers.* 后重建文件（沙盒路径变化也能恢复）
         theme.reloadWallpapersFromBackup()
         // 恢复歌词背景图片：路径变化时按备份的 base64 重建文件

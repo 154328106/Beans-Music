@@ -91,6 +91,7 @@ struct PlayerView: View {
     /// 歌词界面自定义背景
     @AppStorage("beans.lyricBackground.image") private var lyricBackgroundImagePath = ""
     @AppStorage("beans.lyricBackground.blur") private var lyricBackgroundBlur = 12.0
+    @AppStorage("beans.lyricBackground.syncCover") private var lyricBackgroundSyncCover = false
     /// 侧边滑动手势当前位移（刷视频式切歌过渡）
     @State private var swipeOffset: CGFloat = 0
     @State private var coverDrag: CGSize = .zero
@@ -341,8 +342,12 @@ struct PlayerView: View {
                 colors: [palette.backgroundTop, palette.backgroundBottom],
                 startPoint: .top, endPoint: .bottom
             )
-            CoverBlurBackground(url: song?.coverURL, scheme: colorScheme)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if shouldUseLyricBackgroundAsPlayerBackground {
+                lyricPlayerBackgroundLayer
+            } else {
+                CoverBlurBackground(url: song?.coverURL, scheme: colorScheme)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
             AmbientGlowView(
                 accent: palette.accent,
                 secondary: palette.secondary,
@@ -365,6 +370,28 @@ struct PlayerView: View {
             )
         }
         .allowsHitTesting(false)
+    }
+
+    private var shouldUseLyricBackgroundAsPlayerBackground: Bool {
+        !lyricBackgroundImagePath.isEmpty && (showLyrics || lyricBackgroundSyncCover)
+    }
+
+    @ViewBuilder
+    private var lyricPlayerBackgroundLayer: some View {
+        if let image = UIImage(contentsOfFile: lyricBackgroundImagePath) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .scaleEffect(1.08)
+                .blur(radius: CGFloat(lyricBackgroundBlur))
+                .overlay(Color.black.opacity(colorScheme == .dark ? 0.48 : 0.34))
+                .clipped()
+                .ignoresSafeArea()
+        } else {
+            CoverBlurBackground(url: song?.coverURL, scheme: colorScheme)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 
     // MARK: - 顶栏（收起 / 状态 / 红心 / 队列）
@@ -737,7 +764,6 @@ struct PlayerView: View {
     /// 歌词模式：左上小封面 + 歌名信息条 + 居中歌词（自动布局，歌词可滚动到底部透过底栏玻璃）
     private func lyricsPanel(geo: GeometryProxy) -> some View {
         ZStack {
-            lyricBackgroundLayer
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
                 Button {
@@ -814,20 +840,6 @@ struct PlayerView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .id("lyricsPanel-\(song?.identityKey ?? "none")")
-    }
-
-    @ViewBuilder
-    private var lyricBackgroundLayer: some View {
-        if !lyricBackgroundImagePath.isEmpty,
-           let image = UIImage(contentsOfFile: lyricBackgroundImagePath) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-                .blur(radius: CGFloat(lyricBackgroundBlur))
-                .overlay(Color.black.opacity(0.42))
-                .clipped()
-                .ignoresSafeArea()
-        }
     }
 
     // MARK: - 空态兜底（歌曲数据为空时不出现空白页）
@@ -2024,6 +2036,7 @@ struct PlayerSettingsSheet: View {
     @AppStorage("beans.lyricOffset") private var lyricOffset = 0.0
     @AppStorage("beans.lyricBackground.image") private var lyricBackgroundImagePath = ""
     @AppStorage("beans.lyricBackground.blur") private var lyricBackgroundBlur = 12.0
+    @AppStorage("beans.lyricBackground.syncCover") private var lyricBackgroundSyncCover = false
     @AppStorage("beans.audio.mixothers.v1") private var mixesWithOthers = false
     @Environment(\.dismiss) private var dismiss
     @State private var playbackExpanded = false
@@ -2526,6 +2539,8 @@ struct PlayerSettingsSheet: View {
                     Slider(value: $lyricBackgroundBlur, in: 0...30, step: 1)
                         .tint(Color.beansAmber)
                 }
+                settingToggle("同步到封面页背景", isOn: $lyricBackgroundSyncCover,
+                              caption: "开启后播放器封面界面也使用这张自定义背景")
             }
             HStack {
                 Button("恢复默认颜色") {
