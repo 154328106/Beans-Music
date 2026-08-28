@@ -187,8 +187,8 @@ enum BeansUIStyle: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .liquid: return "默认液态"
-        case .clear: return "清透磨砂"
+        case .liquid: return "默认柔和"
+        case .clear: return "清透简洁"
         case .compact: return "紧凑淡雅"
         case .outline: return "描边高亮"
         }
@@ -212,7 +212,7 @@ final class ThemeStore: ObservableObject {
     @Published var backgroundImagePath: String = ""
     /// 壁纸库：所有已上传壁纸的文件路径
     @Published var wallpaperPaths: [String] = []
-    /// 全局 UI 风格：影响玻璃容器、卡片透明度与边框质感
+    /// 全局 UI 风格：影响容器、卡片透明度与边框质感
     @Published var uiStyle: BeansUIStyle = .liquid
 
     private let customAccentKey = "beans.accent.custom"

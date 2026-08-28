@@ -118,7 +118,7 @@ struct WallpaperImage: View {
     }
 }
 
-// MARK: - 全局玻璃容器（跟随全局 UI 样式）
+// MARK: - 全局容器（跟随全局 UI 样式）
 
 struct BeansGlass<S: Shape>: View {
     @AppStorage("beans.uiStyle") private var uiStyleRaw = BeansUIStyle.liquid.rawValue
@@ -164,7 +164,7 @@ struct BeansGlass<S: Shape>: View {
     }
 }
 
-// MARK: - 玻璃卡片（清透版）
+// MARK: - 通用卡片（跟随全局 UI 样式）
 
 struct GlassCard<Content: View>: View {
     var cornerRadius: CGFloat = 24

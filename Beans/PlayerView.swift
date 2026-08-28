@@ -428,7 +428,7 @@ struct PlayerView: View {
         }
     }
 
-    // MARK: - 封面沉浸播放器（无液态玻璃）
+    // MARK: - 封面沉浸播放器
 
     private func coverPlayerScreen(geo: GeometryProxy) -> some View {
         let size = geo.size
@@ -462,13 +462,24 @@ struct PlayerView: View {
             AsyncImage(url: song?.coverURL) { phase in
                 switch phase {
                 case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: size.width + 48, height: size.height + 48)
-                        .position(x: size.width / 2, y: size.height / 2)
-                        .blur(radius: 1.2)
-                        .clipped()
+                    ZStack {
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: size.width, height: size.height)
+                            .blur(radius: 16)
+                            .scaleEffect(1.04)
+                            .clipped()
+
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: size.width, height: size.height * 0.72)
+                            .opacity(0.90)
+                            .clipped()
+                    }
+                    .frame(width: size.width, height: size.height)
+                    .clipped()
                 default:
                     CoverBlurBackground(url: song?.coverURL, scheme: colorScheme)
                         .frame(width: size.width, height: size.height)
@@ -494,7 +505,6 @@ struct PlayerView: View {
         }
         .frame(width: size.width, height: size.height)
         .clipped()
-        .ignoresSafeArea()
     }
 
     private var coverPlayerHeader: some View {
@@ -2493,9 +2503,9 @@ struct PlayerSettingsSheet: View {
         }
     }
 
-    // MARK: - 设置卡片（液态玻璃圆角分组，紧凑排版）
+    // MARK: - 设置卡片（紧凑圆角分组）
 
-    /// 设置卡片容器：液态玻璃圆角卡片
+    /// 设置卡片容器：跟随全局 UI 样式的圆角卡片
     private func settingCard<Content: View>(_ title: String, isExpanded: Binding<Bool>? = nil, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             if let isExpanded {
@@ -2536,7 +2546,7 @@ struct PlayerSettingsSheet: View {
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            PlayerSettingsLiquidGlass(shape: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            PlayerSettingsCardBackground(shape: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
 
@@ -2930,7 +2940,7 @@ struct PlayerSettingsSheet: View {
     }
 }
 
-private struct PlayerSettingsLiquidGlass<S: Shape>: View {
+private struct PlayerSettingsCardBackground<S: Shape>: View {
     @AppStorage("beans.uiStyle") private var uiStyleRaw = BeansUIStyle.liquid.rawValue
     let shape: S
 
