@@ -369,6 +369,8 @@ struct PlayerView: View {
                 startPoint: .top, endPoint: .bottom
             )
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
         .allowsHitTesting(false)
     }
 
@@ -379,15 +381,17 @@ struct PlayerView: View {
     @ViewBuilder
     private var lyricPlayerBackgroundLayer: some View {
         if let image = UIImage(contentsOfFile: lyricBackgroundImagePath) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .scaleEffect(1.08)
-                .blur(radius: CGFloat(lyricBackgroundBlur))
-                .overlay(Color.black.opacity(colorScheme == .dark ? 0.48 : 0.34))
-                .clipped()
-                .ignoresSafeArea()
+            GeometryReader { proxy in
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: proxy.size.width + 96, height: proxy.size.height + 96)
+                    .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+                    .blur(radius: CGFloat(lyricBackgroundBlur))
+                    .overlay(Color.black.opacity(colorScheme == .dark ? 0.48 : 0.34))
+                    .clipped()
+            }
+            .ignoresSafeArea()
         } else {
             CoverBlurBackground(url: song?.coverURL, scheme: colorScheme)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
