@@ -1340,6 +1340,9 @@ struct PlayerView: View {
         case .kugou:
             let encoded = song.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? song.name
             return URL(string: "https://www.kugou.com/yy/html/search.html#searchType=song&searchKeyWord=\(encoded)")
+        // 自建服务器多是内网地址, 分享出去对方打不开, 只分享文字不给链接
+        case .subsonic:
+            return nil
         }
     }
 

@@ -30,6 +30,9 @@ final class FavoritesStore: ObservableObject {
             return qqFavoriteSongs.contains { $0.qqMid == mid }
         case .kugou:
             return false
+        // Subsonic 收藏在服务器侧(star.view), 本轮未接, 先不参与本地收藏
+        case .subsonic:
+            return false
         }
     }
 
@@ -64,6 +67,9 @@ final class FavoritesStore: ObservableObject {
             }
             return true
         case .kugou:
+            return false
+        // Subsonic 收藏在服务器侧(star.view), 本轮未接, 先不参与本地收藏
+        case .subsonic:
             return false
         }
     }
