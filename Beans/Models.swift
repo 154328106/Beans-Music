@@ -35,6 +35,8 @@ enum SongSource: String, Codable, Sendable {
     case netease
     case qq
     case kugou
+    /// 自建 Subsonic 服务器（Navidrome / 道理鱼音乐 等）
+    case subsonic
 
     /// 兼容旧版本地收藏：未知或已下线来源统一回退为网易云
     init(from decoder: Decoder) throws {
@@ -61,6 +63,9 @@ struct Song: Identifiable, Hashable, Codable {
     let kugouAlbumAudioId: String?
     let kugouAlbumId: String?
     let kugouQualityHashes: [String: String]?
+    /// Subsonic 服务器上的真实曲目 id（字符串）。Song.id 是 Int 装不下，
+    /// 所以 id 存这里，Song.id 用 SubsonicAPI.stableHash 填一个稳定数值。
+    let subsonicId: String?
     /// 付费/VIP 标记（网易云：0 免费、1 VIP、4 付费单曲；QQ：0 免费、非 0 付费）
     let fee: Int
 
@@ -75,6 +80,8 @@ struct Song: Identifiable, Hashable, Codable {
         case .qq: return "qq-\(id)"
         case .kugou: return "kugou-\(id)"
         case .netease: return "netease-\(id)"
+        // 用服务器原始 id, 不用哈希后的 Song.id —— 避免万一撞哈希时收藏串味
+        case .subsonic: return "subsonic-\(subsonicId ?? String(id))"
         }
     }
 
@@ -89,10 +96,13 @@ struct Song: Identifiable, Hashable, Codable {
             return fee != 0
         case .kugou:
             return fee != 0
+        // 自建服务器上的都是自己的文件, 不存在会员墙
+        case .subsonic:
+            return false
         }
     }
 
-    init(id: Int, name: String, artists: String, album: String, coverURL: URL?, duration: TimeInterval, source: SongSource = .netease, qqMid: String? = nil, qqMediaMid: String? = nil, kugouHash: String? = nil, kugouAlbumAudioId: String? = nil, kugouAlbumId: String? = nil, kugouQualityHashes: [String: String]? = nil, fee: Int = 0) {
+    init(id: Int, name: String, artists: String, album: String, coverURL: URL?, duration: TimeInterval, source: SongSource = .netease, qqMid: String? = nil, qqMediaMid: String? = nil, kugouHash: String? = nil, kugouAlbumAudioId: String? = nil, kugouAlbumId: String? = nil, kugouQualityHashes: [String: String]? = nil, fee: Int = 0, subsonicId: String? = nil) {
         self.id = id
         self.name = name
         self.artists = artists
@@ -107,6 +117,7 @@ struct Song: Identifiable, Hashable, Codable {
         self.kugouAlbumId = kugouAlbumId
         self.kugouQualityHashes = kugouQualityHashes
         self.fee = fee
+        self.subsonicId = subsonicId
     }
 
     init?(json: [String: Any]) {
