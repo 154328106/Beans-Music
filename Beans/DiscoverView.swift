@@ -963,7 +963,14 @@ struct TopListDetailView: View {
             }
             Spacer()
         }
-        .padding(.vertical, 8)
+        .padding(14)
+        .background {
+            BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+        .beansCardShadow(radius: 8, y: 3)
+        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
     }
 
     private var filteredTracks: [Song] {
@@ -1076,8 +1083,14 @@ struct KugouTopListDetailView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.vertical, 8)
+        .padding(14)
+        .background {
+            BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+        .beansCardShadow(radius: 8, y: 3)
+        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
         .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
     }
 
     private var filteredTracks: [Song] {

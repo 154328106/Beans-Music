@@ -38,6 +38,7 @@ struct ProfileView: View {
     @State private var pendingUpdateInfo: UpdateChecker.ReleaseInfo?
     @State private var updateShareFile: ShareFileItem?
     @State private var updateShareFileURL: URL?
+    @State private var showCommunityQR = false
     @ObservedObject private var qqAuth = QQMusicAuth.shared
     @ObservedObject private var kugouAuth = KugouMusicAuth.shared
 
@@ -119,6 +120,7 @@ struct ProfileView: View {
                     }
                     // 更新入口固定放在“我的”页面最底部，避免被板块排序隐藏。
                     updateLinkCard
+                    communityCard
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -151,6 +153,10 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showUsageGuide) {
             UsageGuideSheet()
+        }
+        .sheet(isPresented: $showCommunityQR) {
+            CommunityQRSheet()
+                .environmentObject(theme)
         }
         .sheet(item: $updateShareFile, onDismiss: cleanupUpdateShareFile) { item in
             ShareSheet(items: [item.url])
@@ -655,6 +661,84 @@ struct ProfileView: View {
             BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
         .beansCardShadow(radius: 9, y: 3)
+    }
+
+    /// 我的页底部交流群入口
+    private var communityCard: some View {
+        Button {
+            BeansHaptics.tap()
+            showCommunityQR = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "person.2.fill")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Color.beansHighlight)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("交流群")
+                        .font(BeansFont.appFont(14, .semibold))
+                        .foregroundStyle(Color.beansLabel)
+                    Text("点击查看二维码")
+                        .font(BeansFont.appFont(11))
+                        .foregroundStyle(Color.beansComment)
+                }
+                Spacer()
+                Image(systemName: "qrcode.viewfinder")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.beansComment)
+            }
+            .padding(16)
+            .background {
+                BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            }
+        }
+        .buttonStyle(GlassPressButtonStyle(scale: 0.98))
+        .beansCardShadow(radius: 9, y: 3)
+    }
+}
+
+// MARK: - 交流群二维码
+
+struct CommunityQRSheet: View {
+    @EnvironmentObject private var theme: ThemeStore
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        BeansNavigationStack {
+            ZStack {
+                GlassBackdrop(customColor: theme.backgroundSyncAll ? theme.customBackground : nil)
+                VStack(spacing: 18) {
+                    Image("CommunityQR")
+                        .resizable()
+                        .interpolation(.none)
+                        .scaledToFit()
+                        .padding(12)
+                        .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .strokeBorder(Color.beansComment.opacity(0.16), lineWidth: 0.8)
+                        }
+                        .padding(.horizontal, 24)
+                    Text("扫码加入交流群")
+                        .font(BeansFont.appFont(15, .semibold))
+                        .foregroundStyle(Color.beansLabel)
+                    Text("如二维码过期，可在 GitHub 或更新说明中获取最新入口")
+                        .font(BeansFont.appFont(11))
+                        .foregroundStyle(Color.beansComment)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 30)
+                }
+                .padding(.vertical, 22)
+            }
+            .navigationTitle("交流群")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+        .modifier(BeansSheetModifier(detents: [.medium, .large]))
     }
 }
 
@@ -1670,13 +1754,38 @@ struct SettingsView: View {
             || key.hasPrefix("beans.kugou.")
     }
 
-    /// 导出：收集除账号信息外的 beans.* 设置生成 JSON，交给系统原生导出面板
+    private static func isPrivacyBackupKey(_ key: String) -> Bool {
+        key.hasPrefix("beans.search.")
+            || key.hasPrefix("beans.log")
+            || key.hasPrefix("beans.crash")
+            || key == "beans.launchInProgress"
+    }
+
+    private static func isSystemBackupKey(_ key: String) -> Bool {
+        key.hasPrefix("Apple")
+            || key.hasPrefix("NS")
+            || key.hasPrefix("com.apple.")
+            || key == "AddingEmojiKeybordHandled"
+    }
+
+    private static func isBackupCandidateKey(_ key: String) -> Bool {
+        key.hasPrefix("beans.") && !isSystemBackupKey(key)
+    }
+
+    private static func isExcludedBackupKey(_ key: String) -> Bool {
+        isAccountBackupKey(key)
+            || isPrivacyBackupKey(key)
+            || key == "beans.backup.meta"
+            || key == "beans.font.restore"
+    }
+
+    /// 导出：收集本 App 设置，排除账号、搜索记录和日志，交给系统原生导出面板
     private func exportBackup() {
         let defaults = UserDefaults.standard
         var payload: [String: Any] = [:]
         for (key, value) in defaults.dictionaryRepresentation() {
-            guard key.hasPrefix("beans.") else { continue }
-            guard !Self.isAccountBackupKey(key) else { continue }
+            guard Self.isBackupCandidateKey(key) else { continue }
+            guard !Self.isExcludedBackupKey(key) else { continue }
             // 超大原始 Data 直接跳过（壁纸 base64 已以字符串形式存于 beans.wallpapers.data，不受影响）
             if let data = value as? Data, data.count > 2 * 1024 * 1024 { continue }
             let safe = backupJSONSafe(value)
@@ -1696,7 +1805,7 @@ struct SettingsView: View {
             "app": "Beans Music",
             "created": ISO8601DateFormatter().string(from: Date()),
             "version": version,
-            "excluded": "account",
+            "excluded": "account, search history, logs",
         ] as [String: Any]
         guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]) else {
             backupMessage = "备份生成失败：存在无法序列化的设置项"
@@ -1705,7 +1814,7 @@ struct SettingsView: View {
         }
         backupDoc = BackupDocument(data: data)
         backupMessage = nil
-        BeansLogger.shared.log("导出配置备份（\(payload.count) 项，已排除账号信息，含壁纸/字体/歌单）", level: .info)
+        BeansLogger.shared.log("导出配置备份（\(payload.count) 项，已排除账号/搜索记录/日志，含壁纸/字体/歌单/播放器布局）", level: .info)
         showExportBackup = true
     }
 
@@ -1726,14 +1835,14 @@ struct SettingsView: View {
         showRestoreConfirm = true
     }
 
-    /// 恢复：把 JSON 备份中除账号信息外的 beans.* 键写回 UserDefaults
+    /// 恢复：把 JSON 备份中除账号、搜索记录和日志外的本 App 设置写回 UserDefaults
     private func applyRestore(_ json: [String: Any]?) {
         guard let json else { return }
         let defaults = UserDefaults.standard
         var count = 0
         for (key, value) in json {
-            guard key.hasPrefix("beans."), key != "beans.backup.meta", key != "beans.font.restore" else { continue }
-            guard !Self.isAccountBackupKey(key) else { continue }
+            guard Self.isBackupCandidateKey(key) else { continue }
+            guard !Self.isExcludedBackupKey(key) else { continue }
             guard let restored = backupPlistSafe(value) else { continue }
             defaults.set(restored, forKey: key)
             count += 1
