@@ -13,6 +13,8 @@ struct BeansApp: App {
     init() {
         // 闪退检测：优先初始化，检测上次异常退出并安装崩溃捕获
         _ = CrashReporter.shared
+        // 图片磁盘缓存调大（系统默认 512KB 内存 / 10MB 磁盘，封面稍多就被挤没）
+        BeansImageCache.configureURLCache()
         // 启动时重新注册用户上传的全局字体（覆盖安装后依然生效）
         FontManager.reinstallIfNeeded()
         // 新安装默认开启高刷新率；老用户保留自己手动关闭的选择。

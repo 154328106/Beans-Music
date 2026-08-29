@@ -362,29 +362,13 @@ struct CoverImage: View {
             .fill(Color.beansGlassFill)
             .frame(width: size, height: size)
             .overlay {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                            .frame(width: size, height: size)
-                            .clipped()
-                    case .failure:
-                        placeholderIcon
-                    case .empty:
-                        if url == nil {
-                            // 封面地址为空时：直接显示占位图标，避免一直转圈
-                            placeholderIcon
-                        } else {
-                            ZStack {
-                                placeholderIcon
-                                ProgressView().tint(Color.beansAmber)
-                            }
-                        }
-                    @unknown default:
-                        placeholderIcon
-                    }
+                // 用带内存缓存的图片视图取代 AsyncImage：
+                // AsyncImage 滚出屏幕再回来就重新请求+解码，列表里非常掉帧
+                BeansAsyncImage(url: url) {
+                    placeholderIcon
                 }
                 .frame(width: size, height: size)
+                .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))

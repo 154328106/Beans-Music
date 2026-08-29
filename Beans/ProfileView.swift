@@ -275,7 +275,7 @@ struct ProfileView: View {
                     .font(.system(size: 14))
                     .foregroundStyle(Color.beansAmber)
                     .frame(width: 26)
-                Text("账号")
+                Text("账号登录")
                     .font(BeansFont.appFont(14, .semibold))
                     .foregroundStyle(Color.beansLabel)
                 Spacer()
