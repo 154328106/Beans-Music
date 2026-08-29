@@ -195,6 +195,38 @@ enum BeansUIStyle: String, CaseIterable {
     }
 }
 
+// MARK: - 播放器按钮样式
+
+enum BeansPlayerButtonStyle: String, CaseIterable, Identifiable {
+    case glass
+    case darkRound = "controlCenter"
+    case outline
+    case filled
+    case minimal
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .glass: return "通透圆形"
+        case .darkRound: return "暗色圆形"
+        case .outline: return "高亮描边"
+        case .filled: return "强调填充"
+        case .minimal: return "极简无底"
+        }
+    }
+
+    var previewIcon: String {
+        switch self {
+        case .glass: return "circle"
+        case .darkRound: return "slider.horizontal.3"
+        case .outline: return "record.circle"
+        case .filled: return "circle.fill"
+        case .minimal: return "minus.circle"
+        }
+    }
+}
+
 // MARK: - 全局主题（ObservableObject：一处修改，全 App 即时联动）
 
 final class ThemeStore: ObservableObject {
