@@ -714,9 +714,9 @@ struct DiscoverView: View {
         var snapshot = DiscoverCache.Snapshot()
         snapshot.savedAt = Date()
         switch source {
-        // 本地音乐在 load() 开头就已分流返回, 走不到这里
+        // 本地音乐在 load() 开头就已分流返回, 走不到这里; 给个空快照满足返回类型
         case .subsonic:
-            return
+            return snapshot
         case .qq:
             async let a = QQMusicAPI.shared.recommendSongs(limit: 30)
             async let b = QQMusicAPI.shared.topLists()
