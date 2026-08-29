@@ -39,6 +39,7 @@ struct RootView: View {
     @State private var showPlayer = false
     /// 免责声明确认状态（门禁在 BeansApp 中，这里用于确认后弹出更新说明）
     @AppStorage("beans.disclaimerAccepted") private var disclaimerAccepted = false
+    @ObservedObject private var addToPlaylist = AddToPlaylistCoordinator.shared
     /// 底栏是否显示文字（关闭后只显示图标）
     @AppStorage("beans.tabLabelsVisible") private var tabLabelsVisible = true
     /// 可选高刷新率，默认开启；需要省电时可在设置里关闭。
@@ -117,6 +118,11 @@ struct RootView: View {
         }
         .sheet(isPresented: $showWhatsNew) {
             WhatsNewSheet()
+        }
+        // 「添加到歌单」全局只挂这一个，替代原来 SongCell 每行一个
+        .sheet(item: $addToPlaylist.pending) { song in
+            AddToPlaylistSheet(song: song)
+                .environmentObject(auth)
         }
         .overlay {
             if showUpdateAlert, let info = updateInfo {

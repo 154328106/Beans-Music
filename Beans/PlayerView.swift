@@ -614,18 +614,29 @@ struct PlayerView: View {
                 ZStack {
                     // 静态装饰层（光晕 + 托盘）：不再呼吸/浮动（用户要求飘动效果暂停），封面本体静止
                     ZStack {
-                            // 主色光晕（呼吸）
+                            // 光晕原本是「纯色圆 + blur(46/40)」。实时模糊在拖动时
+                            // 每帧都要重算整层，是播放页划动卡死的主因。
+                            // 换成径向渐变：视觉几乎一样，代价接近零。
                             Circle()
-                                .fill(palette.accent.opacity(0.24))
+                                .fill(
+                                    RadialGradient(
+                                        colors: [palette.accent.opacity(0.30), palette.accent.opacity(0)],
+                                        center: .center,
+                                        startRadius: size * 0.30,
+                                        endRadius: size * 0.69
+                                    )
+                                )
                                 .frame(width: size * 1.38, height: size * 1.38)
-                                .blur(radius: 46)
-                                .scaleEffect(1.0)
-                            // 次色光晕（反向呼吸，增加层次）
                             Circle()
-                                .fill(palette.secondary.opacity(0.15))
+                                .fill(
+                                    RadialGradient(
+                                        colors: [palette.secondary.opacity(0.20), palette.secondary.opacity(0)],
+                                        center: .center,
+                                        startRadius: size * 0.26,
+                                        endRadius: size * 0.55
+                                    )
+                                )
                                 .frame(width: size * 1.10, height: size * 1.10)
-                                .blur(radius: 40)
-                                .scaleEffect(1.0)
                             // 液态玻璃托盘（圆形模式用圆形托盘）
                             if circularCover {
                                 BeansGlass(shape: Circle())

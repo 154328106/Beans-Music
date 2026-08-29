@@ -11,7 +11,8 @@ struct SongCell: View {
     var glassRow = false
     var onTap: (() -> Void)?
 
-    @State private var showAddToPlaylist = false
+    // 弹窗改由全局 AddToPlaylistCoordinator 统一承载：
+    // 每行各挂一个 .sheet 时，一个长列表就是几十个 sheet presenter，非常吃性能。
     @State private var appeared = false
 
     private var isCurrent: Bool {
@@ -73,7 +74,7 @@ struct SongCell: View {
                 Label("下一首播放", systemImage: "text.line.first.and.arrowtriangle.forward")
             }
             Button {
-                showAddToPlaylist = true
+                AddToPlaylistCoordinator.shared.request(song)
             } label: {
                 Label("添加到歌单", systemImage: "text.badge.plus")
             }
@@ -86,10 +87,6 @@ struct SongCell: View {
                     Label("立即播放", systemImage: "play.fill")
                 }
             }
-        }
-        .sheet(isPresented: $showAddToPlaylist) {
-            AddToPlaylistSheet(song: song)
-                .environmentObject(auth)
         }
     }
 
@@ -108,9 +105,7 @@ struct SongCell: View {
                 rowContent
             }
         }
-        .opacity(appeared ? 1 : 0)
-        .offset(y: appeared ? 0 : 8)
-        .animation(.easeOut(duration: 0.28), value: appeared)
-        .onAppear { appeared = true }
+        // 入场动画去掉：每行都要跑一次 opacity+offset 动画事务，
+        // 快速滚动时会持续触发，收益极小、代价不小。
     }
 }
