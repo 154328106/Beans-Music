@@ -88,7 +88,7 @@ struct ProfileView: View {
                 Text("我的")
                     .font(BeansFont.appFont(30, .bold))
                     .foregroundStyle(Color.beansLabel)
-                Text("\(platformPrefs.summaryText) 账号与外观设置")
+                Text("\(platformPrefs.summaryText) 外观设置")
                     .font(BeansFont.appFont(13))
                     .foregroundStyle(Color.beansComment)
             }
@@ -130,8 +130,6 @@ struct ProfileView: View {
                     }
                     // 更新入口固定放在“我的”页面最底部，避免被板块排序隐藏。
                     subsonicCard
-                    updateLinkCard
-                    communityCard
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -499,7 +497,14 @@ struct ProfileView: View {
 
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionHeader(title: "关于")
+            aboutDisclosure
+            copyrightDisclosure
+        }
+    }
+
+    /// 关于软件（默认折叠，与版权声明同款样式）
+    private var aboutDisclosure: some View {
+        DisclosureGroup {
             VStack(spacing: 8) {
                 Label(appVersionText, systemImage: "beats.headphones")
                     .font(BeansFont.appFont(14, .semibold))
@@ -513,22 +518,28 @@ struct ProfileView: View {
                     .foregroundStyle(Color.beansComment.opacity(0.85))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("本软件完全免费，全部功能开源 · GitHub：XIaodou0416/Beans-Music")
-                    .font(BeansFont.appFont(11, .semibold))
-                    .foregroundStyle(Color.beansAmber)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity)
-            .padding(16)
-            .background {
-                                BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .padding(.top, 6)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.beansAmber)
+                    .frame(width: 26)
+                Text("关于软件")
+                    .font(BeansFont.appFont(14, .semibold))
+                    .foregroundStyle(Color.beansLabel)
+                Spacer()
             }
-            .beansCardShadow(radius: 9, y: 3)
-
-            copyrightDisclosure
-
+            .padding(.vertical, 2)
         }
+        .tint(Color.beansAmber)
+        .padding(16)
+        .background {
+            BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+        .beansCardShadow(radius: 9, y: 3)
     }
 
     /// 版权声明（默认折叠，可展开查看）
