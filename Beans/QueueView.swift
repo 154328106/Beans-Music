@@ -89,8 +89,12 @@ struct QueueView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .contentShape(Rectangle())
+        // 这里**不能**用 BeansGlass：它是 .ultraThinMaterial 毛玻璃，
+        // 队列几十上百行、每行各有一个模糊层，滚动直接卡成马赛克。
+        // 换成纯色填充，观感几乎一样，代价接近零。
         .background {
-                        BeansGlass(shape: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.beansGlassFill.opacity(isCurrent ? 0.95 : 0.55))
         }
         .onTapGesture {
             if player.queue.indices.contains(index) {

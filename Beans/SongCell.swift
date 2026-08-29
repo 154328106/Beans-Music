@@ -99,8 +99,10 @@ struct SongCell: View {
             if glassRow {
                 rowContent
                     .padding(.horizontal, 10)
+                    // 同 QueueView：长列表里逐行毛玻璃太贵，用纯色填充代替
                     .background {
-                                            BeansGlass(shape: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.beansGlassFill.opacity(0.55))
                     }
             } else {
                 rowContent
