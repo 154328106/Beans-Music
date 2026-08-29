@@ -1537,14 +1537,29 @@ struct PlayerView: View {
             self.lyrics = parsed
         }
         if song.source == .subsonic {
-            // 1) 先问服务器（Navidrome 的 getLyrics 可用时直接用；道理鱼实测 404）
+            // 1) OpenSubsonic 的 getLyricsBySongId：按 ID 精确取，带毫秒时间轴。
+            //    文件内嵌的歌词走的就是这条（Navidrome 0.61 实测完整可用）。
+            if let sid = song.subsonicId,
+               let got = try? await SubsonicAPI.shared.lyricsBySongId(sid), !got.lrc.isEmpty {
+                let parsed = LyricParser.parse(got.lrc, translationRaw: got.translation)
+                if !parsed.isEmpty {
+                    apply(parsed)
+                    return
+                }
+            }
+            // 2) 降级到 Subsonic 1.16 的老接口。Navidrome 上它返回空串，
+            //    但别的实现可能只认这一条，所以留着。
             if let raw = try? await SubsonicAPI.shared.lyrics(artist: song.artists, title: song.name),
                !raw.isEmpty {
-                apply(LyricParser.parse(raw))
-                return
+                let parsed = LyricParser.parse(raw)
+                // ⚠️ 必须确认真解析出了内容才 return。原来无条件 return，
+                // 一旦服务器返回了「非空但解析为空」的内容，下面的兜底就再也跑不到。
+                if !parsed.isEmpty {
+                    apply(parsed)
+                    return
+                }
             }
-            // 2) 服务器没有歌词：拿「歌名 歌手」去网易云找同名曲，借它的歌词。
-            //    本地文件基本都没有内嵌歌词，这条兜底才是实际管用的那条。
+            // 3) 服务器两条都拿不到：用「歌名 歌手」去网易云找同名曲借歌词。
             let key = "\(song.name) \(song.artists)".trimmingCharacters(in: .whitespaces)
             if let matches = try? await NetEaseAPI.shared.search(keyword: key, limit: 3),
                let best = matches.first,

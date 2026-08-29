@@ -303,6 +303,11 @@ enum LyricParser {
     /// 解析歌词；可选传入翻译歌词（网易云 tlyric），按时间戳合并到对应行
     static func parse(_ raw: String, translationRaw: String? = nil) -> [LyricLine] {
         var lines = parseCore(raw, offset: declaredOffsetSeconds(in: raw))
+        // 无时间轴的纯文本歌词（大量内嵌歌词就是这种）原来会被 parseCore 整个丢掉，
+        // 界面上表现为「这首歌没歌词」。这里兜一层：文字照显，只是不参与滚动高亮。
+        if lines.isEmpty {
+            lines = plainLines(raw)
+        }
         if let translationRaw, !translationRaw.isEmpty {
             let trans = parseCore(translationRaw, offset: declaredOffsetSeconds(in: translationRaw))
             var byTime: [Double: String] = [:]
@@ -316,6 +321,23 @@ enum LyricParser {
             }
         }
         return lines
+    }
+
+    /// 把无时间轴文本转成「可显示但永不高亮」的行。
+    /// time 取极大值是有意的：播放页用二分查找「最后一个 time <= 进度」的行，
+    /// 取极大值时永远选不中 -> 返回 nil -> 不高亮也不自动滚动。
+    /// 若改成 0，高亮会被钉死在最后一行，反而更糟。
+    private static func plainLines(_ raw: String) -> [LyricLine] {
+        let tagPattern = try? NSRegularExpression(pattern: #"^\[[a-zA-Z#]+:[^\]]*\]$"#)
+        return raw.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { line in
+                guard !line.isEmpty else { return false }
+                // 滤掉 [ti:标题] [ar:歌手] [offset:0] 这类 LRC 元信息行
+                let range = NSRange(line.startIndex..., in: line)
+                return tagPattern?.firstMatch(in: line, options: [], range: range) == nil
+            }
+            .map { LyricLine(time: .greatestFiniteMagnitude, text: $0) }
     }
 
     private static func parseCore(_ raw: String, offset: Double) -> [LyricLine] {

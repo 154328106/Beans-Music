@@ -305,6 +305,46 @@ final class SubsonicAPI {
     }
 
     /// 歌词（Subsonic 的 getLyrics 只认歌名+歌手，拿不到就返回空串）
+    /// OpenSubsonic 扩展 `getLyricsBySongId`：按歌曲 ID 精确取结构化歌词。
+    ///
+    /// **为什么不能只用老的 `getLyrics`**：那是 Subsonic 1.16 的接口，按「歌手 + 歌名」
+    /// 做字符串匹配，而且只返回无时间轴的纯文本。Navidrome 0.61 上实测直接返回空串
+    /// （`{"lyrics":{"value":""}}`）—— 音频文件里内嵌的歌词只能从这条新接口出来。
+    /// 服务器是否支持看 `getOpenSubsonicExtensions` 里有没有 `songLyrics`，
+    /// 不支持的实现（如道理鱼）会直接报错，由调用方降级。
+    ///
+    /// `synced == false` 时 `lrc` 是纯文本、没有时间戳，交给 LyricParser 的纯文本兜底。
+    func lyricsBySongId(_ id: String) async throws -> (lrc: String, translation: String?, synced: Bool) {
+        let r = try await request("getLyricsBySongId.view", [URLQueryItem(name: "id", value: id)])
+        let box = (r["lyricsList"] as? [String: Any]) ?? [:]
+        let blocks = Self.asArray(box["structuredLyrics"])
+        guard let first = blocks.first else { return ("", nil, false) }
+        // 多语言块：第一块当原文，第二块当翻译。时间轴一致时 LyricParser 会按时间合并
+        let main = Self.renderLyricBlock(first)
+        let translation = blocks.count > 1 ? Self.renderLyricBlock(blocks[1]).text : nil
+        return (main.text, translation, main.synced)
+    }
+
+    /// structuredLyrics 的一个语言块 -> LRC 文本，好让现成的 LyricParser 原样吃下去
+    private static func renderLyricBlock(_ block: [String: Any]) -> (text: String, synced: Bool) {
+        let lines = asArray(block["line"])
+        // synced 字段不是所有实现都给，缺省时以「行里有没有 start」为准
+        let synced = (block["synced"] as? Bool) ?? lines.contains(where: { $0["start"] != nil })
+        let rendered: [String] = lines.map { line in
+            let value = str(line["value"])
+            guard synced, line["start"] != nil else { return value }
+            // 全整数运算：先转 Double 再取小数位会踩浮点截断
+            // （11040ms 会被存成 11.0399... 算出 .03，慢 10ms）
+            let ms = int(line["start"])
+            let minute = ms / 60_000
+            let second = (ms % 60_000) / 1000
+            let centi = (ms % 1000) / 10
+            return String(format: "[%02d:%02d.%02d]%@", minute, second, centi, value)
+        }
+        return (rendered.joined(separator: "\n"), synced)
+    }
+
+    /// Subsonic 1.16 的老歌词接口：按歌手+歌名匹配，只有纯文本。留作降级用。
     func lyrics(artist: String, title: String) async throws -> String {
         let r = try await request("getLyrics.view", [
             URLQueryItem(name: "artist", value: artist),
