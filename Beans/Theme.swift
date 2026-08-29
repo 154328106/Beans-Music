@@ -398,7 +398,7 @@ final class ThemeStore: ObservableObject {
     var customBackgroundImage: UIImage? {
         if let cached = cachedBackgroundImage { return cached }
         guard !backgroundImagePath.isEmpty else { return nil }
-        let image = UIImage(contentsOfFile: backgroundImagePath)
+        let image = BeansImageFileCache.image(at: backgroundImagePath)
         cachedBackgroundImage = image
         return image
     }
@@ -429,6 +429,7 @@ final class ThemeStore: ObservableObject {
             UserDefaults.standard.set(url.path, forKey: backgroundImageKey)
             saveWallpaperBackup(url.path, data: imageData)
             invalidateBackgroundCache()
+            BeansImageFileCache.remove(url.path)
         } catch {
             // 保存失败：静默保留当前壁纸
         }
@@ -445,6 +446,7 @@ final class ThemeStore: ObservableObject {
     /// 删除壁纸库中的某张壁纸；若正在使用则自动切换到上一张/清空
     func deleteWallpaper(at path: String) {
         try? FileManager.default.removeItem(atPath: path)
+        BeansImageFileCache.remove(path)
         wallpaperPaths.removeAll { $0 == path }
         removeWallpaperBackup(path)
         saveDeletedWallpaper(path)
@@ -467,9 +469,11 @@ final class ThemeStore: ObservableObject {
     func clearAllWallpapers() {
         for path in wallpaperPaths {
             try? FileManager.default.removeItem(atPath: path)
+            BeansImageFileCache.remove(path)
         }
         if !backgroundImagePath.isEmpty {
             try? FileManager.default.removeItem(atPath: backgroundImagePath)
+            BeansImageFileCache.remove(backgroundImagePath)
         }
         wallpaperPaths = []
         backgroundImagePath = ""
@@ -478,6 +482,7 @@ final class ThemeStore: ObservableObject {
         UserDefaults.standard.removeObject(forKey: deletedKey)
         UserDefaults.standard.set("", forKey: backgroundImageKey)
         invalidateBackgroundCache()
+        BeansImageFileCache.removeAll()
     }
 
     private static func wallpaperDirectory() -> URL {

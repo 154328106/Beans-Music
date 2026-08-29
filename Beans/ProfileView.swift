@@ -364,7 +364,7 @@ struct ProfileView: View {
                 theme.applyWallpaper(at: path)
             } label: {
                 Group {
-                    if let img = UIImage(contentsOfFile: path) {
+                    if let img = BeansImageFileCache.image(at: path) {
                         Image(uiImage: img)
                             .resizable()
                             .scaledToFill()
@@ -1652,7 +1652,7 @@ struct SettingsView: View {
                             Text("高刷新动效")
                                 .font(BeansFont.appFont(15))
                                 .foregroundStyle(Color.beansLabel)
-                            Text("默认开启；在支持 ProMotion 的设备上让设置、我的和播放器动画更丝滑")
+                            Text("默认开启；允许系统高刷动画，不再常驻空转刷新")
                                 .font(BeansFont.appFont(11))
                                 .foregroundStyle(Color.beansComment)
                         }
@@ -2226,7 +2226,7 @@ struct SettingsView: View {
                 theme.applyWallpaper(at: path)
             } label: {
                 Group {
-                    if let img = UIImage(contentsOfFile: path) {
+                    if let img = BeansImageFileCache.image(at: path) {
                         Image(uiImage: img)
                             .resizable()
                             .scaledToFill()

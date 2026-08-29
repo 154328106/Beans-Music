@@ -414,7 +414,7 @@ struct PlayerView: View {
 
     @ViewBuilder
     private var lyricPlayerBackgroundLayer: some View {
-        if let image = UIImage(contentsOfFile: lyricBackgroundImagePath) {
+        if let image = BeansImageFileCache.image(at: lyricBackgroundImagePath) {
             GeometryReader { proxy in
                 Image(uiImage: image)
                     .resizable()

@@ -6,8 +6,18 @@ struct VersionLog: Identifiable {
     let id: String
     let version: String
     let title: String
+    let notices: [String]
     let features: [String]
     let fixes: [String]
+
+    init(id: String, version: String, title: String, notices: [String] = [], features: [String], fixes: [String]) {
+        self.id = id
+        self.version = version
+        self.title = title
+        self.notices = notices
+        self.features = features
+        self.fixes = fixes
+    }
 }
 
 enum ChangelogStore {
@@ -32,6 +42,23 @@ enum ChangelogStore {
     static var latest: VersionLog? { logs.first }
 
     static let logs: [VersionLog] = [
+        VersionLog(
+            id: "1.5.5",
+            version: "1.5.5",
+            title: "播放流畅度与发热优化",
+            notices: [
+                "从 1.5.4 版本开始，播放器设置已从右上角删除，改为点击中间歌曲正在播放的标题打开。"
+            ],
+            features: [
+                "优化播放中全局刷新策略，移除高刷保持器的常驻空转刷新，降低设置页、我的页面和播放器页面的发热与掉帧",
+                "本地壁纸、歌词背景、设置页缩略图改为复用解码缓存，减少滚动和切换设置时的重复图片解码",
+                "锁屏/系统正在播放封面增加缓存，避免播放状态变化时反复下载和刷新同一张封面"
+            ],
+            fixes: [
+                "修复播放中进度更新过于频繁导致非播放器页面也跟随重绘的问题",
+                "修复重新上传歌词背景或恢复壁纸后，部分位置可能继续显示旧图片缓存的问题"
+            ]
+        ),
         VersionLog(
             id: "1.5.4",
             version: "1.5.4",
@@ -219,6 +246,32 @@ private struct VersionLogCard: View {
                 Text(log.title)
                     .font(BeansFont.appFont(14, .semibold))
                     .foregroundStyle(Color.beansLabel)
+            }
+            if !log.notices.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(log.notices, id: \.self) { notice in
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .padding(.top, 1)
+                            Text(notice)
+                                .font(BeansFont.appFont(13, .semibold))
+                                .foregroundStyle(.white)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    LinearGradient(
+                        colors: [Color.orange, Color.red.opacity(0.88)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                )
             }
             if !log.features.isEmpty {
                 logSection(title: "新增功能", icon: "plus.circle.fill", items: log.features)

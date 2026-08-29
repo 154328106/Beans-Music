@@ -19,6 +19,7 @@ enum LyricBackgroundStore {
         let imageData = normalizedJPEG(from: data) ?? data
         let url = directory.appendingPathComponent("lyric-background.jpg")
         do {
+            BeansImageFileCache.remove(url.path)
             try imageData.write(to: url, options: .atomic)
             UserDefaults.standard.set(url.path, forKey: pathKey)
             UserDefaults.standard.set(imageData.base64EncodedString(), forKey: dataKey)
@@ -31,6 +32,7 @@ enum LyricBackgroundStore {
     static func clear() {
         if let path = UserDefaults.standard.string(forKey: pathKey), !path.isEmpty {
             try? FileManager.default.removeItem(atPath: path)
+            BeansImageFileCache.remove(path)
         }
         UserDefaults.standard.removeObject(forKey: pathKey)
         UserDefaults.standard.removeObject(forKey: dataKey)
@@ -52,6 +54,7 @@ enum LyricBackgroundStore {
             return savedPath
         }
         let url = directory.appendingPathComponent("lyric-background.jpg")
+        BeansImageFileCache.remove(url.path)
         if (try? data.write(to: url, options: .atomic)) != nil {
             UserDefaults.standard.set(url.path, forKey: pathKey)
             return url.path
