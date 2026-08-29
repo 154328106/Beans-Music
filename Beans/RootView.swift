@@ -59,6 +59,15 @@ struct RootView: View {
         BeansThemeMode(rawValue: themeModeRaw) ?? .system
     }
 
+    private var usesSystemFloatingTabBar: Bool {
+        if #available(iOS 26, *) { return true }
+        return false
+    }
+
+    private var miniPlayerBottomPadding: CGFloat {
+        usesSystemFloatingTabBar ? 62 : 84
+    }
+
     var body: some View {
         let _ = theme.accent
         ZStack {
@@ -81,6 +90,21 @@ struct RootView: View {
                     .tag(RootTab.profile)
             }
             .tint(Color.beansAmber)
+            .background {
+                TabBarAppearanceConfigurator(hidesSystemTabBarOnLegacy: !usesSystemFloatingTabBar)
+            }
+
+            RootTopBlur()
+                .allowsHitTesting(false)
+                .ignoresSafeArea(edges: .top)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
+            if !usesSystemFloatingTabBar {
+                legacyFloatingTabBar
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(8)
+            }
 
             // 迷你播放器：悬浮在系统 TabBar 上方
             VStack(spacing: 0) {
@@ -89,7 +113,7 @@ struct RootView: View {
                     MiniPlayerView(showPlayer: $showPlayer)
                         .environmentObject(player.clock)
                         .padding(.horizontal, 12)
-                        .padding(.bottom, 62)
+                        .padding(.bottom, miniPlayerBottomPadding)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
@@ -246,6 +270,85 @@ struct RootView: View {
             .padding(32)
         }
     }
+
+    private var legacyFloatingTabBar: some View {
+        HStack(spacing: tabLabelsVisible ? 6 : 10) {
+            ForEach(RootTab.allCases) { tab in
+                Button {
+                    guard selection != tab else { return }
+                    BeansHaptics.select()
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+                        selection = tab
+                    }
+                } label: {
+                    let selected = selection == tab
+                    HStack(spacing: tabLabelsVisible ? 5 : 0) {
+                        Image(systemName: tab.icon)
+                            .font(.system(size: 16, weight: selected ? .bold : .semibold))
+                        if tabLabelsVisible {
+                            Text(tab.title)
+                                .font(BeansFont.appFont(11, selected ? .bold : .semibold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.82)
+                        }
+                    }
+                    .foregroundStyle(selected ? Color.white : Color.beansLabel.opacity(0.76))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 42)
+                    .background {
+                        Capsule()
+                            .fill(selected ? Color.beansAmber : Color.clear)
+                    }
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(GlassPressButtonStyle(scale: 0.92))
+            }
+        }
+        .padding(6)
+        .frame(maxWidth: 390)
+        .background {
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .strokeBorder(.white.opacity(0.22), lineWidth: 0.8)
+                }
+                .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
+        }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 14)
+    }
+}
+
+private struct RootTopBlur: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .frame(height: 54)
+                .overlay {
+                    LinearGradient(
+                        colors: [
+                            (colorScheme == .dark ? Color.black : Color.white).opacity(0.18),
+                            .clear
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+            LinearGradient(
+                colors: [
+                    (colorScheme == .dark ? Color.black : Color.white).opacity(0.10),
+                    .clear
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 34)
+        }
+    }
 }
 
 /// 支持点击外部空白关闭的更新提示。
@@ -345,23 +448,34 @@ private struct UpdatePromptOverlay: View {
 // 拿到当前 UITabBar 实例，直接设置固定清透外观（全透明、无阴影）。
 
 struct TabBarAppearanceConfigurator: UIViewControllerRepresentable {
+    var hidesSystemTabBarOnLegacy = true
+
     func makeUIViewController(context: Context) -> UIViewController {
         let controller = UIViewController()
         controller.view.backgroundColor = .clear
         // 纯外观配置视图：禁止拦截触摸，避免透明全屏视图吃掉页面按钮点击
         controller.view.isUserInteractionEnabled = false
-        DispatchQueue.main.async { Self.apply(from: controller) }
+        DispatchQueue.main.async { Self.apply(from: controller, hidesSystemTabBarOnLegacy: hidesSystemTabBarOnLegacy) }
         return controller
     }
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
-        DispatchQueue.main.async { Self.apply(from: uiViewController) }
+        DispatchQueue.main.async { Self.apply(from: uiViewController, hidesSystemTabBarOnLegacy: hidesSystemTabBarOnLegacy) }
     }
 
     /// 固定清透风格：全透明背景、无阴影；选中态用主题色，
     /// 材质与模糊完全交给系统对底层页面内容的渲染，不再支持手动调节透明度
-    private static func apply(from controller: UIViewController) {
+    private static func apply(from controller: UIViewController, hidesSystemTabBarOnLegacy: Bool) {
         guard let tabBar = controller.tabBarController?.tabBar else { return }
+        if #available(iOS 26, *) {
+            tabBar.isHidden = false
+        } else if hidesSystemTabBarOnLegacy {
+            tabBar.isHidden = true
+            tabBar.isTranslucent = true
+            return
+        } else {
+            tabBar.isHidden = false
+        }
         let appearance = UITabBarAppearance()
         appearance.configureWithTransparentBackground()
         // 超薄材质模糊：与迷你播放器一致的清透玻璃透明度
