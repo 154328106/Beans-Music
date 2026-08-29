@@ -13,6 +13,14 @@ import Foundation
 /// 而某些实现（实测「道理鱼音乐」）是 XML→JSON 转换出来的嵌套形状
 /// `{"subsonic-response":{"_attributes":{"status":"ok",…}}}`。
 /// `normalize(_:)` 会把后者拍平，两种都能吃。
+/// 服务器上的一张专辑
+struct SubsonicAlbum: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let artist: String
+    let coverURL: URL?
+}
+
 final class SubsonicAPI {
     static let shared = SubsonicAPI()
     private init() {}
@@ -226,9 +234,10 @@ final class SubsonicAPI {
         return Self.asArray(box["entry"]).map(mapSong)
     }
 
-    /// 专辑列表：type = newest / frequent / recent / random / alphabeticalByName
-    func albums(type: String = "newest", size: Int = 50, offset: Int = 0) async throws
-        -> [(id: String, name: String, artist: String, coverURL: URL?)] {
+    /// 专辑列表。type 实测(道理鱼/Navidrome 均支持):
+    /// newest 最近添加 / recent 最近播放 / frequent 最多播放 /
+    /// random 随机 / highest 评分最高 / starred 已收藏 / alphabeticalByName
+    func albums(type: String = "newest", size: Int = 50, offset: Int = 0) async throws -> [SubsonicAlbum] {
         let r = try await request("getAlbumList2.view", [
             URLQueryItem(name: "type", value: type),
             URLQueryItem(name: "size", value: String(size)),
@@ -238,13 +247,20 @@ final class SubsonicAPI {
         return Self.asArray(box["album"]).map {
             let aid = Self.str($0["id"])
             let coverId = Self.str($0["coverArt"]).isEmpty ? aid : Self.str($0["coverArt"])
-            return (
+            return SubsonicAlbum(
                 id: aid,
                 name: Self.str($0["name"]),
                 artist: Self.str($0["artist"]),
                 coverURL: coverURL(id: coverId)
             )
         }
+    }
+
+    /// 服务器上已收藏（star）的曲目
+    func starredSongs(limit: Int = 50) async throws -> [Song] {
+        let r = try await request("getStarred2.view")
+        let box = r["starred2"] as? [String: Any] ?? [:]
+        return Array(Self.asArray(box["song"]).map(mapSong).prefix(limit))
     }
 
     /// 专辑内的曲目

@@ -22,7 +22,7 @@ struct SubsonicLibraryView: View {
 
     @State private var songs: [Song] = []
     @State private var playlists: [(id: String, name: String, count: Int, coverURL: URL?)] = []
-    @State private var albums: [(id: String, name: String, artist: String, coverURL: URL?)] = []
+    @State private var albums: [SubsonicAlbum] = []
 
     @State private var loading = false
     @State private var errorText: String?
@@ -165,7 +165,7 @@ struct SubsonicLibraryView: View {
         }
     }
 
-    private func openAlbum(_ a: (id: String, name: String, artist: String, coverURL: URL?)) async {
+    private func openAlbum(_ a: SubsonicAlbum) async {
         await run {
             songs = try await SubsonicAPI.shared.albumSongs(id: a.id)
             title = a.name
