@@ -1510,15 +1510,25 @@ struct PlayerView: View {
     /// 一次性提取当前封面主色，带动整个播放器配色动态变化（失败时保持主题回退色，不影响任何功能）
     private func extractCoverPalette() async {
         guard let url = song?.coverURL else { return }
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            guard let image = UIImage(data: data),
-                  let dominant = PaletteExtractor.dominantColor(in: image) else { return }
-            withAnimation(.easeInOut(duration: 0.45)) {
-                dominantColor = dominant
+        // ⚠️ 解码 + 像素扫描**必须**离开主线程。
+        // 这个函数由 .task 调起, 默认跑在 MainActor 上; 原来直接在这里
+        // UIImage(data:) 再扫像素, 每次切歌都会把主线程堵住 —— 上下划切歌
+        // 连着来第二下就像卡死, 根因在此。
+        let dominant: RGBColor? = await Task.detached(priority: .utility) {
+            // 先吃已解码的内存缓存, 命中就连下载带解码都省了
+            if let cached = BeansImageCache.shared.image(for: url) {
+                return PaletteExtractor.dominantColor(in: cached)
             }
-        } catch {
-            // 提取失败：静默保持回退色
+            var req = URLRequest(url: url)
+            req.cachePolicy = .returnCacheDataElseLoad
+            guard let (data, _) = try? await URLSession.shared.data(for: req),
+                  let image = UIImage(data: data) else { return nil }
+            BeansImageCache.shared.insert(image, for: url)
+            return PaletteExtractor.dominantColor(in: image)
+        }.value
+        guard let dominant else { return }
+        withAnimation(.easeInOut(duration: 0.45)) {
+            dominantColor = dominant
         }
     }
 
