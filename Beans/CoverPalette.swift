@@ -75,6 +75,11 @@ struct CoverPalette {
     var text: Color
     var secondary: Color
     var glassTint: Color
+    /// 文字描边/垫底色，取 text 的反向一端。
+    /// 播放页真正的背景是**模糊封面图**(CoverBlurBackground)，亮度完全不可控，
+    /// 而 text/secondary 是按 backgroundTop 推的 —— 两者对不上，
+    /// 遇到黑白灰封面就会出现"字和背景一样灰"。垫一层反色阴影才能在任何封面上看清。
+    var halo: Color
 
     /// 无封面 / 提取失败时回退到全局主题色，保证任何场景都有可读配色
     static func fallback(colorScheme: ColorScheme) -> CoverPalette {
@@ -86,7 +91,8 @@ struct CoverPalette {
             accentSoft: accent.opacity(0.28),
             text: Color(uiColor: .beansLabel),
             secondary: Color(uiColor: .beansSecondary),
-            glassTint: accent
+            glassTint: accent,
+            halo: colorScheme == .dark ? .black.opacity(0.45) : .white.opacity(0.55)
         )
     }
 
@@ -113,8 +119,11 @@ struct CoverPalette {
             accent: accent,
             accentSoft: accent.opacity(0.26),
             text: text,
-            secondary: text.opacity(0.66),
-            glassTint: accent
+            // 0.66 太弱：歌词行还会再乘一次行内不透明度，两次相乘后
+            // 已播行只剩约 22% 白，在中灰背景上基本看不见
+            secondary: text.opacity(0.86),
+            glassTint: accent,
+            halo: bgTop.luminance > 0.52 ? .white.opacity(0.55) : .black.opacity(0.45)
         )
     }
 }

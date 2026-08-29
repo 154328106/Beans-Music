@@ -83,8 +83,8 @@ struct PlayerView: View {
     /// 侧边滑动切歌（抖音式刷视频交互，默认开启）
     @AppStorage("beans.swipeSwitchSong") private var swipeSwitchSong = true
     /// 歌词模糊控制：起始距离（距当前行几行开始模糊）+ 模糊强度（0 = 关闭）
-    @AppStorage("beans.lyricBlurStart") private var lyricBlurStart = 1
-    @AppStorage("beans.lyricBlurAmount") private var lyricBlurAmount = 1.1
+    @AppStorage("beans.lyricBlurStart") private var lyricBlurStart = 2
+    @AppStorage("beans.lyricBlurAmount") private var lyricBlurAmount = 0.9
     /// 歌词 3D 倾斜角度（0 = 关闭；顶部向后倒，立体透视感）
     @AppStorage("beans.lyricTilt") private var lyricTilt = 0
     /// 歌词左右倾斜角度（0 = 关闭；负值向左、正值向右，立体透视感）
@@ -796,7 +796,8 @@ struct PlayerView: View {
                             .foregroundStyle(item.isCurrent ? palette.accent : palette.secondary.opacity(0.5))
                         Text(item.text)
                             .font(BeansFont.appFont(12, item.isCurrent ? .semibold : .regular))
-                            .foregroundStyle(item.isCurrent ? palette.text : palette.secondary.opacity(0.8))
+                            .foregroundStyle(item.isCurrent ? palette.text : palette.secondary)
+                            .shadow(color: palette.halo, radius: 1.5, y: 0.5)
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                     }
@@ -921,7 +922,7 @@ struct PlayerView: View {
                 if lyrics.isEmpty {
                     emptyLyricsView
                 } else {
-                    LyricsSection(lyrics: lyrics, accent: lyricCurrentColor, secondary: lyricDimColor, gradientStart: lyricGradStart, gradientEnd: lyricGradEnd, baseFontSize: CGFloat(lyricFontSize) * CGFloat(lyricScale), lineSpacing: CGFloat(lyricLineSpacing), glowRadius: lyricGlowRadius, showTranslation: lyricTranslation, alignment: lyricAlign, offsetX: CGFloat(lyricOffsetX), anchor: lyricAnchor, glowColorOverride: lyricGlowColor, blurStart: CGFloat(lyricBlurStart), blurAmount: lyricBlurAmount, tilt: CGFloat(lyricTilt), tiltY: CGFloat(lyricTiltY), lyricOffset: CGFloat(lyricOffset)) { line in
+                    LyricsSection(lyrics: lyrics, halo: palette.halo, accent: lyricCurrentColor, secondary: lyricDimColor, gradientStart: lyricGradStart, gradientEnd: lyricGradEnd, baseFontSize: CGFloat(lyricFontSize) * CGFloat(lyricScale), lineSpacing: CGFloat(lyricLineSpacing), glowRadius: lyricGlowRadius, showTranslation: lyricTranslation, alignment: lyricAlign, offsetX: CGFloat(lyricOffsetX), anchor: lyricAnchor, glowColorOverride: lyricGlowColor, blurStart: CGFloat(lyricBlurStart), blurAmount: lyricBlurAmount, tilt: CGFloat(lyricTilt), tiltY: CGFloat(lyricTiltY), lyricOffset: CGFloat(lyricOffset)) { line in
                         BeansHaptics.tap()
                         player.seek(to: LyricTiming.seekTime(for: line, userOffset: lyricOffset))
                     }
@@ -1883,6 +1884,8 @@ struct LyricsSection: View {
     @EnvironmentObject private var player: PlayerManager
     @EnvironmentObject private var clock: PlaybackClock
     let lyrics: [LyricLine]
+    /// 每行垫的描边色（见 CoverPalette.halo）
+    var halo: Color = .black.opacity(0.45)
     let accent: Color
     let secondary: Color
     var gradientStart: Color? = nil
@@ -2039,9 +2042,10 @@ struct LyricsSection: View {
         let isCurrent = index == currentIndex
         let isPlayed = (currentIndex ?? -1) >= 0 && index < (currentIndex ?? 0)
         let distance = abs(index - (currentIndex ?? 0))
+        // 注意 secondary 自带 alpha，这里的值是**再乘一次**，别设太低
         let opacity: Double = isCurrent
             ? 1.0
-            : (isPlayed ? 0.38 : 0.72) - Double(min(distance, 4)) * 0.05
+            : (isPlayed ? 0.58 : 0.85) - Double(min(distance, 4)) * 0.04
         let size = isCurrent ? baseFontSize + 4 : baseFontSize - CGFloat(min(distance, 2)) * 1.5
         // 歌词行模糊：当前行与邻近行保持清晰，距离越远才越柔和（避免只剩一行清晰显得突兀）
         // 模糊起始距离与强度由用户控制（0 强度 = 完全关闭模糊）
@@ -2073,8 +2077,12 @@ struct LyricsSection: View {
                     color: isCurrent ? glowColor.opacity(glowRadius > 0 ? 0.55 : 0) : .clear,
                     radius: isCurrent ? glowRadius : 0
                 )
+                // 背景是模糊封面，亮度不可控：垫一层反色描边，
+                // 深色/浅色封面下都能把字从背景里拉出来。
+                // 当前行若已有光晕就跳过，否则暗描边叠在彩色光晕上会发浑
+                .shadow(color: (isCurrent && glowRadius > 0) ? .clear : halo, radius: 2, y: 0.5)
                 .blur(radius: blurRadius)
-                .opacity(max(opacity, 0.15))
+                .opacity(max(opacity, 0.25))
                 .scaleEffect(isCurrent ? 1.05 : 1)
                 .multilineTextAlignment(alignment == .leading ? .leading : .center)
                 .lineLimit(nil)
@@ -2214,8 +2222,8 @@ struct PlayerSettingsSheet: View {
     @AppStorage("beans.djVisualIntensity") private var djVisualIntensity = 0.8
     @AppStorage("beans.lyricGlowColorRaw") private var glowColorRaw = ""
     @AppStorage("beans.swipeSwitchSong") private var swipeSwitchSong = true
-    @AppStorage("beans.lyricBlurStart") private var lyricBlurStart = 1
-    @AppStorage("beans.lyricBlurAmount") private var lyricBlurAmount = 1.1
+    @AppStorage("beans.lyricBlurStart") private var lyricBlurStart = 2
+    @AppStorage("beans.lyricBlurAmount") private var lyricBlurAmount = 0.9
     @AppStorage("beans.lyricTilt") private var lyricTilt = 0
     @AppStorage("beans.lyricTiltY") private var lyricTiltY = 0
     @AppStorage("beans.lyricOffset") private var lyricOffset = 0.0
