@@ -43,6 +43,10 @@ struct RootView: View {
     @AppStorage("beans.tabLabelsVisible") private var tabLabelsVisible = true
     /// 可选高刷新率，默认开启；需要省电时可在设置里关闭。
     @AppStorage("beans.enableHighRefresh") private var enableHighRefresh = true
+    @AppStorage("beans.legacyTabCornerRadius") private var legacyTabCornerRadius = 32.0
+    @AppStorage("beans.legacyTabWidth") private var legacyTabWidth = 356.0
+    @AppStorage("beans.legacyTabOffsetX") private var legacyTabOffsetX = 0.0
+    @AppStorage("beans.legacyTabOffsetY") private var legacyTabOffsetY = 0.0
     /// 版本更新说明弹窗
     @State private var showWhatsNew = false
     /// 自动检测更新结果
@@ -267,6 +271,10 @@ struct RootView: View {
     }
 
     private var legacyFloatingTabBar: some View {
+        let cornerRadius = CGFloat(legacyTabCornerRadius)
+        let width = min(CGFloat(legacyTabWidth), max(300, UIScreen.main.bounds.width - 28))
+        let offsetX = CGFloat(legacyTabOffsetX)
+        let offsetY = CGFloat(legacyTabOffsetY)
         HStack(spacing: 4) {
             ForEach(RootTab.allCases) { tab in
                 Button {
@@ -308,20 +316,20 @@ struct RootView: View {
         }
         .padding(.horizontal, 7)
         .padding(.vertical, 5)
-        .frame(maxWidth: 372)
+        .frame(width: width)
         .background {
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(.clear)
                 .background {
                     VisualEffectBlur(style: .systemUltraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                 }
                 .overlay {
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .strokeBorder(.white.opacity(0.20), lineWidth: 0.7)
                 }
                 .overlay {
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [.white.opacity(0.18), .white.opacity(0.04), .black.opacity(0.03)],
@@ -329,12 +337,13 @@ struct RootView: View {
                                 endPoint: .bottom
                             )
                         )
-                        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                 }
                 .shadow(color: .black.opacity(0.16), radius: 18, y: 7)
         }
         .padding(.horizontal, 18)
         .padding(.bottom, 12)
+        .offset(x: offsetX, y: offsetY)
     }
 }
 

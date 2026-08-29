@@ -987,6 +987,10 @@ struct SettingsView: View {
     @AppStorage("beans.audioQuality") private var audioQualityRaw = BeansAudioQuality.exhigh.rawValue
     /// 底栏是否显示文字（关闭后只显示图标）
     @AppStorage("beans.tabLabelsVisible") private var tabLabelsVisible = true
+    @AppStorage("beans.legacyTabCornerRadius") private var legacyTabCornerRadius = 32.0
+    @AppStorage("beans.legacyTabWidth") private var legacyTabWidth = 356.0
+    @AppStorage("beans.legacyTabOffsetX") private var legacyTabOffsetX = 0.0
+    @AppStorage("beans.legacyTabOffsetY") private var legacyTabOffsetY = 0.0
     /// 官方地址不可用时，是否尝试内置音源
     @AppStorage("beans.enableUnblock") private var enableBuiltInSources = true
     /// 第三方音源播放会员歌成功时提醒，默认开启
@@ -1238,6 +1242,10 @@ struct SettingsView: View {
                 }
                 .toggleStyle(.switch)
                 .tint(Color.beansAmber)
+
+                Divider().overlay(Color.beansComment.opacity(0.15))
+
+                legacyTabBarSettings
 
                 Divider().overlay(Color.beansComment.opacity(0.15))
 
@@ -2014,6 +2022,81 @@ struct SettingsView: View {
             ToastCenter.shared.show("已恢复 \(count) 项设置")
         } else {
             backupMessage = "备份中未找到可恢复的设置"
+        }
+    }
+
+    private var legacyTabBarSettings: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: "iphone.gen3")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.beansAmber)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("低系统悬浮底栏")
+                        .font(BeansFont.appFont(15))
+                        .foregroundStyle(Color.beansLabel)
+                    Text("仅 iOS 26 以下生效，用来模拟高系统悬浮底栏")
+                        .font(BeansFont.appFont(11))
+                        .foregroundStyle(Color.beansComment)
+                }
+                Spacer()
+                Button("默认") {
+                    resetLegacyTabBar()
+                    BeansHaptics.select()
+                }
+                .font(BeansFont.appFont(12, .semibold))
+                .foregroundStyle(Color.beansAmber)
+                .buttonStyle(.plain)
+            }
+            settingsSlider("圆润度", valueText: "\(Int(legacyTabCornerRadius))") {
+                Slider(value: $legacyTabCornerRadius, in: 18...42, step: 1)
+                    .tint(Color.beansAmber)
+            }
+            settingsSlider("长度", valueText: "\(Int(legacyTabWidth))") {
+                Slider(value: $legacyTabWidth, in: 300...420, step: 1)
+                    .tint(Color.beansAmber)
+            }
+            settingsSlider("X 位置", valueText: signedIntText(legacyTabOffsetX)) {
+                Slider(value: $legacyTabOffsetX, in: -40...40, step: 1)
+                    .tint(Color.beansAmber)
+            }
+            settingsSlider("Y 位置", valueText: signedIntText(legacyTabOffsetY)) {
+                Slider(value: $legacyTabOffsetY, in: -36...36, step: 1)
+                    .tint(Color.beansAmber)
+            }
+        }
+        .padding(14)
+        .background {
+            BeansGlass(shape: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+    }
+
+    private func resetLegacyTabBar() {
+        legacyTabCornerRadius = 32
+        legacyTabWidth = 356
+        legacyTabOffsetX = 0
+        legacyTabOffsetY = 0
+    }
+
+    private func signedIntText(_ value: Double) -> String {
+        let intValue = Int(value.rounded())
+        if intValue == 0 { return "0" }
+        return intValue > 0 ? "+\(intValue)" : "\(intValue)"
+    }
+
+    private func settingsSlider<Content: View>(_ title: String, valueText: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(spacing: 5) {
+            HStack {
+                Text(title)
+                    .font(BeansFont.appFont(13))
+                    .foregroundStyle(Color.beansLabel)
+                Spacer()
+                Text(valueText)
+                    .font(BeansFont.appFont(12, .semibold))
+                    .foregroundStyle(Color.beansAmber)
+            }
+            content()
         }
     }
 
