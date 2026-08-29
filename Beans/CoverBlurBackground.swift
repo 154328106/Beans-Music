@@ -57,7 +57,9 @@ final class CoverBlurView: UIView {
         gradientLayer.colors = [UIColor.systemGray.cgColor, UIColor.systemGray2.cgColor]
         gradientLayer.startPoint = CGPoint(x: 0.5, y: 0)
         gradientLayer.endPoint = CGPoint(x: 0.5, y: 1)
-        gradientLayer.opacity = 0.62
+        // 0.62 太重：这层灰渐变会把整个背景洗成中灰，白色歌词直接糊在上面。
+        // 降到 0.38，让模糊封面本身的明暗透出来，前景文字才有对比度可言。
+        gradientLayer.opacity = 0.38
         gradientHost.layer.addSublayer(gradientLayer)
 
         addSubview(imageView)
@@ -115,9 +117,10 @@ final class CoverBlurView: UIView {
 
     func updateScheme(_ scheme: ColorScheme) {
         // 深浅遮罩：压暗/提亮背景，保证前景文字与控件始终可读
+        // 加重一档：背景够暗/够亮，前景才不用靠堆不透明度硬撑
         tintView.backgroundColor = scheme == .dark
-            ? UIColor.black.withAlphaComponent(0.30)
-            : UIColor.white.withAlphaComponent(0.10)
+            ? UIColor.black.withAlphaComponent(0.42)
+            : UIColor.white.withAlphaComponent(0.20)
     }
 
     func load(url: URL?) {
@@ -180,7 +183,8 @@ final class CoverBlurView: UIView {
             ?? UIColor.systemGray
         let bottom = areaAverage(of: sample, in: CGRect(x: 0, y: 0, width: 1, height: 0.5))
             ?? UIColor.systemGray2
-        return (top.lightened(0.28), bottom.darkened(0.48))
+        // 顶色原来提亮 0.28，叠上去后画面上半部分发白，歌词区正好落在那儿
+        return (top.lightened(0.14), bottom.darkened(0.48))
     }
 
     private static func areaAverage(of image: UIImage, in normalizedRect: CGRect) -> UIColor? {

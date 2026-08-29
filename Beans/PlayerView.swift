@@ -187,7 +187,9 @@ struct PlayerView: View {
         case "dark": return Color.black.opacity(0.55)
         default:
             if lyricDimColorRaw.hasPrefix("#"), let c = Color(hex: lyricDimColorRaw) { return c }
-            return palette.secondary
+            // 用 text 而不是 secondary：secondary 自带 alpha，歌词行还会再乘一次
+            // 行内不透明度，两次相乘就糊了。深色模式下这里就是纯白。
+            return palette.text
         }
     }
 
@@ -673,9 +675,13 @@ struct PlayerView: View {
 
                     // 封面（静态）
                     CoverImage(url: song?.coverURL, size: size, cornerRadius: coverRadius, emptyHint: player.isBuffering ? "等待开始播放…" : nil)
+                        // ⚠️ CoverSpin 必须在 matchedGeometryEffect **里面**。
+                        // 它是个 TimelineView，每帧重算一次视图树；反过来包的话，
+                        // 共享几何会跟着每帧重解，而封面⇄歌词切换时两个面板同时存在、
+                        // 用的又是同一个 namespace id —— 来回切几次就卡死。
+                        .modifier(CoverSpin(enabled: circularCover && circularCoverSpin, isPlaying: playerVisualsActive))
                         .matchedGeometryEffect(id: "playerCover", in: coverNS)
                         .id(song?.identityKey ?? "empty-cover")
-                        .modifier(CoverSpin(enabled: circularCover && circularCoverSpin, isPlaying: playerVisualsActive))
                         .overlay {
                             RoundedRectangle(cornerRadius: coverRadius, style: .continuous)
                                 .strokeBorder(.white.opacity(0.28), lineWidth: 1)
@@ -863,8 +869,9 @@ struct PlayerView: View {
                     toggleLyrics()
                 } label: {
                     CoverImage(url: song?.coverURL, size: 48, cornerRadius: circularCover ? 24 : 12)
-                        .matchedGeometryEffect(id: "playerCover", in: coverNS)
+                        // 同 albumPanel：旋转在里、共享几何在外
                         .modifier(CoverSpin(enabled: circularCover && circularCoverSpin, isPlaying: playerVisualsActive))
+                        .matchedGeometryEffect(id: "playerCover", in: coverNS)
                         .overlay {
                             RoundedRectangle(cornerRadius: circularCover ? 24 : 12, style: .continuous)
                                 .strokeBorder(.white.opacity(0.2), lineWidth: 1)
@@ -2982,7 +2989,8 @@ struct CoverSpin: ViewModifier {
 
     func body(content: Content) -> some View {
         if enabled {
-            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !isPlaying)) { context in
+            // 15°/秒 的慢转，30fps 完全够看；60fps 等于把整棵子树每秒重算 60 次
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isPlaying)) { context in
                 let angle = (context.date.timeIntervalSinceReferenceDate * 15)
                     .truncatingRemainder(dividingBy: 360)
                 return content
