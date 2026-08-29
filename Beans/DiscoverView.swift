@@ -1226,7 +1226,21 @@ struct KugouTopListDetailView: View {
 
     private var header: some View {
         HStack(spacing: 14) {
-            CoverImage(url: topList.coverURL, size: 88, cornerRadius: 16)
+            // 酷狗返回的榜单封面很花，跟列表页保持一致用自绘色块
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(LinearGradient(colors: [Color(red: 0.30, green: 0.62, blue: 0.95),
+                                              Color(red: 0.12, green: 0.36, blue: 0.72)],
+                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+                .frame(width: 88, height: 88)
+                .overlay {
+                    Text(topList.name)
+                        .font(BeansFont.appFont(15, .bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .minimumScaleFactor(0.5)
+                        .padding(8)
+                }
             VStack(alignment: .leading, spacing: 6) {
                 Text(topList.name)
                     .font(BeansFont.appFont(18, .bold))

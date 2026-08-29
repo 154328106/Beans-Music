@@ -324,9 +324,21 @@ final class KugouMusicAPI {
 
     /// 酷狗官方排行榜歌曲。
     func rankSongs(rankID: Int, limit: Int = 100) async throws -> [Song] {
+        // 两条数据源实测对比(2026-08-29, rankid=8888):
+        //   m.kugou.com/rank/info     30 首, **带 album_sizable_cover**
+        //   www.kugou.com 官网 global.features  22 首, 字段里**根本没有封面**
+        //     (只有 Hash/FileName/timeLen/album_id/encrypt_id/author_name)
+        // 所以优先走 m 站, 官网降为兜底 —— 否则整个酷狗榜都没有封面。
+        if let songs = try? await mobileRankSongs(rankID: rankID, limit: limit), !songs.isEmpty {
+            return songs
+        }
         if let songs = try? await officialWebRankSongs(rankID: rankID, limit: limit), !songs.isEmpty {
             return songs
         }
+        return try await mobileRankSongs(rankID: rankID, limit: limit)
+    }
+
+    private func mobileRankSongs(rankID: Int, limit: Int) async throws -> [Song] {
         var components = URLComponents(string: "https://m.kugou.com/rank/info")!
         components.queryItems = [
             URLQueryItem(name: "rankid", value: "\(rankID)"),
