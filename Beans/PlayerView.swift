@@ -1466,7 +1466,23 @@ struct PlayerView: View {
             guard self.song?.identityKey == identity else { return }
             self.lyrics = parsed
         }
-        if song.source == .kugou, let hash = song.kugouHash {
+        if song.source == .subsonic {
+            // 1) 先问服务器（Navidrome 的 getLyrics 可用时直接用；道理鱼实测 404）
+            if let raw = try? await SubsonicAPI.shared.lyrics(artist: song.artists, title: song.name),
+               !raw.isEmpty {
+                apply(LyricParser.parse(raw))
+                return
+            }
+            // 2) 服务器没有歌词：拿「歌名 歌手」去网易云找同名曲，借它的歌词。
+            //    本地文件基本都没有内嵌歌词，这条兜底才是实际管用的那条。
+            let key = "\(song.name) \(song.artists)".trimmingCharacters(in: .whitespaces)
+            if let matches = try? await NetEaseAPI.shared.search(keyword: key, limit: 3),
+               let best = matches.first,
+               let pair = try? await NetEaseAPI.shared.lyricWithTranslation(id: best.id),
+               let lrc = pair.lrc, !lrc.isEmpty {
+                apply(LyricParser.parse(lrc, translationRaw: pair.tlyric))
+            }
+        } else if song.source == .kugou, let hash = song.kugouHash {
             let raw = await KugouMusicAPI.shared.lyric(hash: hash, duration: song.duration)
             apply(LyricParser.parse(raw))
         } else if song.source == .qq, let mid = song.qqMid {

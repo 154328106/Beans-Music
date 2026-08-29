@@ -25,11 +25,7 @@ struct DiscoverView: View {
     }
     /// 首页数据源：记住上次选择，下次打开仍保持该平台（默认网易云）
     @AppStorage("beans.homeSource") private var homeSourceRaw = SearchProvider.netease.rawValue
-    @State private var subsonicSongs: [Song] = []
-    @State private var subsonicNewest: [SubsonicAlbum] = []
-    @State private var subsonicFrequent: [SubsonicAlbum] = []
-    @State private var subsonicRecentAlbums: [SubsonicAlbum] = []
-    @State private var subsonicStarred: [Song] = []
+    @State private var selectedSubsonicRank: SubsonicRankItem?
     private var homeProviders: [SearchProvider] { platformPrefs.enabledSearchProviders }
     /// 首页数据源：网易云 / QQ音乐（与搜索页同一控件样式）
     private var source: SearchProvider {
@@ -150,6 +146,10 @@ struct DiscoverView: View {
                 QQTopListDetailView(topID: info.id, name: info.name)
                     .environmentObject(player)
                     .environmentObject(auth)
+            }
+            .sheet(item: $selectedSubsonicRank) { item in
+                SubsonicRankDetailView(title: item.title, subtitle: item.subtitle, type: item.type)
+                    .environmentObject(player)
             }
             .sheet(item: $selectedKugouTopList) { info in
                 KugouTopListDetailView(topList: info)
@@ -626,144 +626,57 @@ struct DiscoverView: View {
 
     // MARK: - 动作
 
-    /// 首页的「本地音乐」：仿平台首页的多板块布局
+    /// 本地音乐的四个「榜」。Subsonic 没有真正的排行榜概念，
+    /// 这里是 getAlbumList2 的几种排序，用榜单形式呈现。
+    private static let subsonicRanks: [(title: String, subtitle: String, type: String)] = [
+        ("热听榜", "最多播放", "frequent"),
+        ("新歌榜", "最新加入", "newest"),
+        ("热歌榜", "评分最高", "highest"),
+        ("最近播放", "最近听过", "recent"),
+    ]
+
+    /// 首页的「本地音乐」：仿排行榜排版
     private var subsonicHomeSection: some View {
-        VStack(alignment: .leading, spacing: 26) {
+        VStack(alignment: .leading, spacing: 14) {
             if !SubsonicAuth.shared.isLoggedIn {
                 EmptyStateView(icon: "externaldrive.badge.plus", text: "还没连接音乐服务器，去「我的」页添加")
             } else {
-                subsonicSongRow(title: "随便听听", songs: subsonicSongs, trailing: "换一批") {
-                    Task { await loadSubsonicRandom() }
-                }
-                subsonicAlbumRow(title: "最近添加", albums: subsonicNewest)
-                subsonicAlbumRow(title: "最多播放", albums: subsonicFrequent)
-                subsonicAlbumRow(title: "最近播放", albums: subsonicRecentAlbums)
-                subsonicSongRow(title: "我的收藏", songs: subsonicStarred, trailing: nil, action: nil)
-            }
-        }
-    }
-
-    /// 横滑歌曲卡（与「每日推荐」同款）
-    @ViewBuilder
-    private func subsonicSongRow(title: String, songs: [Song], trailing: String?, action: (() -> Void)?) -> some View {
-        if !songs.isEmpty {
-            VStack(alignment: .leading, spacing: 14) {
-                if let trailing, let action {
-                    SectionHeader(title: title, trailing: trailing) {
-                        BeansHaptics.tap()
-                        action()
-                    }
-                } else {
-                    SectionHeader(title: title)
-                }
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 12) {
-                        ForEach(Array(songs.prefix(12).enumerated()), id: \.element.identityKey) { index, song in
-                            Button {
-                                BeansHaptics.tap()
-                                player.play(songs: songs, startAt: index)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    CoverImage(url: song.coverURL, size: 108, cornerRadius: 16)
-                                    Text(song.name)
-                                        .font(BeansFont.appFont(12, .semibold))
-                                        .foregroundStyle(Color.beansLabel)
-                                        .lineLimit(1)
-                                    Text(song.artists)
-                                        .font(BeansFont.appFont(10))
-                                        .foregroundStyle(Color.beansComment)
-                                        .lineLimit(1)
-                                }
-                                .frame(width: 108, alignment: .leading)
-                            }
-                            .buttonStyle(.plain)
+                SectionHeader(title: "排行榜")
+                VStack(spacing: 0) {
+                    ForEach(Array(Self.subsonicRanks.enumerated()), id: \.element.type) { index, rank in
+                        rankRow(index: index,
+                                name: rank.title,
+                                subtitle: rank.subtitle,
+                                coverURL: nil) {
+                            BeansHaptics.tap()
+                            selectedSubsonicRank = SubsonicRankItem(
+                                title: rank.title, subtitle: rank.subtitle, type: rank.type)
+                        }
+                        if index < Self.subsonicRanks.count - 1 {
+                            Divider().overlay(Color.beansComment.opacity(0.12))
                         }
                     }
-                    .padding(.vertical, 2)
                 }
-                .beansScrollIndicatorsHidden()
+                .padding(.horizontal, 14)
+                .padding(.vertical, 4)
+                .background {
+                    BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                }
+                .beansCardShadow(radius: 9, y: 3)
             }
         }
     }
 
-    /// 横滑专辑卡：点一张就把整张专辑丢进播放队列
-    @ViewBuilder
-    private func subsonicAlbumRow(title: String, albums: [SubsonicAlbum]) -> some View {
-        if !albums.isEmpty {
-            VStack(alignment: .leading, spacing: 14) {
-                SectionHeader(title: title)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 12) {
-                        ForEach(albums.prefix(12)) { album in
-                            Button {
-                                BeansHaptics.tap()
-                                Task { await playAlbum(album) }
-                            } label: {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    CoverImage(url: album.coverURL, size: 108, cornerRadius: 16)
-                                    Text(album.name)
-                                        .font(BeansFont.appFont(12, .semibold))
-                                        .foregroundStyle(Color.beansLabel)
-                                        .lineLimit(1)
-                                    Text(album.artist)
-                                        .font(BeansFont.appFont(10))
-                                        .foregroundStyle(Color.beansComment)
-                                        .lineLimit(1)
-                                }
-                                .frame(width: 108, alignment: .leading)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.vertical, 2)
-                }
-                .beansScrollIndicatorsHidden()
-            }
-        }
-    }
-
-    private func playAlbum(_ album: SubsonicAlbum) async {
-        guard let songs = try? await SubsonicAPI.shared.albumSongs(id: album.id), !songs.isEmpty else {
-            ToastCenter.shared.show("这张专辑没有取到曲目")
-            return
-        }
-        player.play(songs: songs, startAt: 0)
-    }
-
-    private func loadSubsonicRandom() async {
-        subsonicSongs = (try? await SubsonicAPI.shared.randomSongs(count: 30)) ?? []
-    }
-
-    /// 首页本地音乐的全部板块。各板块**互不影响**——
-    /// 某个接口在某些实现上不支持(如道理鱼没有 getRandomSongs)，只是那一栏为空，不会整页失败。
     private func loadSubsonic() async {
-        guard SubsonicAuth.shared.isLoggedIn else {
-            subsonicSongs = []
-            subsonicNewest = []
-            subsonicFrequent = []
-            subsonicRecentAlbums = []
-            subsonicStarred = []
-            return
-        }
-        async let random = SubsonicAPI.shared.randomSongs(count: 30)
-        async let newest = SubsonicAPI.shared.albums(type: "newest", size: 12)
-        async let frequent = SubsonicAPI.shared.albums(type: "frequent", size: 12)
-        async let recent = SubsonicAPI.shared.albums(type: "recent", size: 12)
-        async let starred = SubsonicAPI.shared.starredSongs(limit: 12)
-        subsonicSongs = (try? await random) ?? []
-        subsonicNewest = (try? await newest) ?? []
-        subsonicFrequent = (try? await frequent) ?? []
-        subsonicRecentAlbums = (try? await recent) ?? []
-        subsonicStarred = (try? await starred) ?? []
+        // 榜单内容进详情页时再拉；首页只画四行入口，不预拉数据
     }
 
     private func load(force: Bool = false) async {
         // 本地音乐不走平台那套缓存/榜单逻辑，单独拉曲目
         if source == .subsonic {
-            loading = subsonicSongs.isEmpty && subsonicNewest.isEmpty
-            errorMessage = nil
-            await loadSubsonic()
+            // 本地音乐首页只有四行榜单入口，没有需要预拉的数据
             loading = false
+            errorMessage = nil
             return
         }
         let cache = DiscoverCache.shared
