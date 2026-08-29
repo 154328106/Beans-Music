@@ -79,8 +79,7 @@ enum SearchProvider: String, CaseIterable, Identifiable {
         case .netease: return "BrandNetease"
         case .qq: return "BrandQQ"
         case .kugou: return "BrandKugou"
-        // 本地音乐用 SF Symbol, 没有品牌图
-        case .subsonic: return nil
+        case .subsonic: return "BrandLocal"
         }
     }
 }
@@ -408,6 +407,9 @@ struct SearchView: View {
                     historyStore.record(word)
                     Task { await startSearch(word) }
                 }
+                // 本地音乐(自建服务器)没有热搜榜, 整段跳过——
+                // 否则 hotWords 永远是空, LoadingStateView 会一直转圈
+                if provider != .subsonic {
                 SectionHeader(title: "\(provider.rawValue)热搜")
                 if hotWords.isEmpty {
                     LoadingStateView()
@@ -426,6 +428,7 @@ struct SearchView: View {
                             }
                         }
                     }
+                }
                 }
                 Spacer().frame(height: 130)
             }

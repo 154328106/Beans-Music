@@ -37,8 +37,7 @@ enum LibraryProvider: String, CaseIterable, Identifiable {
         case .netease: return "BrandNetease"
         case .qq: return "BrandQQ"
         case .kugou: return "BrandKugou"
-        // 用 SF Symbol, 没有品牌图
-        case .server: return nil
+        case .server: return "BrandLocal"
         }
     }
 }
