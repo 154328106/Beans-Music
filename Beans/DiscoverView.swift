@@ -634,8 +634,9 @@ struct DiscoverView: View {
     private static let subsonicRanks: [(title: String, subtitle: String, type: String)] = [
         ("热听榜", "最多播放", "frequent"),
         ("新歌榜", "最新加入", "newest"),
-        ("热歌榜", "评分最高", "highest"),
         ("最近播放", "最近听过", "recent"),
+        // 去掉了「热歌榜」(highest=评分最高) —— 实测 Navidrome 返回 0 张,
+        // 因为要手动给专辑打分才有数据, 常态是空榜。
     ]
 
     /// 首页的「本地音乐」：横滑卡 + 榜单列表并存，跟平台首页一个结构
