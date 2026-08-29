@@ -94,11 +94,6 @@ struct RootView: View {
                 TabBarAppearanceConfigurator(hidesSystemTabBarOnLegacy: !usesSystemFloatingTabBar)
             }
 
-            RootTopBlur()
-                .allowsHitTesting(false)
-                .ignoresSafeArea(edges: .top)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-
             if !usesSystemFloatingTabBar {
                 legacyFloatingTabBar
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -340,36 +335,6 @@ struct RootView: View {
         }
         .padding(.horizontal, 18)
         .padding(.bottom, 12)
-    }
-}
-
-private struct RootTopBlur: View {
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        VStack(spacing: 0) {
-            VisualEffectBlur(style: colorScheme == .dark ? .systemChromeMaterialDark : .systemChromeMaterialLight)
-                .frame(height: 58)
-                .overlay {
-                    LinearGradient(
-                        colors: [
-                            (colorScheme == .dark ? Color.black : Color.white).opacity(0.08),
-                            .clear
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                }
-            LinearGradient(
-                colors: [
-                    (colorScheme == .dark ? Color.black : Color.white).opacity(0.08),
-                    .clear
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 34)
-        }
     }
 }
 
