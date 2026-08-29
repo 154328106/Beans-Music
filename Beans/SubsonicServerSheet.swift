@@ -13,7 +13,7 @@ struct SubsonicServerSheet: View {
             List {
                 if auth.servers.isEmpty {
                     Section {
-                        Text("还没有添加服务器")
+                        Text("还没有添加服务器，点右上角 + 添加")
                             .foregroundStyle(.secondary)
                     } footer: {
                         Text("支持 Subsonic 协议的自建服务：Navidrome、道理鱼音乐、gonic、Airsonic 等。")
@@ -57,19 +57,19 @@ struct SubsonicServerSheet: View {
                     }
                 }
 
-                Section {
-                    Button {
-                        adding = true
-                    } label: {
-                        Label("添加服务器", systemImage: "plus.circle")
-                    }
-                }
             }
             .navigationTitle("音乐服务器")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button("完成") { dismiss() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        adding = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
                 }
             }
             .sheet(item: $editing) { s in

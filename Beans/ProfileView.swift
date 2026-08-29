@@ -687,11 +687,9 @@ struct ProfileView: View {
     private var subsonicCard: some View {
         Button {
             BeansHaptics.tap()
-            if subsonicAuth.isLoggedIn {
-                showSubsonicLibrary = true
-            } else {
-                showSubsonicServer = true
-            }
+            // 「我的」这个入口是**服务器管理**（列表/新增/编辑），
+            // 浏览曲库在「音乐库」标签页，两者不要混
+            showSubsonicServer = true
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "externaldrive.connected.to.line.below")
@@ -703,13 +701,13 @@ struct ProfileView: View {
                         .font(BeansFont.appFont(14, .semibold))
                         .foregroundStyle(Color.beansLabel)
                     Text(subsonicAuth.isLoggedIn
-                         ? "已连接 \(subsonicAuth.serverName) · 点击浏览曲库"
+                         ? "已添加 \(subsonicAuth.servers.count) 台 · 当前 \(subsonicAuth.serverName)"
                          : "连接 Navidrome / 道理鱼音乐等自建服务")
                         .font(BeansFont.appFont(11))
                         .foregroundStyle(Color.beansComment)
                 }
                 Spacer()
-                Image(systemName: subsonicAuth.isLoggedIn ? "chevron.right" : "plus.circle")
+                Image(systemName: "chevron.right")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color.beansComment)
             }
@@ -722,9 +720,9 @@ struct ProfileView: View {
         .beansCardShadow(radius: 9, y: 3)
         .contextMenu {
             Button {
-                showSubsonicServer = true
+                showSubsonicLibrary = true
             } label: {
-                Label("服务器设置", systemImage: "gearshape")
+                Label("浏览曲库", systemImage: "music.note.list")
             }
         }
     }
