@@ -72,6 +72,14 @@ struct RootView: View {
         usesSystemFloatingTabBar ? 62 : 80
     }
 
+    private var legacyTabResolvedCornerRadius: CGFloat {
+        CGFloat(legacyTabCornerRadius)
+    }
+
+    private var legacyTabResolvedWidth: CGFloat {
+        min(CGFloat(legacyTabWidth), max(300, UIScreen.main.bounds.width - 28))
+    }
+
     var body: some View {
         let _ = theme.accent
         ZStack {
@@ -271,10 +279,6 @@ struct RootView: View {
     }
 
     private var legacyFloatingTabBar: some View {
-        let cornerRadius = CGFloat(legacyTabCornerRadius)
-        let width = min(CGFloat(legacyTabWidth), max(300, UIScreen.main.bounds.width - 28))
-        let offsetX = CGFloat(legacyTabOffsetX)
-        let offsetY = CGFloat(legacyTabOffsetY)
         HStack(spacing: 4) {
             ForEach(RootTab.allCases) { tab in
                 Button {
@@ -316,20 +320,20 @@ struct RootView: View {
         }
         .padding(.horizontal, 7)
         .padding(.vertical, 5)
-        .frame(width: width)
+        .frame(width: legacyTabResolvedWidth)
         .background {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: legacyTabResolvedCornerRadius, style: .continuous)
                 .fill(.clear)
                 .background {
                     VisualEffectBlur(style: .systemUltraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: legacyTabResolvedCornerRadius, style: .continuous))
                 }
                 .overlay {
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: legacyTabResolvedCornerRadius, style: .continuous)
                         .strokeBorder(.white.opacity(0.20), lineWidth: 0.7)
                 }
                 .overlay {
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: legacyTabResolvedCornerRadius, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [.white.opacity(0.18), .white.opacity(0.04), .black.opacity(0.03)],
@@ -337,13 +341,13 @@ struct RootView: View {
                                 endPoint: .bottom
                             )
                         )
-                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: legacyTabResolvedCornerRadius, style: .continuous))
                 }
                 .shadow(color: .black.opacity(0.16), radius: 18, y: 7)
         }
         .padding(.horizontal, 18)
         .padding(.bottom, 12)
-        .offset(x: offsetX, y: offsetY)
+        .offset(x: CGFloat(legacyTabOffsetX), y: CGFloat(legacyTabOffsetY))
     }
 }
 
