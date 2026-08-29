@@ -254,11 +254,38 @@ final class SubsonicAPI {
         return Self.asArray(box["song"]).map(mapSong)
     }
 
-    /// 随机曲目（首页「随便听听」用）
+    /// 随机曲目（首页与「随便听听」用）。
+    ///
+    /// ⚠️ `getRandomSongs.view` 不是所有实现都有——实测「道理鱼音乐」直接 **404**。
+    /// 所以拿不到时退回「最新专辑 → 逐张取曲目」拼一份，再打乱。
+    /// Navidrome 支持原生接口，走不到兜底。
     func randomSongs(count: Int = 50) async throws -> [Song] {
-        let r = try await request("getRandomSongs.view", [URLQueryItem(name: "size", value: String(count))])
-        let box = r["randomSongs"] as? [String: Any] ?? [:]
-        return Self.asArray(box["song"]).map(mapSong)
+        if let songs = try? await request("getRandomSongs.view", [URLQueryItem(name: "size", value: String(count))]) {
+            let box = songs["randomSongs"] as? [String: Any] ?? [:]
+            let list = Self.asArray(box["song"]).map(mapSong)
+            if !list.isEmpty { return list }
+        }
+        return try await songsFromAlbums(limit: count)
+    }
+
+    /// 兜底：把最新的若干张专辑摊平成曲目列表。
+    ///
+    /// 实测用户的库里**多数专辑只有 1 首**（单曲成辑），所以不能按"一张十首"估，
+    /// 直接按 limit 张来取；串行会很慢，用 TaskGroup 并发拉。
+    private func songsFromAlbums(limit: Int) async throws -> [Song] {
+        let list = try await albums(type: "newest", size: min(50, max(limit, 10)))
+        guard !list.isEmpty else { return [] }
+        let ids = list.map(\.id)
+        var out: [Song] = []
+        await withTaskGroup(of: [Song].self) { group in
+            for id in ids {
+                group.addTask { (try? await self.albumSongs(id: id)) ?? [] }
+            }
+            for await songs in group {
+                out.append(contentsOf: songs)
+            }
+        }
+        return Array(out.shuffled().prefix(limit))
     }
 
     /// 歌词（Subsonic 的 getLyrics 只认歌名+歌手，拿不到就返回空串）
