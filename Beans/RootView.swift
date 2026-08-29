@@ -65,7 +65,7 @@ struct RootView: View {
     }
 
     private var miniPlayerBottomPadding: CGFloat {
-        usesSystemFloatingTabBar ? 62 : 84
+        usesSystemFloatingTabBar ? 62 : 80
     }
 
     var body: some View {
@@ -272,7 +272,7 @@ struct RootView: View {
     }
 
     private var legacyFloatingTabBar: some View {
-        HStack(spacing: tabLabelsVisible ? 6 : 10) {
+        HStack(spacing: 4) {
             ForEach(RootTab.allCases) { tab in
                 Button {
                     guard selection != tab else { return }
@@ -282,41 +282,64 @@ struct RootView: View {
                     }
                 } label: {
                     let selected = selection == tab
-                    HStack(spacing: tabLabelsVisible ? 5 : 0) {
+                    VStack(spacing: 3) {
                         Image(systemName: tab.icon)
-                            .font(.system(size: 16, weight: selected ? .bold : .semibold))
+                            .font(.system(size: 17, weight: selected ? .semibold : .medium))
+                            .symbolRenderingMode(.hierarchical)
                         if tabLabelsVisible {
                             Text(tab.title)
-                                .font(BeansFont.appFont(11, selected ? .bold : .semibold))
+                                .font(BeansFont.appFont(10, selected ? .semibold : .medium))
                                 .lineLimit(1)
-                                .minimumScaleFactor(0.82)
+                                .minimumScaleFactor(0.78)
                         }
                     }
-                    .foregroundStyle(selected ? Color.white : Color.beansLabel.opacity(0.76))
+                    .foregroundStyle(selected ? Color.beansAmber : Color.beansLabel.opacity(0.70))
                     .frame(maxWidth: .infinity)
-                    .frame(height: 42)
+                    .frame(height: 48)
                     .background {
-                        Capsule()
-                            .fill(selected ? Color.beansAmber : Color.clear)
+                        if selected {
+                            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                                .fill(Color.beansAmber.opacity(0.12))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 17, style: .continuous)
+                                        .strokeBorder(Color.beansAmber.opacity(0.18), lineWidth: 0.7)
+                                }
+                        }
                     }
-                    .contentShape(Capsule())
+                    .contentShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
                 }
-                .buttonStyle(GlassPressButtonStyle(scale: 0.92))
+                .buttonStyle(GlassPressButtonStyle(scale: 0.94))
             }
         }
-        .padding(6)
-        .frame(maxWidth: 390)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 5)
+        .frame(maxWidth: 372)
         .background {
             RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(.ultraThinMaterial)
+                .fill(.clear)
+                .background {
+                    VisualEffectBlur(style: .systemUltraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                }
                 .overlay {
                     RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .strokeBorder(.white.opacity(0.22), lineWidth: 0.8)
+                        .strokeBorder(.white.opacity(0.20), lineWidth: 0.7)
                 }
-                .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [.white.opacity(0.18), .white.opacity(0.04), .black.opacity(0.03)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                }
+                .shadow(color: .black.opacity(0.16), radius: 18, y: 7)
         }
-        .padding(.horizontal, 14)
-        .padding(.bottom, 14)
+        .padding(.horizontal, 18)
+        .padding(.bottom, 12)
     }
 }
 
