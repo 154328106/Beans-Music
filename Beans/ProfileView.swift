@@ -121,7 +121,7 @@ struct ProfileView: View {
                     ForEach(profileOrder, id: \.self) { key in
                         switch key {
                         case "账号":
-                            userCard
+                            accountDisclosure
                         case "关于":
                             aboutSection
                         default:
@@ -264,6 +264,35 @@ struct ProfileView: View {
         .transition(.opacity)
     }
 
+    /// 账号（折叠）：收起时只显示当前登录状态，展开才是完整卡片
+    private var accountDisclosure: some View {
+        DisclosureGroup {
+            userCard
+                .padding(.top, 6)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "person.crop.circle")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.beansAmber)
+                    .frame(width: 26)
+                Text("账号")
+                    .font(BeansFont.appFont(14, .semibold))
+                    .foregroundStyle(Color.beansLabel)
+                Spacer()
+                Text(hasVisibleAccountLogin ? "已登录" : "未登录")
+                    .font(BeansFont.appFont(11))
+                    .foregroundStyle(Color.beansComment)
+            }
+            .padding(.vertical, 2)
+        }
+        .tint(Color.beansAmber)
+        .padding(16)
+        .background {
+            BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+        .beansCardShadow(radius: 9, y: 3)
+    }
+
     private var userCard: some View {
         VStack(spacing: 16) {
             Button {
@@ -316,11 +345,7 @@ struct ProfileView: View {
                 platformStatusRow
             }
         }
-        .padding(16)
-        .background {
-                        BeansGlass(shape: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        }
-        .beansCardShadow(radius: 10, y: 4)
+        // 外层折叠区已经有玻璃卡了，这里不再叠一层背景/阴影
     }
 
     /// 每个登录平台单独展示登录成功状态（网易云 / QQ 音乐）
@@ -792,7 +817,8 @@ struct ProfileView: View {
             .padding(.top, 6)
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: "shield.checkmark")
+                // 正确的符号名是 checkmark.shield（shield.checkmark 不存在，会渲染成空白）
+                Image(systemName: "checkmark.shield")
                     .font(.system(size: 14))
                     .foregroundStyle(Color.beansAmber)
                     .frame(width: 26)

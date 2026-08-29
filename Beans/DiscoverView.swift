@@ -360,7 +360,8 @@ struct DiscoverView: View {
             }
         } else if source == .kugou {
             ForEach(Array(kugouTopLists.prefix(displayedRankCount).enumerated()), id: \.element.id) { index, info in
-                rankRow(index: index, name: info.name, subtitle: info.updateFrequency, coverURL: info.coverURL) {
+                // 酷狗返回的榜单封面很花，统一改成自绘渐变色块（coverURL 传 nil 即走占位）
+                rankRow(index: index, name: info.name, subtitle: info.updateFrequency, coverURL: nil) {
                     BeansHaptics.tap()
                     selectedKugouTopList = info
                 }
@@ -400,7 +401,11 @@ struct DiscoverView: View {
                     .font(BeansFont.appFont(16, .bold, .rounded))
                     .foregroundStyle(index < 3 ? Color.beansAmber : Color.beansComment)
                     .frame(width: 24)
-                CoverImage(url: coverURL, size: 52, cornerRadius: 12)
+                if let coverURL {
+                    CoverImage(url: coverURL, size: 52, cornerRadius: 12)
+                } else {
+                    rankCoverTile(name: name)
+                }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(name)
                         .font(BeansFont.appFont(15, .semibold))
@@ -422,6 +427,32 @@ struct DiscoverView: View {
         .buttonStyle(.plain)
     }
 
+    /// 榜单占位色块：渐变底 + 榜名，用于封面不好看/拿不到的平台
+    private func rankCoverTile(name: String) -> some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(qqRankGradient(name))
+            .frame(width: 52, height: 52)
+            .overlay {
+                Text(rankShortName(name))
+                    .font(BeansFont.appFont(12, .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.55)
+                    .padding(4)
+            }
+    }
+
+    /// 榜名精简：去掉平台前缀，只留「热歌榜」这种核心词
+    private func rankShortName(_ name: String) -> String {
+        var s = name
+        for prefix in ["酷狗音乐", "酷狗", "QQ音乐", "网易云音乐", "网易云"] {
+            if s.hasPrefix(prefix) { s.removeFirst(prefix.count) }
+        }
+        s = s.trimmingCharacters(in: .whitespaces)
+        return s.isEmpty ? name : String(s.prefix(5))
+    }
+
     /// QQ 峰尖榜占位渐变（保留备用）
     private func qqRankGradient(_ name: String) -> LinearGradient {
         let palettes: [[Color]] = [
@@ -432,7 +463,8 @@ struct DiscoverView: View {
             [Color(red: 0.62, green: 0.45, blue: 0.90), Color(red: 0.40, green: 0.25, blue: 0.68)],
             [Color(red: 0.30, green: 0.70, blue: 0.85), Color(red: 0.16, green: 0.45, blue: 0.65)]
         ]
-        let seed = abs(name.hashValue) % palettes.count
+        // 不能用 hashValue：它每进程加盐，同一个榜每次启动都换色
+        let seed = name.unicodeScalars.reduce(0) { ($0 &+ Int($1.value)) % 9973 } % palettes.count
         return LinearGradient(colors: palettes[seed], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
