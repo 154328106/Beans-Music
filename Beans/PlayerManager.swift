@@ -84,6 +84,9 @@ final class PlayerManager: NSObject, ObservableObject {
     private var sleepTimer: Timer?
     private var lastCountedSongID: String?
     private var wasPlayingBeforeInterruption = false
+    private var lastPublishedProgress: Double = -1
+    private var lastNowPlayingArtworkKey: String?
+    private static let nowPlayingArtworkCache = NSCache<NSURL, UIImage>()
 
     private let historyKey = "beans.history"
     private let countsKey = "beans.playcounts"
@@ -623,10 +626,13 @@ final class PlayerManager: NSObject, ObservableObject {
             bumpPlayCount(song)
             lastCountedSongID = song.identityKey
         }
-        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.1, preferredTimescale: 600), queue: .main) { [weak self] time in
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.2, preferredTimescale: 600), queue: .main) { [weak self] time in
             guard let self, let player = self.player else { return }
             if time.seconds.isFinite {
-                self.progress = time.seconds
+                if abs(time.seconds - self.lastPublishedProgress) >= 0.18 {
+                    self.lastPublishedProgress = time.seconds
+                    self.progress = time.seconds
+                }
             }
             if let itemDuration = player.currentItem?.duration, itemDuration.isNumeric {
                 let seconds = itemDuration.seconds
@@ -673,6 +679,7 @@ final class PlayerManager: NSObject, ObservableObject {
         timeControlStatusObserver = nil
         playbackConfirmed = false
         pendingThirdPartyVIPNotice = nil
+        lastPublishedProgress = -1
     }
 
     private func thirdPartyVIPNotice(for song: Song, sourceTitle: String) -> ThirdPartyVIPNotice? {
@@ -847,7 +854,7 @@ final class PlayerManager: NSObject, ObservableObject {
 
     private func updateNowPlaying() {
         guard let song = currentSong else { return }
-        let info: [String: Any] = [
+        var info: [String: Any] = [
             MPMediaItemPropertyTitle: song.name,
             MPMediaItemPropertyArtist: song.artists,
             MPMediaItemPropertyAlbumTitle: song.album,
@@ -855,16 +862,25 @@ final class PlayerManager: NSObject, ObservableObject {
             MPNowPlayingInfoPropertyElapsedPlaybackTime: progress,
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? rate : 0.0,
         ]
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
         if let artworkURL = song.coverURL {
-            Task {
-                if let data = try? Data(contentsOf: artworkURL), let image = UIImage(data: data) {
-                    var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-                    updated[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                    MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
+            let artworkKey = song.identityKey + "|" + artworkURL.absoluteString
+            if let cached = Self.nowPlayingArtworkCache.object(forKey: artworkURL as NSURL) {
+                info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: cached.size) { _ in cached }
+            } else if lastNowPlayingArtworkKey != artworkKey {
+                lastNowPlayingArtworkKey = artworkKey
+                Task {
+                    if let data = try? Data(contentsOf: artworkURL), let image = UIImage(data: data) {
+                        Self.nowPlayingArtworkCache.setObject(image, forKey: artworkURL as NSURL)
+                        var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+                        updated[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                        MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
+                    }
                 }
             }
+        } else {
+            lastNowPlayingArtworkKey = nil
         }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
     private func setupRemoteCommands() {

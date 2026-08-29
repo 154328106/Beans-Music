@@ -54,6 +54,8 @@ struct PlayerView: View {
     @AppStorage("beans.playerBreath") private var playerBreath = 0.6
     /// 播放控件颜色是否跟随封面主色；关闭后使用全局主题色
     @AppStorage("beans.playerControlsUseCoverColor") private var controlsUseCoverColor = true
+    /// 播放器顶部与底部控制按钮的统一样式
+    @AppStorage("beans.playerButtonStyle") private var playerButtonStyleRaw = BeansPlayerButtonStyle.glass.rawValue
     /// 显示歌词翻译（借鉴 Kumone：网易云 tlyric）
     @AppStorage("beans.lyricTranslation") private var lyricTranslation = true
     /// 进度条样式：0 流光 / 1 辉光 / 2 极光 / 3 波浪
@@ -135,6 +137,18 @@ struct PlayerView: View {
 
     private var controlAccentSoft: Color {
         controlsUseCoverColor ? palette.accentSoft : Color.beansAmber.opacity(0.28)
+    }
+
+    private var playerButtonStyle: BeansPlayerButtonStyle {
+        BeansPlayerButtonStyle(rawValue: playerButtonStyleRaw) ?? .glass
+    }
+
+    private var playerButtonText: Color {
+        palette.text
+    }
+
+    private var playerButtonSecondaryText: Color {
+        palette.secondary
     }
 
     private var progressAccent: Color {
@@ -293,6 +307,11 @@ struct PlayerView: View {
         .onChange(of: layoutData) { newValue in
             PlayerLayoutStore.save(newValue)
         }
+        .onAppear {
+            if let path = LyricBackgroundStore.restoreFromBackup(), lyricBackgroundImagePath != path {
+                lyricBackgroundImagePath = path
+            }
+        }
         .sheet(isPresented: $showQueue) { QueueView().environmentObject(player) }
         .sheet(isPresented: $showSleepTimer) { SleepTimerSheet().environmentObject(player) }
         .sheet(isPresented: $showAddToPlaylist) {
@@ -395,7 +414,7 @@ struct PlayerView: View {
 
     @ViewBuilder
     private var lyricPlayerBackgroundLayer: some View {
-        if let image = UIImage(contentsOfFile: lyricBackgroundImagePath) {
+        if let image = BeansImageFileCache.image(at: lyricBackgroundImagePath) {
             GeometryReader { proxy in
                 Image(uiImage: image)
                     .resizable()
@@ -423,10 +442,10 @@ struct PlayerView: View {
             } label: {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(palette.text)
+                    .foregroundStyle(playerButtonText)
                     .frame(width: 38, height: 38)
                     .background {
-                                                BeansGlass(shape: Circle())
+                        playerButtonSurface(size: 38)
                     }
                     .clipShape(Circle())
             }
@@ -473,10 +492,10 @@ struct PlayerView: View {
             } label: {
                 Image(systemName: favorites.isLiked(song) ? "heart.fill" : "heart")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(favorites.isLiked(song) ? Color(red: 0.95, green: 0.33, blue: 0.42) : palette.text)
+                    .foregroundStyle(favorites.isLiked(song) ? Color(red: 0.95, green: 0.33, blue: 0.42) : playerButtonText)
                     .frame(width: 38, height: 38)
                     .background {
-                                                BeansGlass(shape: Circle())
+                        playerButtonSurface(size: 38, active: favorites.isLiked(song))
                     }
                     .clipShape(Circle())
             }
@@ -1092,6 +1111,58 @@ struct PlayerView: View {
         .padding(.horizontal, 8)
     }
 
+    @ViewBuilder
+    private func playerButtonSurface(size: CGFloat, active: Bool = false, primary: Bool = false) -> some View {
+        switch playerButtonStyle {
+        case .glass:
+            ZStack {
+                BeansGlass(shape: Circle())
+                if primary {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [controlAccent.opacity(0.62), controlAccentSoft.opacity(0.56)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+                Circle()
+                    .strokeBorder(
+                        active || primary ? controlAccent.opacity(0.52) : .white.opacity(0.22),
+                        lineWidth: primary ? 1.1 : 0.8
+                    )
+            }
+            .frame(width: size, height: size)
+        case .minimal:
+            ZStack {
+                if primary {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [controlAccent.opacity(0.92), controlAccent.opacity(0.58)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .shadow(color: controlAccent.opacity(0.32), radius: 14, y: 7)
+                } else if active {
+                    Circle()
+                        .fill(controlAccent.opacity(0.16))
+                } else {
+                    Circle()
+                        .fill(Color.white.opacity(0.001))
+                }
+                Circle()
+                    .strokeBorder(
+                        primary ? .white.opacity(0.20) : (active ? controlAccent.opacity(0.42) : palette.secondary.opacity(0.18)),
+                        lineWidth: 0.8
+                    )
+            }
+            .frame(width: size, height: size)
+        }
+    }
+
     /// 循环 / 随机播放按钮（随机模式高亮）
     private var modeButton: some View {
         Button {
@@ -1100,10 +1171,10 @@ struct PlayerView: View {
         } label: {
             Image(systemName: player.playMode.icon)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(player.playMode == .shuffle ? controlAccent : palette.secondary)
-                .frame(width: 24, height: 24)
+                .foregroundStyle(player.playMode == .shuffle ? controlAccent : playerButtonSecondaryText)
+                .frame(width: 30, height: 30)
                 .background {
-                                        BeansGlass(shape: Circle())
+                    playerButtonSurface(size: 30, active: player.playMode == .shuffle)
                 }
                 .clipShape(Circle())
         }
@@ -1119,10 +1190,10 @@ struct PlayerView: View {
         } label: {
             Image(systemName: "list.bullet")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(palette.secondary)
-                .frame(width: 24, height: 24)
+                .foregroundStyle(playerButtonSecondaryText)
+                .frame(width: 30, height: 30)
                 .background {
-                                        BeansGlass(shape: Circle())
+                    playerButtonSurface(size: 30)
                 }
                 .clipShape(Circle())
         }
@@ -1137,10 +1208,10 @@ struct PlayerView: View {
         } label: {
             Image(systemName: icon)
                 .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(accent ? controlAccent : palette.text)
+                .foregroundStyle(accent ? controlAccent : playerButtonText)
                 .frame(width: 34, height: 34)
                 .background {
-                                        BeansGlass(shape: Circle())
+                    playerButtonSurface(size: 34, active: accent)
                 }
                 .clipShape(Circle())
         }
@@ -1158,21 +1229,9 @@ struct PlayerView: View {
                 .foregroundStyle(Color.white)
                 .frame(width: 56, height: 56)
                 .background {
-                                        BeansGlass(shape: Circle())
-                    .overlay {
-                        Circle().fill(
-                            LinearGradient(
-                                colors: [controlAccent.opacity(0.55), controlAccentSoft.opacity(0.55)],
-                                startPoint: .top, endPoint: .bottom
-                            )
-                        )
-                    }
-                    .overlay {
-                        Circle().strokeBorder(.white.opacity(0.30), lineWidth: 1)
-                    }
+                    playerButtonSurface(size: 56, primary: true)
                 }
                 .clipShape(Circle())
-                .shadow(color: controlAccent.opacity(0.4), radius: 14, y: 7)
         }
         .buttonStyle(GlassPressButtonStyle(scale: 0.9))
     }
@@ -2149,9 +2208,10 @@ struct PlayerSettingsSheet: View {
     @AppStorage("beans.lyricBackground.blur") private var lyricBackgroundBlur = 12.0
     @AppStorage("beans.lyricBackground.syncCover") private var lyricBackgroundSyncCover = false
     @AppStorage("beans.audio.mixothers.v1") private var mixesWithOthers = false
+    @AppStorage("beans.playerButtonStyle") private var playerButtonStyleRaw = BeansPlayerButtonStyle.glass.rawValue
     @Environment(\.dismiss) private var dismiss
-    @State private var playbackExpanded = false
-    @State private var lyricDisplayExpanded = false
+    @State private var playbackExpanded = true
+    @State private var lyricDisplayExpanded = true
     @State private var lyricEffectExpanded = false
     @State private var layoutExpanded = false
     @State private var coverExpanded = false
@@ -2312,6 +2372,11 @@ struct PlayerSettingsSheet: View {
             }
             .ignoresSafeArea()
         }
+        .onAppear {
+            if let path = LyricBackgroundStore.restoreFromBackup(), lyricBackgroundImagePath != path {
+                lyricBackgroundImagePath = path
+            }
+        }
     }
 
     // MARK: - 设置卡片（液态玻璃圆角分组，紧凑排版）
@@ -2394,62 +2459,136 @@ struct PlayerSettingsSheet: View {
     /// 播放卡片：切歌 / 进度条样式 / 背景光晕 / DJ 视觉
     private var playingCard: some View {
         settingCard("播放", isExpanded: $playbackExpanded) {
-            settingToggle("播放控件跟随封面取色", isOn: $controlsUseCoverColor,
-                          caption: "开启：播放键、进度条和高亮跟随封面；关闭：使用你设置的主题色")
+            playerButtonStyleSelector
             Divider().opacity(0.5)
-            settingToggle("播放页上下滑动切换歌曲", isOn: $swipeSwitchSong,
-                          caption: "上下滑动像刷视频一样切歌：上滑下一首、下滑上一首")
+            CompactSettingGroup {
+                settingToggle("控件跟随封面取色", isOn: $controlsUseCoverColor,
+                              caption: "关闭后使用全局主题色")
+                Divider().opacity(0.35)
+                settingToggle("上下滑动切歌", isOn: $swipeSwitchSong,
+                              caption: "上滑下一首，下滑上一首")
+                Divider().opacity(0.35)
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("进度条颜色")
+                            .font(BeansFont.appFont(13))
+                            .foregroundStyle(Color.beansLabel)
+                        Text(progressAccentHex.isEmpty ? "跟随播放控件" : "自定义")
+                            .font(BeansFont.appFont(12))
+                            .foregroundStyle(Color.beansComment)
+                    }
+                    Spacer()
+                    ColorPicker("", selection: progressAccentColor)
+                        .labelsHidden()
+                    Button {
+                        progressAccentHex = ""
+                        BeansHaptics.select()
+                    } label: {
+                        Text("跟随")
+                            .font(BeansFont.appFont(12, .semibold))
+                            .foregroundStyle(Color.beansAmber)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.beansAmber.opacity(0.12), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
             Divider().opacity(0.5)
             Text("进度条样式")
-                .font(BeansFont.appFont(13))
+                .font(BeansFont.appFont(13, .semibold))
                 .foregroundStyle(Color.beansLabel)
             progressStyleGrid
-            Divider().opacity(0.5)
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("进度条颜色")
-                        .font(BeansFont.appFont(13))
-                        .foregroundStyle(Color.beansLabel)
-                    Text(progressAccentHex.isEmpty ? "跟随播放控件颜色" : "使用自定义颜色")
-                        .font(BeansFont.appFont(12))
-                        .foregroundStyle(Color.beansComment)
-                }
-                Spacer()
-                ColorPicker("", selection: progressAccentColor)
-                    .labelsHidden()
-                Button {
-                    progressAccentHex = ""
-                    BeansHaptics.select()
-                } label: {
-                    Text("跟随")
-                        .font(BeansFont.appFont(12, .semibold))
-                        .foregroundStyle(Color.beansAmber)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.ultraThinMaterial, in: Capsule())
-                }
-                .buttonStyle(.plain)
-            }
             Divider().opacity(0.5)
             settingSlider("背景光晕强度", valueText: "\(Int((breath * 100).rounded()))%") {
                 Slider(value: $breath, in: 0...1, step: 0.05)
                     .tint(Color.beansAmber)
             }
             Divider().opacity(0.5)
-            settingToggle("DJ 节奏脉冲光效", isOn: $djVisualEnabled,
-                          caption: "封面背后随节拍扩散光环（仅播放时运行动画）")
-            if djVisualEnabled {
-                settingSlider("光效强度", valueText: "\(Int((djVisualIntensity * 100).rounded()))%") {
-                    Slider(value: $djVisualIntensity, in: 0...1, step: 0.05)
-                        .tint(Color.beansAmber)
+            CompactSettingGroup {
+                settingToggle("DJ 节奏脉冲光效", isOn: $djVisualEnabled,
+                              caption: "封面背后随节拍扩散光环")
+                if djVisualEnabled {
+                    Divider().opacity(0.35)
+                    settingSlider("光效强度", valueText: "\(Int((djVisualIntensity * 100).rounded()))%") {
+                        Slider(value: $djVisualIntensity, in: 0...1, step: 0.05)
+                            .tint(Color.beansAmber)
+                    }
                 }
+                Divider().opacity(0.35)
+                settingToggle("与其他音频同时播放", isOn: $mixesWithOthers,
+                              caption: "默认关闭以显示锁屏/灵动岛")
+                    .onChange(of: mixesWithOthers) { value in
+                        PlayerManager.applyAudioMixPreference(value)
+                    }
             }
-            Divider().opacity(0.5)
-            settingToggle("与其他音频同时播放", isOn: $mixesWithOthers,
-                          caption: "默认关闭以显示锁屏/灵动岛；开启后可与其他 App 声音同时播放")
-                .onChange(of: mixesWithOthers) { value in
-                    PlayerManager.applyAudioMixPreference(value)
+        }
+    }
+
+    /// 播放器按钮样式选择
+    private var playerButtonStyleSelector: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("播放器按钮样式")
+                        .font(BeansFont.appFont(13, .semibold))
+                        .foregroundStyle(Color.beansLabel)
+                    Text("只换按钮外观，不改变播放逻辑")
+                        .font(BeansFont.appFont(12))
+                        .foregroundStyle(Color.beansComment)
                 }
+                Spacer()
+                Image(systemName: "circle.grid.2x2")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.beansAmber)
+                    .frame(width: 30, height: 30)
+                    .background(Color.beansAmber.opacity(0.12), in: Circle())
+            }
+            ForEach(BeansPlayerButtonStyle.allCases) { style in
+                let selected = playerButtonStyleRaw == style.rawValue
+                Button {
+                    playerButtonStyleRaw = style.rawValue
+                    BeansHaptics.select()
+                } label: {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            Circle()
+                                .fill(selected ? Color.beansAmber : Color.primary.opacity(0.06))
+                                .frame(width: 32, height: 32)
+                            Image(systemName: style.previewIcon)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(selected ? Color.white : Color.beansLabel)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(style.title)
+                                .font(BeansFont.appFont(13, .semibold))
+                                .foregroundStyle(Color.beansLabel)
+                            Text(style.subtitle)
+                                .font(BeansFont.appFont(11))
+                                .foregroundStyle(Color.beansComment)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        if selected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Color.beansAmber)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 9)
+                    .background(
+                        selected ? Color.beansAmber.opacity(0.12) : Color.primary.opacity(0.035),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(selected ? Color.beansAmber.opacity(0.42) : Color.beansComment.opacity(0.10), lineWidth: 0.8)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
@@ -2733,6 +2872,27 @@ struct PlayerSettingsSheet: View {
         case 3: return "强烈"
         case 4: return "明亮"
         default: return "极亮"
+        }
+    }
+}
+
+private struct CompactSettingGroup<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            content
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.beansComment.opacity(0.10), lineWidth: 0.8)
         }
     }
 }
