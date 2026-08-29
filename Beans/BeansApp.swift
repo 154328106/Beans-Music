@@ -28,10 +28,8 @@ struct BeansApp: App {
                     .environmentObject(player)
                     .environmentObject(theme)
                     .environmentObject(favorites)
-                // 未确认前展示首次使用引导页（分页引导 + 免责确认）
-                if !disclaimerAccepted {
-                    OnboardingView { disclaimerAccepted = true }
-                }
+                // 免责声明改为常驻「我的」页的折叠区（见 ProfileView.disclaimerDisclosure），
+                // 启动不再拦人。首次引导页保留在代码里, 需要时把这段放回来即可。
             }
         }
     }

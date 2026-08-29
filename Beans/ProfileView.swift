@@ -129,7 +129,7 @@ struct ProfileView: View {
                         }
                     }
                     // 更新入口固定放在“我的”页面最底部，避免被板块排序隐藏。
-                    subsonicCard
+                    subsonicDisclosure
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -498,6 +498,7 @@ struct ProfileView: View {
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             aboutDisclosure
+            disclaimerDisclosure
             copyrightDisclosure
         }
     }
@@ -694,7 +695,123 @@ struct ProfileView: View {
     }
 
     /// 我的页底部交流群入口
-    /// 自建音乐服务器入口：没连过就去填地址，连上了就直接进曲库（长按可改配置）
+    /// 音乐服务器（折叠）：展开直接看已添加的服务器，点行切换，底部进管理页
+    private var subsonicDisclosure: some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 8) {
+                if subsonicAuth.servers.isEmpty {
+                    Text("还没有添加服务器")
+                        .font(BeansFont.appFont(12))
+                        .foregroundStyle(Color.beansComment)
+                } else {
+                    ForEach(subsonicAuth.servers) { s in
+                        Button {
+                            BeansHaptics.tap()
+                            subsonicAuth.select(id: s.id)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: s.id == subsonicAuth.currentID
+                                      ? "checkmark.circle.fill" : "circle")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(s.id == subsonicAuth.currentID
+                                                     ? Color.beansAmber : Color.beansComment)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(s.displayName)
+                                        .font(BeansFont.appFont(13, .semibold))
+                                        .foregroundStyle(Color.beansLabel)
+                                    Text(s.server)
+                                        .font(BeansFont.appFont(10))
+                                        .foregroundStyle(Color.beansComment)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                            }
+                        }
+                    }
+                }
+                Divider().overlay(Color.beansComment.opacity(0.15))
+                Button {
+                    BeansHaptics.tap()
+                    showSubsonicServer = true
+                } label: {
+                    Label("管理服务器", systemImage: "gearshape")
+                        .font(BeansFont.appFont(12, .semibold))
+                        .foregroundStyle(Color.beansAmber)
+                }
+                Button {
+                    BeansHaptics.tap()
+                    showSubsonicLibrary = true
+                } label: {
+                    Label("浏览曲库", systemImage: "music.note.list")
+                        .font(BeansFont.appFont(12, .semibold))
+                        .foregroundStyle(Color.beansAmber)
+                }
+                .disabled(!subsonicAuth.isLoggedIn)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 6)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "externaldrive.connected.to.line.below")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.beansAmber)
+                    .frame(width: 26)
+                Text("音乐服务器")
+                    .font(BeansFont.appFont(14, .semibold))
+                    .foregroundStyle(Color.beansLabel)
+                Spacer()
+                if subsonicAuth.isLoggedIn {
+                    Text(subsonicAuth.serverName)
+                        .font(BeansFont.appFont(11))
+                        .foregroundStyle(Color.beansComment)
+                }
+            }
+            .padding(.vertical, 2)
+        }
+        .tint(Color.beansAmber)
+        .padding(16)
+        .background {
+            BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+        .beansCardShadow(radius: 9, y: 3)
+    }
+
+    /// 免责声明（折叠）：原来是首次启动的门禁页，改成常驻这里
+    private var disclaimerDisclosure: some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("· Beans Music 只用作个人学习研究，禁止用于商业及非法用途，如产生法律纠纷与本人无关。")
+                Text("· 音乐 API 来自于 GitHub 开源项目（非官方版 API），本软件不提供任何音频存储服务，如需下载音频，请支持正版！")
+                Text("· 音乐版权归各网站所有，本站不承担任何法律责任和连带责任。")
+                Text("· “酷狗音乐”、酷狗图形标识及相关音乐内容的著作权、商标权或其他权利归酷狗音乐及其相关权利方所有。")
+            }
+            .font(BeansFont.appFont(11))
+            .foregroundStyle(Color.beansComment)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, 6)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "shield.checkmark")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.beansAmber)
+                    .frame(width: 26)
+                Text("免责声明")
+                    .font(BeansFont.appFont(14, .semibold))
+                    .foregroundStyle(Color.beansLabel)
+                Spacer()
+            }
+            .padding(.vertical, 2)
+        }
+        .tint(Color.beansAmber)
+        .padding(16)
+        .background {
+            BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+        .beansCardShadow(radius: 9, y: 3)
+    }
+
+    /// (旧) 音乐服务器卡片，已被上面的折叠区取代
     private var subsonicCard: some View {
         Button {
             BeansHaptics.tap()

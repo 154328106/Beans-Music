@@ -110,30 +110,13 @@ struct RootView: View {
         .onAppear {
             // 启动已完成：标记本次启动正常（供下次启动检测闪退）
             CrashReporter.shared.markLaunchCompleted()
-            // 已确认过免责声明：直接判断是否需要展示更新说明
-            if disclaimerAccepted, ChangelogStore.shouldShowWhatsNew {
-                showWhatsNew = true
-            }
             HighRefreshKeeper.shared.configure(enabled: enableHighRefresh)
         }
         .onChange(of: enableHighRefresh) { enabled in
             HighRefreshKeeper.shared.configure(enabled: enabled)
         }
-        .onChange(of: disclaimerAccepted) { accepted in
-            // 首次进入：确认免责声明后弹出更新说明
-            if accepted, ChangelogStore.shouldShowWhatsNew {
-                showWhatsNew = true
-            }
-        }
         .sheet(isPresented: $showWhatsNew) {
             WhatsNewSheet()
-        }
-        .task(id: disclaimerAccepted) {
-            guard disclaimerAccepted else { return }
-            if let info = await UpdateChecker.checkIfNeeded() {
-                updateInfo = info
-                showUpdateAlert = true
-            }
         }
         .overlay {
             if showUpdateAlert, let info = updateInfo {
