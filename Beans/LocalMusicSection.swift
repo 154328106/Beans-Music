@@ -249,7 +249,7 @@ struct LocalSearchAddSheet: View {
                 .padding(12)
                 Picker("平台", selection: $provider) {
                     ForEach(searchProviders) { p in
-                        Text(p.rawValue).tag(p)
+                        Text(p.title).tag(p)
                     }
                 }
                 .pickerStyle(.segmented)

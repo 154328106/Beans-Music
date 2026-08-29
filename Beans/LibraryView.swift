@@ -1,14 +1,27 @@
 import SwiftUI
 
 enum LibraryProvider: String, CaseIterable, Identifiable {
+    /// 自建音乐服务器（Navidrome / 道理鱼音乐…）= 用户自己的曲库。
+    /// 声明顺序就是 allCases 顺序，也就是 tab 顺序 —— 放第一个。
+    /// 不是平台，不受平台开关控制。⚠️ rawValue 是持久化键，不要改。
+    case server = "本地音乐"
     case netease = "网易云"
     case qq = "QQ音乐"
     case kugou = "酷狗"
-    /// 自建音乐服务器（Navidrome / 道理鱼音乐…）。对用户来说这就是"我自己的音乐"，
-    /// 所以标签叫「本地音乐」。不是平台，不受平台开关控制，始终显示。
-    case server = "本地音乐"
 
     var id: String { rawValue }
+
+    /// 界面显示名。**与 rawValue 分开**：rawValue 是持久化键
+    /// （beans.enabledPlatforms.v1 / beans.homeSource），改名会让老配置对不上号，
+    /// 所以改显示名只动这里。
+    var title: String {
+        switch self {
+        case .server: return "My Music"
+        case .netease: return "网易云"
+        case .qq: return "QQ音乐"
+        case .kugou: return "酷狗"
+        }
+    }
 
     var tint: LinearGradient {
         switch self {
@@ -168,7 +181,7 @@ struct LibraryView: View {
             Button("创建") { createPlaylist() }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("输入歌单名称，创建后同步到\(source.rawValue)")
+            Text("输入歌单名称，创建后同步到\(source.title)")
         }
         .confirmationDialog("确定删除歌单「\(pendingDelete?.name ?? "")」吗？", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("删除", role: .destructive) { confirmDeletePlaylist() }
@@ -425,7 +438,7 @@ struct LibraryView: View {
                             Image(systemName: p.icon)
                                 .font(.system(size: 11, weight: .semibold))
                         }
-                        Text(p.rawValue)
+                        Text(p.title)
                             .font(BeansFont.appFont(13, .semibold))
                     }
                     .foregroundStyle(source == p ? Color.white : Color.beansComment)

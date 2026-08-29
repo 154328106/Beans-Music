@@ -24,8 +24,8 @@ final class PlatformPreferenceStore: ObservableObject {
     var enabledSearchProviders: [SearchProvider] {
         var list = SearchProvider.allCases.filter { selectedRaw.contains($0.rawValue) }
         if list.isEmpty { list = [.netease] }
-        // 本地音乐不是平台, 不受开关控制, 始终排在最后
-        if !list.contains(.subsonic) { list.append(.subsonic) }
+        // 本地音乐不是平台, 不受开关控制; 即使被关掉也补回来, 且固定排在最前
+        if !list.contains(.subsonic) { list.insert(.subsonic, at: 0) }
         return list
     }
 
@@ -38,7 +38,7 @@ final class PlatformPreferenceStore: ObservableObject {
     }
 
     var summaryText: String {
-        enabledSearchProviders.map(\.rawValue).joined(separator: " / ")
+        enabledSearchProviders.map(\.title).joined(separator: " / ")
     }
 
     func isEnabled(_ provider: SearchProvider) -> Bool {
@@ -120,7 +120,7 @@ struct PlatformPreferencePicker: View {
                                 .frame(width: 28, height: 28)
                         }
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(provider.rawValue)
+                            Text(provider.title)
                                 .font(BeansFont.appFont(14, .semibold))
                                 .foregroundStyle(Color.beansLabel)
                             Text(store.isEnabled(provider) ? "已显示" : "已隐藏")

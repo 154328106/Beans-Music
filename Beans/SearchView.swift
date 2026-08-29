@@ -39,13 +39,27 @@ struct FlowLayout: Layout {
 }
 
 enum SearchProvider: String, CaseIterable, Identifiable {
+    /// 自建 Subsonic 服务器（Navidrome / 道理鱼音乐…）= 用户自己的曲库。
+    /// 声明顺序就是 allCases 顺序，也就是各页 tab 的顺序 —— 放第一个。
+    /// ⚠️ rawValue 是持久化键，不要改；显示名走 title。
+    case subsonic = "本地音乐"
     case netease = "网易云"
     case qq = "QQ音乐"
     case kugou = "酷狗音乐"
-    /// 自建 Subsonic 服务器（Navidrome / 道理鱼音乐…），对用户就是"我自己的音乐"
-    case subsonic = "本地音乐"
 
     var id: String { rawValue }
+
+    /// 界面显示名。**与 rawValue 分开**：rawValue 是持久化键
+    /// （beans.enabledPlatforms.v1 / beans.homeSource），改名会让老配置对不上号，
+    /// 所以改显示名只动这里。
+    var title: String {
+        switch self {
+        case .subsonic: return "My Music"
+        case .netease: return "网易云"
+        case .qq: return "QQ音乐"
+        case .kugou: return "酷狗音乐"
+        }
+    }
 
     /// 主题色渐变：网易云红 / QQ 绿
     var tint: LinearGradient {
@@ -211,7 +225,7 @@ struct SearchView: View {
                         Image(systemName: provider.icon)
                             .font(.system(size: 12, weight: .semibold))
                     }
-                    Text(provider.rawValue)
+                    Text(provider.title)
                 }
                 .font(BeansFont.appFont(12, .semibold))
                 .foregroundStyle(Color.beansComment)
@@ -327,7 +341,7 @@ struct SearchView: View {
                             Image(systemName: p.icon)
                                 .font(.system(size: 11, weight: .semibold))
                         }
-                        Text(p.rawValue)
+                        Text(p.title)
                             .font(BeansFont.appFont(13, .semibold))
                     }
                     .foregroundStyle(provider == p ? Color.white : Color.beansComment)
@@ -410,7 +424,7 @@ struct SearchView: View {
                 // 本地音乐(自建服务器)没有热搜榜, 整段跳过——
                 // 否则 hotWords 永远是空, LoadingStateView 会一直转圈
                 if provider != .subsonic {
-                SectionHeader(title: "\(provider.rawValue)热搜")
+                SectionHeader(title: "\(provider.title)热搜")
                 if hotWords.isEmpty {
                     LoadingStateView()
                 } else {
@@ -517,12 +531,12 @@ struct SearchView: View {
             } else if searching && songResults.isEmpty {
                 LoadingStateView()
             } else if songResults.isEmpty {
-                EmptyStateView(icon: "music.note", text: "\(provider.rawValue)未找到相关歌曲")
+                EmptyStateView(icon: "music.note", text: "\(provider.title)未找到相关歌曲")
             } else {
                 ScrollView {
                     LazyVStack(spacing: 8) {
                         HStack {
-                            Text("找到 \(songResults.count) 首 · \(provider.rawValue)")
+                            Text("找到 \(songResults.count) 首 · \(provider.title)")
                                 .font(BeansFont.appFont(12))
                                 .foregroundStyle(Color.beansComment)
                             Spacer()
@@ -577,12 +591,12 @@ struct SearchView: View {
             } else if searching && artistResults.isEmpty {
                 LoadingStateView()
             } else if artistResults.isEmpty {
-                EmptyStateView(icon: "person.crop.circle", text: "\(provider.rawValue)未找到相关歌手")
+                EmptyStateView(icon: "person.crop.circle", text: "\(provider.title)未找到相关歌手")
             } else {
                 ScrollView {
                     LazyVStack(spacing: 8) {
                         HStack {
-                            Text("找到 \(artistResults.count) 位 · \(provider.rawValue)")
+                            Text("找到 \(artistResults.count) 位 · \(provider.title)")
                                 .font(BeansFont.appFont(12))
                                 .foregroundStyle(Color.beansComment)
                             Spacer()
@@ -645,12 +659,12 @@ struct SearchView: View {
             } else if searching && albumResults.isEmpty {
                 LoadingStateView()
             } else if albumResults.isEmpty {
-                EmptyStateView(icon: "square.stack", text: "\(provider.rawValue)未找到相关专辑")
+                EmptyStateView(icon: "square.stack", text: "\(provider.title)未找到相关专辑")
             } else {
                 ScrollView {
                     LazyVStack(spacing: 8) {
                         HStack {
-                            Text("找到 \(albumResults.count) 张 · \(provider.rawValue)")
+                            Text("找到 \(albumResults.count) 张 · \(provider.title)")
                                 .font(BeansFont.appFont(12))
                                 .foregroundStyle(Color.beansComment)
                             Spacer()
@@ -751,7 +765,7 @@ struct SearchView: View {
         searchTask = Task {
             searching = true
             errorMessage = nil
-            BeansLogger.shared.log("搜索：\(provider.rawValue) [\(resultType.rawValue)] \(trimmed)", level: .info)
+            BeansLogger.shared.log("搜索：\(provider.title) [\(resultType.rawValue)] \(trimmed)", level: .info)
             defer { if !Task.isCancelled { searching = false } }
             do {
                 switch (provider, resultType) {
@@ -808,11 +822,11 @@ struct SearchView: View {
                     albumResults = albums
                 }
                 let count = resultType == .song ? songResults.count : (resultType == .artist ? artistResults.count : albumResults.count)
-                BeansLogger.shared.log("搜索完成：\(provider.rawValue) [\(resultType.rawValue)] \(trimmed) 结果=\(count)", level: .info)
+                BeansLogger.shared.log("搜索完成：\(provider.title) [\(resultType.rawValue)] \(trimmed) 结果=\(count)", level: .info)
             } catch {
                 guard !Task.isCancelled else { return }
                 errorMessage = error.localizedDescription
-                BeansLogger.shared.log("搜索失败：\(provider.rawValue) \(trimmed) - \(error.localizedDescription)", level: .error)
+                BeansLogger.shared.log("搜索失败：\(provider.title) \(trimmed) - \(error.localizedDescription)", level: .error)
             }
         }
         await searchTask?.value

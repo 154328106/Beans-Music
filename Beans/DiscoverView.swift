@@ -24,7 +24,7 @@ struct DiscoverView: View {
         source == .qq ? ["每日推荐", "排行榜"] : SectionOrderStore.homeDefaults
     }
     /// 首页数据源：记住上次选择，下次打开仍保持该平台（默认网易云）
-    @AppStorage("beans.homeSource") private var homeSourceRaw = SearchProvider.netease.rawValue
+    @AppStorage("beans.homeSource") private var homeSourceRaw = SearchProvider.subsonic.rawValue
     @State private var selectedSubsonicRank: SubsonicRankItem?
     @State private var subsonicSongs: [Song] = []
     @State private var subsonicNewest: [SubsonicAlbum] = []
@@ -221,7 +221,7 @@ struct DiscoverView: View {
                             Image(systemName: p.icon)
                                 .font(.system(size: 11, weight: .semibold))
                         }
-                        Text(p.rawValue)
+                        Text(p.title)
                             .font(BeansFont.appFont(13, .semibold))
                     }
                     .foregroundStyle(source == p ? Color.white : Color.beansComment)
