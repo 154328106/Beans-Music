@@ -1011,6 +1011,9 @@ struct SettingsView: View {
     @State private var showRestorePicker = false
     @State private var pendingRestore: [String: Any]?
     @State private var showRestoreConfirm = false
+    @State private var showResetSettingsConfirm = false
+    @State private var backupIncludeAccounts = false
+    @State private var backupIncludeWallpapers = true
     @State private var backupMessage: String?
     /// 日志
     @State private var showLogViewer = false
@@ -1101,6 +1104,14 @@ struct SettingsView: View {
                 applyRestore(pendingRestore)
             }
             Button("取消", role: .cancel) {}
+        }
+        .confirmationDialog("重置所有设置？", isPresented: $showResetSettingsConfirm, titleVisibility: .visible) {
+            Button("重置设置", role: .destructive) {
+                resetAllSettingsKeepingAccounts()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("会恢复主题、播放器、平台显示、壁纸、布局等设置，但保留已登录账号。")
         }
     }
 
@@ -1804,15 +1815,36 @@ struct SettingsView: View {
     private var backupSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title: "备份与恢复")
+            VStack(spacing: 10) {
+                Toggle("备份登录信息", isOn: $backupIncludeAccounts)
+                    .tint(Color.beansAmber)
+                    .font(BeansFont.appFont(13))
+                Divider().opacity(0.35)
+                Toggle("备份壁纸图片", isOn: $backupIncludeWallpapers)
+                    .tint(Color.beansAmber)
+                    .font(BeansFont.appFont(13))
+                Text("默认不带账号登录信息；关闭壁纸后只备份普通设置，不写入壁纸图片数据")
+                    .font(BeansFont.appFont(11))
+                    .foregroundStyle(Color.beansComment)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(14)
+            .background {
+                BeansGlass(shape: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            }
             HStack(spacing: 10) {
                 backupActionButton(icon: "square.and.arrow.up", title: "导出备份") {
                     BeansHaptics.tap()
-                    exportBackup()
+                    exportBackup(includeAccounts: backupIncludeAccounts, includeWallpapers: backupIncludeWallpapers)
                 }
                 backupActionButton(icon: "square.and.arrow.down", title: "导入恢复") {
                     BeansHaptics.tap()
                     showRestorePicker = true
                 }
+            }
+            backupActionButton(icon: "arrow.counterclockwise.circle", title: "重置所有设置（保留登录）") {
+                BeansHaptics.tap()
+                showResetSettingsConfirm = true
             }
             if let backupMessage {
                 Text(backupMessage)
@@ -1855,6 +1887,14 @@ struct SettingsView: View {
             || key == "beans.wallpapers.deleted"
     }
 
+    private static func isWallpaperBackupKey(_ key: String) -> Bool {
+        key == "beans.background.image"
+            || key == "beans.wallpapers.list"
+            || key == "beans.wallpapers.data"
+            || key == "beans.lyricBackground.image"
+            || key == "beans.lyricBackground.data"
+    }
+
     private static func isSystemBackupKey(_ key: String) -> Bool {
         key.hasPrefix("Apple")
             || key.hasPrefix("NS")
@@ -1866,22 +1906,25 @@ struct SettingsView: View {
         key.hasPrefix("beans.") && !isSystemBackupKey(key)
     }
 
-    private static func isExcludedBackupKey(_ key: String) -> Bool {
-        isAccountBackupKey(key)
+    private static func isExcludedBackupKey(_ key: String, includeAccounts: Bool = false, includeWallpapers: Bool = true) -> Bool {
+        (!includeAccounts && isAccountBackupKey(key))
+            || (!includeWallpapers && isWallpaperBackupKey(key))
             || isPrivacyBackupKey(key)
             || key == "beans.backup.meta"
             || key == "beans.font.restore"
     }
 
     /// 导出：收集本 App 设置，排除账号、搜索记录和日志，交给系统原生导出面板
-    private func exportBackup() {
+    private func exportBackup(includeAccounts: Bool, includeWallpapers: Bool) {
         let defaults = UserDefaults.standard
         var payload: [String: Any] = [:]
-        theme.refreshWallpaperBackupForExport()
-        LyricBackgroundStore.refreshForExport()
+        if includeWallpapers {
+            theme.refreshWallpaperBackupForExport()
+            LyricBackgroundStore.refreshForExport()
+        }
         for (key, value) in defaults.dictionaryRepresentation() {
             guard Self.isBackupCandidateKey(key) else { continue }
-            guard !Self.isExcludedBackupKey(key) else { continue }
+            guard !Self.isExcludedBackupKey(key, includeAccounts: includeAccounts, includeWallpapers: includeWallpapers) else { continue }
             // 超大原始 Data 直接跳过（壁纸 base64 已以字符串形式存于 beans.wallpapers.data，不受影响）
             if let data = value as? Data, data.count > 2 * 1024 * 1024 { continue }
             let safe = backupJSONSafe(value)
@@ -1901,7 +1944,14 @@ struct SettingsView: View {
             "app": "Beans Music",
             "created": ISO8601DateFormatter().string(from: Date()),
             "version": version,
-            "excluded": "account, search history, logs",
+            "includedAccounts": includeAccounts,
+            "includedWallpapers": includeWallpapers,
+            "excluded": [
+                includeAccounts ? nil : "account",
+                includeWallpapers ? nil : "wallpapers",
+                "search history",
+                "logs",
+            ].compactMap { $0 }.joined(separator: ", "),
         ] as [String: Any]
         guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]) else {
             backupMessage = "备份生成失败：存在无法序列化的设置项"
@@ -1910,7 +1960,7 @@ struct SettingsView: View {
         }
         backupDoc = BackupDocument(data: data)
         backupMessage = nil
-        BeansLogger.shared.log("导出配置备份（\(payload.count) 项，已排除账号/搜索记录/日志，含壁纸/字体/歌单/播放器布局）", level: .info)
+        BeansLogger.shared.log("导出配置备份（\(payload.count) 项，账号=\(includeAccounts ? "包含" : "排除") 壁纸=\(includeWallpapers ? "包含" : "排除")）", level: .info)
         showExportBackup = true
     }
 
@@ -1938,7 +1988,7 @@ struct SettingsView: View {
         var count = 0
         for (key, value) in json {
             guard Self.isBackupCandidateKey(key) else { continue }
-            guard !Self.isExcludedBackupKey(key) else { continue }
+            guard !Self.isExcludedBackupKey(key, includeAccounts: true, includeWallpapers: true) else { continue }
             guard let restored = backupPlistSafe(value) else { continue }
             defaults.set(restored, forKey: key)
             count += 1
@@ -1965,6 +2015,31 @@ struct SettingsView: View {
         } else {
             backupMessage = "备份中未找到可恢复的设置"
         }
+    }
+
+    private func resetAllSettingsKeepingAccounts() {
+        let defaults = UserDefaults.standard
+        var removed = 0
+        for key in defaults.dictionaryRepresentation().keys {
+            guard Self.isBackupCandidateKey(key) else { continue }
+            guard !Self.isAccountBackupKey(key) else { continue }
+            guard !Self.isSystemBackupKey(key) else { continue }
+            guard key != "beans.disclaimerAccepted" else { continue }
+            defaults.removeObject(forKey: key)
+            removed += 1
+        }
+        theme.set(.amber)
+        theme.clearCustomAccent()
+        theme.setBackground("")
+        theme.setBackgroundSyncAll(true)
+        theme.clearAllWallpapers()
+        theme.setUIStyle(.liquid)
+        LyricBackgroundStore.clear()
+        PlatformPreferenceStore.shared.resetToDefault()
+        BeansHaptics.success()
+        backupMessage = "已重置 \(removed) 项设置，登录信息已保留"
+        ToastCenter.shared.show("设置已重置")
+        BeansLogger.shared.log("重置所有设置：移除 \(removed) 项，保留登录信息", level: .info)
     }
 
     /// 任意 UserDefaults 值 → JSON 可序列化（Data 转 base64、Date 转时间戳）

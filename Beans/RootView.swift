@@ -325,13 +325,12 @@ private struct RootTopBlur: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .frame(height: 54)
+            VisualEffectBlur(style: colorScheme == .dark ? .systemChromeMaterialDark : .systemChromeMaterialLight)
+                .frame(height: 58)
                 .overlay {
                     LinearGradient(
                         colors: [
-                            (colorScheme == .dark ? Color.black : Color.white).opacity(0.18),
+                            (colorScheme == .dark ? Color.black : Color.white).opacity(0.08),
                             .clear
                         ],
                         startPoint: .top,
@@ -340,7 +339,7 @@ private struct RootTopBlur: View {
                 }
             LinearGradient(
                 colors: [
-                    (colorScheme == .dark ? Color.black : Color.white).opacity(0.10),
+                    (colorScheme == .dark ? Color.black : Color.white).opacity(0.08),
                     .clear
                 ],
                 startPoint: .top,
@@ -348,6 +347,18 @@ private struct RootTopBlur: View {
             )
             .frame(height: 34)
         }
+    }
+}
+
+private struct VisualEffectBlur: UIViewRepresentable {
+    var style: UIBlurEffect.Style
+
+    func makeUIView(context: Context) -> UIVisualEffectView {
+        UIVisualEffectView(effect: UIBlurEffect(style: style))
+    }
+
+    func updateUIView(_ uiView: UIVisualEffectView, context: Context) {
+        uiView.effect = UIBlurEffect(style: style)
     }
 }
 

@@ -463,6 +463,23 @@ final class ThemeStore: ObservableObject {
         invalidateBackgroundCache()
     }
 
+    /// 重置设置时清空整套壁纸库与当前背景。
+    func clearAllWallpapers() {
+        for path in wallpaperPaths {
+            try? FileManager.default.removeItem(atPath: path)
+        }
+        if !backgroundImagePath.isEmpty {
+            try? FileManager.default.removeItem(atPath: backgroundImagePath)
+        }
+        wallpaperPaths = []
+        backgroundImagePath = ""
+        UserDefaults.standard.removeObject(forKey: wallpaperListKey)
+        UserDefaults.standard.removeObject(forKey: wallpaperDataKey)
+        UserDefaults.standard.removeObject(forKey: deletedKey)
+        UserDefaults.standard.set("", forKey: backgroundImageKey)
+        invalidateBackgroundCache()
+    }
+
     private static func wallpaperDirectory() -> URL {
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("BeansWallpapers", isDirectory: true)
