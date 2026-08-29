@@ -813,6 +813,7 @@ struct AccountHubSheet: View {
         .confirmationDialog("退出网易云登录？", isPresented: $confirmNeteaseLogout, titleVisibility: .visible) {
             Button("退出登录", role: .destructive) {
                 auth.logout()
+                WebLoginDataCleaner.clearNetEase()
                 ToastCenter.shared.show("已退出网易云账号")
             }
             Button("取消", role: .cancel) {}
@@ -820,6 +821,7 @@ struct AccountHubSheet: View {
         .confirmationDialog("退出 QQ 音乐？", isPresented: $confirmQQLogout, titleVisibility: .visible) {
             Button("退出登录", role: .destructive) {
                 qqAuth.logout()
+                WebLoginDataCleaner.clearQQMusic()
                 ToastCenter.shared.show("已退出 QQ 音乐")
             }
             Button("取消", role: .cancel) {}
@@ -827,6 +829,7 @@ struct AccountHubSheet: View {
         .confirmationDialog("退出酷狗音乐？", isPresented: $confirmKugouLogout, titleVisibility: .visible) {
             Button("退出登录", role: .destructive) {
                 kugouAuth.logout()
+                WebLoginDataCleaner.clearKugou()
                 ToastCenter.shared.show("已退出酷狗音乐")
             }
             Button("取消", role: .cancel) {}

@@ -199,30 +199,28 @@ enum BeansUIStyle: String, CaseIterable {
 
 enum BeansPlayerButtonStyle: String, CaseIterable, Identifiable {
     case glass
-    case darkRound = "controlCenter"
-    case outline
-    case filled
     case minimal
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .glass: return "通透圆形"
-        case .darkRound: return "暗色圆形"
-        case .outline: return "高亮描边"
-        case .filled: return "强调填充"
-        case .minimal: return "极简无底"
+        case .glass: return "经典圆形"
+        case .minimal: return "极简无比"
         }
     }
 
     var previewIcon: String {
         switch self {
         case .glass: return "circle"
-        case .darkRound: return "slider.horizontal.3"
-        case .outline: return "record.circle"
-        case .filled: return "circle.fill"
         case .minimal: return "minus.circle"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .glass: return "保留原来的圆形玻璃按钮"
+        case .minimal: return "弱化底板，只保留轻量触控反馈"
         }
     }
 }
