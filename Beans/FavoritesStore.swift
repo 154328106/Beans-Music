@@ -33,6 +33,8 @@ final class FavoritesStore: ObservableObject {
         // Subsonic 收藏在服务器侧(star.view), 本轮未接, 先不参与本地收藏
         case .subsonic:
             return false
+        case .feiniu:
+            return false
         }
     }
 
@@ -70,6 +72,8 @@ final class FavoritesStore: ObservableObject {
             return false
         // Subsonic 收藏在服务器侧(star.view), 本轮未接, 先不参与本地收藏
         case .subsonic:
+            return false
+        case .feiniu:
             return false
         }
     }

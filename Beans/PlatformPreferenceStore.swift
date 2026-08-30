@@ -18,7 +18,15 @@ final class PlatformPreferenceStore: ObservableObject {
         } else {
             selectedRaw = Set(saved)
         }
+        // 老版本保存的是“当时所有平台”，升级后不会自动包含新枚举；只迁移一次，
+        // 之后用户手动隐藏飞牛音乐时保持其选择。
+        let feiniuMigrationKey = "beans.enabledPlatforms.feiniu.v1"
+        if !UserDefaults.standard.bool(forKey: feiniuMigrationKey) {
+            selectedRaw.insert(SearchProvider.feiniu.rawValue)
+            UserDefaults.standard.set(true, forKey: feiniuMigrationKey)
+        }
         normalize()
+        save()
     }
 
     var enabledSearchProviders: [SearchProvider] {
@@ -94,6 +102,7 @@ extension LibraryProvider {
         case .qq: return .qq
         case .kugou: return .kugou
         case .server: return .subsonic
+        case .feiniu: return .feiniu
         }
     }
 }

@@ -188,6 +188,7 @@ enum UnblockService {
         case .kugou: return "kg"
         // 自建服务器的文件不走第三方音源解锁, 占位即可
         case .subsonic: return ""
+        case .feiniu: return ""
         }
     }
 

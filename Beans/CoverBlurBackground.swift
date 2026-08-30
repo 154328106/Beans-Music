@@ -138,7 +138,10 @@ final class CoverBlurView: UIView {
             return
         }
 
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+        let request = FeiniuAPI.shared.isFeiniuResource(url)
+            ? FeiniuAPI.shared.authenticatedRequest(url: url)
+            : URLRequest(url: url)
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
             guard let self, let data, let source = UIImage(data: data) else { return }
             Self.blurQueue.async {
                 let blurred = Self.makeBlurredImage(source)

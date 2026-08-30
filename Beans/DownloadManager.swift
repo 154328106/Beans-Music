@@ -76,7 +76,10 @@ final class DownloadManager {
             // 2) 下载到临时文件
             let tempURL: URL
             do {
-                let (downloaded, response) = try await URLSession.shared.download(from: url)
+                let request = song.source == .feiniu
+                    ? FeiniuAPI.shared.authenticatedRequest(url: url)
+                    : URLRequest(url: url)
+                let (downloaded, response) = try await URLSession.shared.download(for: request)
                 if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
                     lastError = NetEaseError.unknown("下载失败（HTTP \(http.statusCode)）")
                     continue
@@ -116,7 +119,11 @@ final class DownloadManager {
     }
 
     private func resolveURL(song: Song, quality: DownloadQuality) async -> String? {
-        if song.source == .qq, let mid = song.qqMid {
+        if song.source == .feiniu, let id = song.feiniuId {
+            return FeiniuAPI.shared.streamURL(id: id)?.absoluteString
+        } else if song.source == .subsonic, let id = song.subsonicId {
+            return SubsonicAPI.shared.streamURL(id: id)?.absoluteString
+        } else if song.source == .qq, let mid = song.qqMid {
             return try? await QQMusicAPI.shared.songURL(songmid: mid, mediaMid: song.qqMediaMid, br: quality.qqBR)
         } else if song.source == .kugou {
             return try? await KugouMusicAPI.shared.songURL(song: song)

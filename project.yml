@@ -16,7 +16,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.beans.app
-        MARKETING_VERSION: "1.5.5"
+        MARKETING_VERSION: "1.6"
         CURRENT_PROJECT_VERSION: "36"
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_OBJC_BRIDGING_HEADER: Beans/Beans-Bridging-Header.h
@@ -38,6 +38,7 @@ targets:
         CADisableMinimumFrameDurationOnPhone: true
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+        NSLocalNetworkUsageDescription: 用于连接局域网中的飞牛音乐与自建音乐服务器
 
 schemes:
   Beans:

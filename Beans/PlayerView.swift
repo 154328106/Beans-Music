@@ -1421,6 +1421,8 @@ struct PlayerView: View {
         // 自建服务器多是内网地址, 分享出去对方打不开, 只分享文字不给链接
         case .subsonic:
             return nil
+        case .feiniu:
+            return nil
         }
     }
 
@@ -1544,7 +1546,18 @@ struct PlayerView: View {
             guard self.song?.identityKey == identity else { return }
             self.lyrics = parsed
         }
-        if song.source == .subsonic {
+        if song.source == .feiniu {
+            if let id = song.feiniuId,
+               let raw = try? await FeiniuAPI.shared.lyrics(trackID: id),
+               !raw.isEmpty {
+                let parsed = LyricParser.parse(raw)
+                if !parsed.isEmpty {
+                    apply(parsed)
+                    return
+                }
+            }
+            // 飞牛中没有歌词时继续走下面的网易云同名曲兜底。
+        } else if song.source == .subsonic {
             // 1) OpenSubsonic 的 getLyricsBySongId：按 ID 精确取，带毫秒时间轴。
             //    文件内嵌的歌词走的就是这条（Navidrome 0.61 实测完整可用）。
             if let sid = song.subsonicId,
@@ -1601,7 +1614,9 @@ struct PlayerView: View {
             if let cached = BeansImageCache.shared.image(for: url) {
                 return PaletteExtractor.dominantColor(in: cached)
             }
-            var req = URLRequest(url: url)
+            var req = FeiniuAPI.shared.isFeiniuResource(url)
+                ? FeiniuAPI.shared.authenticatedRequest(url: url)
+                : URLRequest(url: url)
             req.cachePolicy = .returnCacheDataElseLoad
             guard let (data, _) = try? await URLSession.shared.data(for: req),
                   let image = UIImage(data: data) else { return nil }

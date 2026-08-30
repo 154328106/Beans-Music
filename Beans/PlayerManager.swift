@@ -373,6 +373,8 @@ final class PlayerManager: NSObject, ObservableObject {
             // 自建 Subsonic 服务器: stream 是直链, 拼出来就能播, 不需要任何异步换链
             if song.source == .subsonic {
                 urlString = song.subsonicId.flatMap { SubsonicAPI.shared.streamURL(id: $0)?.absoluteString }
+            } else if song.source == .feiniu {
+                urlString = song.feiniuId.flatMap { FeiniuAPI.shared.streamURL(id: $0)?.absoluteString }
             } else if song.source == .kugou {
                 urlString = try? await KugouMusicAPI.shared.songURL(song: song)
                 if urlString == nil {
@@ -413,7 +415,8 @@ final class PlayerManager: NSObject, ObservableObject {
             }
             await MainActor.run {
                 guard generation == self.loadGeneration else { return }
-                self.setupPlayer(url: url)
+                let headers = song.source == .feiniu ? FeiniuAuth.shared.requestHeaders() : nil
+                self.setupPlayer(url: url, headers: headers)
             }
         }
     }
@@ -563,7 +566,7 @@ final class PlayerManager: NSObject, ObservableObject {
     }
 
 
-    private func setupPlayer(url: URL, thirdPartyVIPNotice: ThirdPartyVIPNotice? = nil) {
+    private func setupPlayer(url: URL, headers customHeaders: [String: String]? = nil, thirdPartyVIPNotice: ThirdPartyVIPNotice? = nil) {
         configureAudioSession()
         UIApplication.shared.beginReceivingRemoteControlEvents()
         removeCurrentObservers()
@@ -571,7 +574,12 @@ final class PlayerManager: NSObject, ObservableObject {
         // QQ 官方 CDN（isure.stream.qqmusic.qq.com 等）要求 UA/Referer 请求头，
         // 否则裸 GET 会被拒绝（403），导致播放成功却无声、进度条不动。
         let item: AVPlayerItem
-        if url.host?.contains("qq.com") == true {
+        if let customHeaders, !customHeaders.isEmpty {
+            let asset = AVURLAsset(url: url, options: [
+                "AVURLAssetHTTPHeaderFieldsKey": customHeaders
+            ])
+            item = AVPlayerItem(asset: asset)
+        } else if url.host?.contains("qq.com") == true {
             var headers = [
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:80.0) Gecko/20100101 Firefox/80.0",
                 "Referer": "https://y.qq.com/",
@@ -613,6 +621,9 @@ final class PlayerManager: NSObject, ObservableObject {
             self.playbackConfirmed = true
             if let song = self.currentSong {
                 BeansLogger.shared.log("▶ 播放成功：\(song.name)｜域名=\(url.host ?? "?")", level: .info)
+                if song.source == .feiniu, let id = song.feiniuId {
+                    Task { await FeiniuAPI.shared.reportPlay(trackID: id) }
+                }
             }
             self.showPendingThirdPartyVIPNoticeIfNeeded()
         }
@@ -725,6 +736,8 @@ final class PlayerManager: NSObject, ObservableObject {
             return user.vipBadge != nil
         case .subsonic:
             return true   // 自己的服务器, 不存在会员墙
+        case .feiniu:
+            return true
         }
     }
 
@@ -869,7 +882,11 @@ final class PlayerManager: NSObject, ObservableObject {
             } else if lastNowPlayingArtworkKey != artworkKey {
                 lastNowPlayingArtworkKey = artworkKey
                 Task {
-                    if let data = try? Data(contentsOf: artworkURL), let image = UIImage(data: data) {
+                    let request = FeiniuAPI.shared.isFeiniuResource(artworkURL)
+                        ? FeiniuAPI.shared.authenticatedRequest(url: artworkURL)
+                        : URLRequest(url: artworkURL)
+                    if let (data, _) = try? await URLSession.shared.data(for: request),
+                       let image = UIImage(data: data) {
                         Self.nowPlayingArtworkCache.setObject(image, forKey: artworkURL as NSURL)
                         var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
                         updated[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }

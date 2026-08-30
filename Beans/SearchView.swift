@@ -43,6 +43,7 @@ enum SearchProvider: String, CaseIterable, Identifiable {
     /// 声明顺序就是 allCases 顺序，也就是各页 tab 的顺序 —— 放第一个。
     /// ⚠️ rawValue 是持久化键，不要改；显示名走 title。
     case subsonic = "本地音乐"
+    case feiniu = "飞牛音乐"
     case netease = "网易云"
     case qq = "QQ音乐"
     case kugou = "酷狗音乐"
@@ -55,6 +56,7 @@ enum SearchProvider: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .subsonic: return "My Music"
+        case .feiniu: return "飞牛音乐"
         case .netease: return "网易云"
         case .qq: return "QQ音乐"
         case .kugou: return "酷狗音乐"
@@ -76,6 +78,9 @@ enum SearchProvider: String, CaseIterable, Identifiable {
         case .subsonic: return LinearGradient(
             colors: [Color(red: 0.55, green: 0.35, blue: 0.90), Color(red: 0.36, green: 0.20, blue: 0.70)],
             startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .feiniu: return LinearGradient(
+            colors: [Color(red: 1.00, green: 0.58, blue: 0.18), Color(red: 0.93, green: 0.32, blue: 0.12)],
+            startPoint: .topLeading, endPoint: .bottomTrailing)
         }
     }
 
@@ -85,6 +90,7 @@ enum SearchProvider: String, CaseIterable, Identifiable {
         case .qq: return "play.rectangle.fill"
         case .kugou: return "music.note"
         case .subsonic: return "externaldrive.connected.to.line.below"
+        case .feiniu: return "externaldrive.connected.to.line.below.fill"
         }
     }
 
@@ -94,6 +100,7 @@ enum SearchProvider: String, CaseIterable, Identifiable {
         case .qq: return "BrandQQ"
         case .kugou: return "BrandKugou"
         case .subsonic: return "BrandLocal"
+        case .feiniu: return nil
         }
     }
 }
@@ -423,7 +430,7 @@ struct SearchView: View {
                 }
                 // 本地音乐(自建服务器)没有热搜榜, 整段跳过——
                 // 否则 hotWords 永远是空, LoadingStateView 会一直转圈
-                if provider != .subsonic {
+                if provider != .subsonic && provider != .feiniu {
                 SectionHeader(title: "\(provider.title)热搜")
                 if hotWords.isEmpty {
                     LoadingStateView()
@@ -743,7 +750,7 @@ struct SearchView: View {
     }
 
     private func loadHotWords() async {
-        if provider == .subsonic {
+        if provider == .subsonic || provider == .feiniu {
             hotWords = []   // 自建服务器没有热搜榜
             return
         }
@@ -779,6 +786,17 @@ struct SearchView: View {
                     guard !Task.isCancelled else { return }
                     artistResults = []
                 case (.subsonic, .album):
+                    guard !Task.isCancelled else { return }
+                    albumResults = []
+                case (.feiniu, .song):
+                    let songs = try await FeiniuAPI.shared.search(trimmed)
+                    guard !Task.isCancelled else { return }
+                    songResults = songs
+                    if !songs.isEmpty { BeansHaptics.success() }
+                case (.feiniu, .artist):
+                    guard !Task.isCancelled else { return }
+                    artistResults = []
+                case (.feiniu, .album):
                     guard !Task.isCancelled else { return }
                     albumResults = []
                 case (.netease, .song):

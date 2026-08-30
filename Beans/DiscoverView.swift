@@ -29,6 +29,8 @@ struct DiscoverView: View {
     @State private var subsonicSongs: [Song] = []
     @State private var subsonicNewest: [SubsonicAlbum] = []
     @State private var subsonicStarred: [Song] = []
+    @State private var feiniuSongs: [Song] = []
+    @State private var feiniuFavorites: [Song] = []
     private var homeProviders: [SearchProvider] { platformPrefs.enabledSearchProviders }
     /// 首页数据源：网易云 / QQ音乐（与搜索页同一控件样式）
     private var source: SearchProvider {
@@ -78,6 +80,8 @@ struct DiscoverView: View {
                         LoadingStateView()
                     } else if source == .subsonic {
                         subsonicHomeSection
+                    } else if source == .feiniu {
+                        feiniuHomeSection
                     } else {
                         // 板块按用户自定义顺序渲染（可拖拽排序）
                         ForEach(homeOrder.filter { availableSections.contains($0) }, id: \.self) { key in
@@ -295,6 +299,7 @@ struct DiscoverView: View {
         case .kugou: return kugouTopLists.count
         // 本地音乐没有榜单
         case .subsonic: return 0
+        case .feiniu: return 0
         }
     }
 
@@ -309,6 +314,7 @@ struct DiscoverView: View {
         case .qq: return !qqTopLists.isEmpty
         case .kugou: return !kugouTopLists.isEmpty
         case .subsonic: return false
+        case .feiniu: return false
         }
     }
 
@@ -655,6 +661,19 @@ struct DiscoverView: View {
         }
     }
 
+    private var feiniuHomeSection: some View {
+        VStack(alignment: .leading, spacing: 26) {
+            if !FeiniuAuth.shared.isConfigured {
+                EmptyStateView(icon: "externaldrive.badge.plus", text: "还没连接飞牛音乐，去「音乐库」页添加")
+            } else {
+                subsonicSongRow(title: "飞牛曲库", songs: feiniuSongs, trailing: "换一批") {
+                    Task { await loadFeiniu() }
+                }
+                subsonicSongRow(title: "我的收藏", songs: feiniuFavorites, trailing: nil, action: nil)
+            }
+        }
+    }
+
     /// 四行榜单（与网易云/酷狗同款 rankRow）
     private var subsonicRankList: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -790,12 +809,31 @@ struct DiscoverView: View {
         subsonicStarred = (try? await starred) ?? []
     }
 
+    private func loadFeiniu() async {
+        guard FeiniuAuth.shared.isConfigured else {
+            feiniuSongs = []
+            feiniuFavorites = []
+            return
+        }
+        async let tracks = FeiniuAPI.shared.tracks(page: 1, size: 60)
+        async let favorites = FeiniuAPI.shared.favoriteSongs(size: 20)
+        feiniuSongs = ((try? await tracks) ?? []).shuffled()
+        feiniuFavorites = (try? await favorites) ?? []
+    }
+
     private func load(force: Bool = false) async {
         // 本地音乐不走平台那套缓存/榜单逻辑，单独拉曲目
         if source == .subsonic {
             loading = subsonicSongs.isEmpty && subsonicNewest.isEmpty
             errorMessage = nil
             await loadSubsonic()
+            loading = false
+            return
+        }
+        if source == .feiniu {
+            loading = feiniuSongs.isEmpty && feiniuFavorites.isEmpty
+            errorMessage = nil
+            await loadFeiniu()
             loading = false
             return
         }
@@ -884,6 +922,8 @@ struct DiscoverView: View {
         switch source {
         // 本地音乐在 load() 开头就已分流返回, 走不到这里; 给个空快照满足返回类型
         case .subsonic:
+            return snapshot
+        case .feiniu:
             return snapshot
         case .qq:
             async let a = QQMusicAPI.shared.recommendSongs(limit: 30)

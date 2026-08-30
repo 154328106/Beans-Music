@@ -75,7 +75,9 @@ struct BeansAsyncImage<Placeholder: View>: View {
         image = nil
         failed = false
         do {
-            var req = URLRequest(url: url)
+            var req = FeiniuAPI.shared.isFeiniuResource(url)
+                ? FeiniuAPI.shared.authenticatedRequest(url: url)
+                : URLRequest(url: url)
             // 优先吃 URLCache，拿不到再上网
             req.cachePolicy = .returnCacheDataElseLoad
             let (data, _) = try await URLSession.shared.data(for: req)

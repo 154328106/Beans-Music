@@ -37,6 +37,8 @@ enum SongSource: String, Codable, Sendable {
     case kugou
     /// 自建 Subsonic 服务器（Navidrome / 道理鱼音乐 等）
     case subsonic
+    /// fnOS 自带的飞牛音乐服务
+    case feiniu
 
     /// 兼容旧版本地收藏：未知或已下线来源统一回退为网易云
     init(from decoder: Decoder) throws {
@@ -66,6 +68,8 @@ struct Song: Identifiable, Hashable, Codable {
     /// Subsonic 服务器上的真实曲目 id（字符串）。Song.id 是 Int 装不下，
     /// 所以 id 存这里，Song.id 用 SubsonicAPI.stableHash 填一个稳定数值。
     let subsonicId: String?
+    /// 飞牛音乐曲目的 GUID；`Song.id` 保存稳定哈希以兼容现有播放器模型。
+    let feiniuId: String?
     /// 付费/VIP 标记（网易云：0 免费、1 VIP、4 付费单曲；QQ：0 免费、非 0 付费）
     let fee: Int
 
@@ -82,6 +86,7 @@ struct Song: Identifiable, Hashable, Codable {
         case .netease: return "netease-\(id)"
         // 用服务器原始 id, 不用哈希后的 Song.id —— 避免万一撞哈希时收藏串味
         case .subsonic: return "subsonic-\(subsonicId ?? String(id))"
+        case .feiniu: return "feiniu-\(feiniuId ?? String(id))"
         }
     }
 
@@ -99,10 +104,12 @@ struct Song: Identifiable, Hashable, Codable {
         // 自建服务器上的都是自己的文件, 不存在会员墙
         case .subsonic:
             return false
+        case .feiniu:
+            return false
         }
     }
 
-    init(id: Int, name: String, artists: String, album: String, coverURL: URL?, duration: TimeInterval, source: SongSource = .netease, qqMid: String? = nil, qqMediaMid: String? = nil, kugouHash: String? = nil, kugouAlbumAudioId: String? = nil, kugouAlbumId: String? = nil, kugouQualityHashes: [String: String]? = nil, fee: Int = 0, subsonicId: String? = nil) {
+    init(id: Int, name: String, artists: String, album: String, coverURL: URL?, duration: TimeInterval, source: SongSource = .netease, qqMid: String? = nil, qqMediaMid: String? = nil, kugouHash: String? = nil, kugouAlbumAudioId: String? = nil, kugouAlbumId: String? = nil, kugouQualityHashes: [String: String]? = nil, fee: Int = 0, subsonicId: String? = nil, feiniuId: String? = nil) {
         self.id = id
         self.name = name
         self.artists = artists
@@ -118,6 +125,7 @@ struct Song: Identifiable, Hashable, Codable {
         self.kugouQualityHashes = kugouQualityHashes
         self.fee = fee
         self.subsonicId = subsonicId
+        self.feiniuId = feiniuId
     }
 
     init?(json: [String: Any]) {
@@ -148,10 +156,11 @@ struct Song: Identifiable, Hashable, Codable {
         kugouAlbumId = nil
         kugouQualityHashes = nil
         subsonicId = nil
+        feiniuId = nil
         fee = json["fee"] as? Int ?? 0
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, artists, album, coverURL, duration, source, qqMid, qqMediaMid, kugouHash, kugouAlbumAudioId, kugouAlbumId, kugouQualityHashes, fee, subsonicId }
+    private enum CodingKeys: String, CodingKey { case id, name, artists, album, coverURL, duration, source, qqMid, qqMediaMid, kugouHash, kugouAlbumAudioId, kugouAlbumId, kugouQualityHashes, fee, subsonicId, feiniuId }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -169,6 +178,7 @@ struct Song: Identifiable, Hashable, Codable {
         kugouAlbumId = try c.decodeIfPresent(String.self, forKey: .kugouAlbumId)
         kugouQualityHashes = try c.decodeIfPresent([String: String].self, forKey: .kugouQualityHashes)
         subsonicId = try c.decodeIfPresent(String.self, forKey: .subsonicId)
+        feiniuId = try c.decodeIfPresent(String.self, forKey: .feiniuId)
         fee = try c.decodeIfPresent(Int.self, forKey: .fee) ?? 0
     }
 
@@ -188,6 +198,7 @@ struct Song: Identifiable, Hashable, Codable {
         try c.encodeIfPresent(kugouAlbumId, forKey: .kugouAlbumId)
         try c.encodeIfPresent(kugouQualityHashes, forKey: .kugouQualityHashes)
         try c.encodeIfPresent(subsonicId, forKey: .subsonicId)
+        try c.encodeIfPresent(feiniuId, forKey: .feiniuId)
         try c.encode(fee, forKey: .fee)
     }
 }

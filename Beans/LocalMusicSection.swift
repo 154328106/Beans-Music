@@ -315,6 +315,8 @@ struct LocalSearchAddSheet: View {
                     songs = try await KugouMusicAPI.shared.searchSongs(keyword: trimmed)
                 case .subsonic:
                     songs = try await SubsonicAPI.shared.search(trimmed, count: 50)
+                case .feiniu:
+                    songs = try await FeiniuAPI.shared.search(trimmed)
                 }
                 guard !Task.isCancelled else { return }
                 results = songs

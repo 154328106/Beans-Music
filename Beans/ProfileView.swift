@@ -24,6 +24,9 @@ struct ProfileView: View {
     @State private var showSubsonicServer = false
     @State private var showSubsonicLibrary = false
     @ObservedObject private var subsonicAuth = SubsonicAuth.shared
+    @State private var showFeiniuServer = false
+    @State private var showFeiniuLibrary = false
+    @ObservedObject private var feiniuAuth = FeiniuAuth.shared
     @State private var showSectionSort = false
     /// 我的界面板块顺序（账号 / 关于，可自定义）
     @State private var profileOrder = SectionOrderStore.load(SectionOrderStore.profileKey, defaults: SectionOrderStore.profileDefaults)
@@ -130,6 +133,7 @@ struct ProfileView: View {
                     }
                     // 更新入口固定放在“我的”页面最底部，避免被板块排序隐藏。
                     subsonicDisclosure
+                    feiniuDisclosure
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -165,6 +169,12 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showSubsonicLibrary) {
             NavigationView { SubsonicLibraryView() }
+        }
+        .sheet(isPresented: $showFeiniuServer) {
+            FeiniuServerSheet()
+        }
+        .sheet(isPresented: $showFeiniuLibrary) {
+            NavigationView { FeiniuLibraryView() }
         }
         .sheet(isPresented: $showSectionSort) {
             SectionOrderSheet(title: "我的板块排序", sections: SectionOrderStore.profileDefaults, order: $profileOrder)
@@ -798,6 +808,64 @@ struct ProfileView: View {
         .background {
             BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
+        .beansCardShadow(radius: 9, y: 3)
+    }
+
+    private var feiniuDisclosure: some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 10) {
+                if let server = feiniuAuth.config {
+                    Text(server.server)
+                        .font(BeansFont.appFont(11))
+                        .foregroundStyle(Color.beansComment)
+                        .lineLimit(1)
+                } else {
+                    Text("尚未连接 fnOS 飞牛音乐")
+                        .font(BeansFont.appFont(12))
+                        .foregroundStyle(Color.beansComment)
+                }
+                Divider().overlay(Color.beansComment.opacity(0.15))
+                Button {
+                    BeansHaptics.tap()
+                    showFeiniuServer = true
+                } label: {
+                    Label(feiniuAuth.isConfigured ? "修改连接" : "连接服务器", systemImage: "gearshape")
+                        .font(BeansFont.appFont(12, .semibold))
+                        .foregroundStyle(.orange)
+                }
+                Button {
+                    BeansHaptics.tap()
+                    showFeiniuLibrary = true
+                } label: {
+                    Label("浏览飞牛曲库", systemImage: "music.note.list")
+                        .font(BeansFont.appFont(12, .semibold))
+                        .foregroundStyle(.orange)
+                }
+                .disabled(!feiniuAuth.isConfigured)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 6)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "externaldrive.connected.to.line.below.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.orange)
+                    .frame(width: 26)
+                Text("飞牛音乐")
+                    .font(BeansFont.appFont(14, .semibold))
+                    .foregroundStyle(Color.beansLabel)
+                Spacer()
+                if feiniuAuth.isConfigured {
+                    Text(feiniuAuth.serverName)
+                        .font(BeansFont.appFont(11))
+                        .foregroundStyle(Color.beansComment)
+                }
+            }
+            .padding(.vertical, 2)
+        }
+        .tint(.orange)
+        .padding(16)
+        .background { BeansGlass(shape: RoundedRectangle(cornerRadius: 22, style: .continuous)) }
         .beansCardShadow(radius: 9, y: 3)
     }
 

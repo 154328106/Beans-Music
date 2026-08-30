@@ -5,6 +5,7 @@ enum LibraryProvider: String, CaseIterable, Identifiable {
     /// 声明顺序就是 allCases 顺序，也就是 tab 顺序 —— 放第一个。
     /// 不是平台，不受平台开关控制。⚠️ rawValue 是持久化键，不要改。
     case server = "本地音乐"
+    case feiniu = "飞牛音乐"
     case netease = "网易云"
     case qq = "QQ音乐"
     case kugou = "酷狗"
@@ -17,6 +18,7 @@ enum LibraryProvider: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .server: return "My Music"
+        case .feiniu: return "飞牛音乐"
         case .netease: return "网易云"
         case .qq: return "QQ音乐"
         case .kugou: return "酷狗"
@@ -33,6 +35,8 @@ enum LibraryProvider: String, CaseIterable, Identifiable {
             return LinearGradient(colors: [Color(red: 0.12, green: 0.58, blue: 0.95), Color(red: 0.02, green: 0.32, blue: 0.72)], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .server:
             return LinearGradient(colors: [Color(red: 0.55, green: 0.35, blue: 0.90), Color(red: 0.36, green: 0.20, blue: 0.70)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .feiniu:
+            return LinearGradient(colors: [Color(red: 1.00, green: 0.58, blue: 0.18), Color(red: 0.93, green: 0.32, blue: 0.12)], startPoint: .topLeading, endPoint: .bottomTrailing)
         }
     }
 
@@ -42,6 +46,7 @@ enum LibraryProvider: String, CaseIterable, Identifiable {
         case .qq: return "play.rectangle.fill"
         case .kugou: return "music.note"
         case .server: return "externaldrive.connected.to.line.below"
+        case .feiniu: return "externaldrive.connected.to.line.below.fill"
         }
     }
 
@@ -51,6 +56,7 @@ enum LibraryProvider: String, CaseIterable, Identifiable {
         case .qq: return "BrandQQ"
         case .kugou: return "BrandKugou"
         case .server: return "BrandLocal"
+        case .feiniu: return nil
         }
     }
 }
@@ -68,6 +74,9 @@ struct LibraryView: View {
     @State private var showSubsonicServer = false
     @State private var showSubsonicLibrary = false
     @ObservedObject private var subsonicAuth = SubsonicAuth.shared
+    @State private var showFeiniuServer = false
+    @State private var showFeiniuLibrary = false
+    @ObservedObject private var feiniuAuth = FeiniuAuth.shared
     @State private var showSectionSort = false
     /// 音乐库板块顺序（本地音乐库 / 我的歌单 / 最近播放，可自定义）
     @State private var libraryOrder = SectionOrderStore.load(SectionOrderStore.libraryKey, defaults: SectionOrderStore.libraryDefaults)
@@ -99,6 +108,8 @@ struct LibraryView: View {
                     // 本机 / 自建服务器这两个 tab 有各自的整页内容, 不走板块排序
                     if source == .server {
                         subsonicSection
+                    } else if source == .feiniu {
+                        feiniuSection
                     } else {
                     // 板块按用户自定义顺序渲染（可拖拽排序）
                     ForEach(libraryOrder, id: \.self) { key in
@@ -110,6 +121,7 @@ struct LibraryView: View {
                             case .kugou: kugouSection
                             // 本地音乐有自己的整页内容, 走不到板块这一层
                             case .server: EmptyView()
+                            case .feiniu: EmptyView()
                             }
                         case "最近播放":
                             historySection
@@ -161,6 +173,12 @@ struct LibraryView: View {
         }
         .sheet(isPresented: $showSubsonicLibrary) {
             NavigationView { SubsonicLibraryView() }
+        }
+        .sheet(isPresented: $showFeiniuServer) {
+            FeiniuServerSheet()
+        }
+        .sheet(isPresented: $showFeiniuLibrary) {
+            NavigationView { FeiniuLibraryView() }
         }
         .sheet(isPresented: $showHistory) {
             HistoryView()
@@ -222,6 +240,7 @@ struct LibraryView: View {
         case .qq: return "QQ 音乐收藏与歌单"
         case .kugou: return "酷狗云端歌单"
         case .server: return "我的音乐服务器"
+        case .feiniu: return "fnOS 飞牛音乐曲库"
         }
     }
 
@@ -394,6 +413,51 @@ struct LibraryView: View {
         }
     }
 
+    /// fnOS 飞牛音乐板块：使用官方飞牛音乐 HTTP API 与 token Cookie。
+    private var feiniuSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "飞牛音乐", trailing: feiniuAuth.isConfigured ? "浏览" : "去连接") {
+                if feiniuAuth.isConfigured { showFeiniuLibrary = true }
+                else { showFeiniuServer = true }
+            }
+            if feiniuAuth.isConfigured {
+                Button {
+                    BeansHaptics.tap()
+                    showFeiniuLibrary = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "externaldrive.connected.to.line.below.fill")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.orange)
+                            .frame(width: 28)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(feiniuAuth.serverName)
+                                .font(BeansFont.appFont(14, .semibold))
+                                .foregroundStyle(Color.beansLabel)
+                            Text("歌曲 · 专辑 · 歌单 · 收藏")
+                                .font(BeansFont.appFont(11))
+                                .foregroundStyle(Color.beansComment)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Color.beansComment)
+                    }
+                    .padding(14)
+                    .background { BeansGlass(shape: RoundedRectangle(cornerRadius: 18, style: .continuous)) }
+                }
+                .buttonStyle(GlassPressButtonStyle(scale: 0.98))
+                .contextMenu {
+                    Button { showFeiniuServer = true } label: {
+                        Label("服务器设置", systemImage: "gearshape")
+                    }
+                }
+            } else {
+                EmptyStateView(icon: "externaldrive.badge.plus", text: "连接 NAS 上的飞牛音乐服务")
+            }
+        }
+    }
+
     private var historySection: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: "最近播放", trailing: "查看全部") {
@@ -473,6 +537,8 @@ struct LibraryView: View {
             await loadKugouPlaylists(force: force)
         // 本地音乐的内容进二级页时再拉
         case .server:
+            break
+        case .feiniu:
             break
         }
     }
@@ -670,7 +736,7 @@ struct LibraryView: View {
         }
         switch source {
         // 本地音乐不支持在这里建歌单
-        case .server:
+        case .server, .feiniu:
             return
         case .netease:
             guard auth.isLoggedIn else {
@@ -720,7 +786,7 @@ struct LibraryView: View {
         guard let playlist = pendingDelete else { return }
         switch source {
         // 本地音乐不支持在这里删歌单
-        case .server:
+        case .server, .feiniu:
             return
         case .netease:
             Task {
@@ -761,4 +827,3 @@ struct LibraryView: View {
         }
     }
 }
-
